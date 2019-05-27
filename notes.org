@@ -1,0 +1,145 @@
+* Code architecture notes for Arrow/Ivy implementation and benchmarks
+
+We use the [[https://hackage.haskell.org/package/mono-traversable][mono-traversable]] library.
+
+** What is the essence of a combination between Arrow and Ivy?
+
+#+BEGIN_SRC haskell
+  -- | Selects a node to choose as predecessor
+  combination :: MonoFoldable s => NonNull s -> Element s
+#+END_SRC
+
+Actually every algorithm might have different requirements
+
+*** Arrow
+#+BEGIN_SRC haskell
+  arrow :: MonoFoldable s => NonNull s -> Element s
+  arrow = last
+#+END_SRC
+
+*** Ivy
+#+BEGIN_SRC haskell
+  ivy :: MonoFoldable s => NonNull s -> Element s
+  ivy = head
+#+END_SRC
+
+*** Random
+#+BEGIN_SRC haskell
+  rnd :: (Member Random r, IsSequence s, Integral (Index s)) => NonNull s -> Sem r (Element s)
+  rnd nodes = do
+    index <- randomR (0, lengthIndex nodes - 1)
+    return (indexEx nodes index)
+#+END_SRC
+
+Needs effects.
+
+*** Choose depending on edge weights
+
+What edge weights does a node have access to?
+- It can't have access to all edges, because this would be a global view and be impossible to do distributively.
+- How about the edges right next to it? That makes sense to have. Space needed as many neighbors there are.
+- How about the weights of the edges the request already traveled through? Either accumulated (Monoid, constant space state in the message) or all of them (SetContainer, linear space state in the message). Edit: Not needed, implemented through message state.
+
+Should have access to only one thing: Neighbors and their weights.
+
+*** Depending on past requests
+
+Nodes might want to e.g. count how many requests they received and influence their choice based on that
+
+#+BEGIN_SRC haskell
+
+  -- Needed for running function below
+  class HasInitial a where
+    initial :: a
+
+  arrowWithCount :: (Member (State Int) r, MonoFoldable s) => NonNull s -> Sem r (Element s)
+  arrowWithCount seq = do
+    modify (+1)
+    return (lest seq)
+
+  -- | Algorithms have access to the node's state
+  type AlgorithmEffects s = Members '[State s, Random]
+
+  data Algorithm = forall s . Algorithm
+    { initialNodeState :: s
+    , generateRequest :: forall r . AlgorithmEffects s r => Sem r Request
+    , forward :: forall r . AlgorithmEffects s r => Request -> NonNull a -> Int -> Sem r (Element a, Request)
+    , reach :: forall r . AlgorithmEffects s r => Request -> NonNull a -> Sem r (Element a)
+    }
+#+END_SRC
+
+Do we need to control what state the message sends with it? Sending and receiving messages state can be used to implement getting weight from different nodes accross the wire, so it's a generalization.
+
+
+(much later) Hold on, do we need the ~NonNull a~ thing even? Because we can't realistically get it at zero cost and would have to put it in the messages anyways. So how about just having algorithms track this state in the messages itself.
+
+#+BEGIN_SRC haskell
+  -- | arrow request this -> (nextPredecessor, nextRequest)
+  arrow :: a -> a -> Sem r (a, a)
+  arrow req this = return (req, this)
+
+  ivy :: a -> a -> Sem r (a, a)
+  ivy req this = return (req, req)
+
+  middle :: [a] -> a -> Sem r (a, [a])
+  middle req this = return (req !! (length req / 2), this : req)
+
+  alternating :: (a, Maybe a) -> a -> Sem r (a, (a, Maybe a))
+  alternating (root, alt) this = return $ case alt of
+    Nothing   -> (root, Just this)
+    Just prev -> (prev, Nothing)
+#+END_SRC
+
+^^ Very promising, can have convenience function for sequence based predecessor selection, since it's a specialization of this
+
+#+BEGIN_SRC haskell
+  -- | alg nodes message   chooses a node out of nodes as a new predecessor, while also receiving and determining the message contents
+  alg :: MonoFoldable s => NonNull s -> Message -> Sem r (Element s, Message)
+#+END_SRC
+
+Initial states? Maybe we need a data type for algorithms with fields for initial node state and initial message state. And the initial tree state! Can we run a separate algorithm just to determine the initial tree state? Probably the longer the request series, the less the initial state matters, so we could just choose a fixed initial state. Maybe the tree with lowest diameter in order to minimize the influence of the initial state. Or the tree that minimizes the summed distance between any pair of nodes. Can we even calculate that?
+
+
+
+We need a field for generating a start message, which generates an initial message and has access to and can change the root nodes state.
+
+
+Do we need access to the predecessor? Well I can't think of anything we could use this for, but why not.
+
+
+#+BEGIN_SRC haskell
+
+
+
+  data NodeState = NodeState
+    { nodePredecessor :: 
+
+  data Algorithm = Algorithm
+    { makeRequest :: Member (State NodeState) r => Sem r Message
+    }
+#+END_SRC
+
+Want to use [[https://hackage.haskell.org/package/algebraic-graphs][algebraic-graphs]] library for polymorphic graphs.
+
+- By using [[https://hackage.haskell.org/package/algebraic-graphs-0.4/docs/Algebra-Graph-ToGraph.html][ToGraph]] we can write algorithms polymorphic in the underlying graph representation. But since algorithms might want to access edge weights, we need the [[https://hackage.haskell.org/package/algebraic-graphs-0.4/docs/Algebra-Graph-Labelled-AdjacencyMap.html][Algebra.Graph.Labelled.AdjacencyMap]] module.
+- How about instead, we use ToGraph for the underlying graph, but store the edge weights in a 2-dimensional immutable array for fast access (or it can even be mutable later on). We don't need the flexibility of changing edge weights.
+- But hold on, we have a complete graph, there's nothing underlying to store, because everything is connected to everything anyways! So we just need to store the edge weights and the spanning tree somehow.
+
+For the edge weights, we use the [[https://hackage.haskell.org/package/array][array]] library because it supports multiple dimensions and random access.
+
+What do to about the spanning tree?
+
+#+BEGIN_SRC haskell
+  data Node s = Node
+    { successor :: Maybe Int -- ^ Nothing if holding token or request made
+    , state     :: s -- ^ Arbitrary state, chosen by the algorithm
+    }
+
+
+  -- | Mutable (ST) array's for keeping the state of all nodes
+  -- Nodes 1, 2, 3 -> Array [(0, Nothing), (0, Just 0), (0, Just 1)]
+  -- Requests come in as a sequence of integers
+#+END_SRC
+
+
+One graph transformation per request, one runST per request series.
