@@ -1,6 +1,6 @@
 { pkgs ? import (fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/tarball/acbdaa569f4ee387386ebe1b9e60b9f95b4ab21b";
-    sha256 = "0xzyghyxk3hwhicgdbi8yv8b8ijy1rgdsj5wb26y5j322v96zlpz";
+    url = "https://github.com/NixOS/nixpkgs/tarball/61f0936d1cd73760312712615233cd80195a9b47";
+    sha256 = "1fkmp99lxd827km8mk3cqqsfmgzpj0rvaz5hgdmgzzyji70fa2f8";
   }) {}
 }:
 let
@@ -14,7 +14,7 @@ let
     "arvy.cabal"
   ];
 
-  pkg = pkgs.haskellPackages.callCabal2nix "arvy" src {};
+  pkg = pkgs.haskell.packages.ghc864.callCabal2nix "arvy" src {};
 
   env = pkg.env.overrideAttrs (old: {
     nativeBuildInputs = old.nativeBuildInputs or [] ++ [ pkgs.haskellPackages.cabal-install ];
