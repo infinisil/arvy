@@ -126,7 +126,7 @@ TODO: The ~forall i~ won't work.
 How do we determine the initial tree state?
 - Matters a lot for Arrow
 - Doesn't matter a lot for Ivy, the more request have happened the less part of the original tree is intact
-- Both of which are instances of our algorithm spectrum, so there can be many more algorithms where initial tree state matters
+- Both of which are instances of our algorithm spectrum, so there could be many more algorithms where initial tree state matters
 
 So this should probably be part of the algorithm itself, because in any practical scenario, if you could choose the initial state, you might as well to get the best out of it.
 
@@ -139,6 +139,10 @@ Or even better: provide a set of algorithms and a set of initialization algorith
 - Connect shortest edge, repeat until tree (and watch out for cycles)
 - Tree with lowest diameter (how?)
 - Tree that minimizes the summed distance between any pair of nodes (how?)
+
+*** Tree convergence
+
+Considering an algorithm that changes the tree state, one would think that the more requests are issued, the less the initial tree matters. But is that really true? We should plot how well a graph does over a number of requests (either by average request time or some average weight between all nodes). It seems that this graph should start at some high initial value for the initial tree, but converge to a fixed number the more requests are issued. Does it converge? Do different algorithms converge with different speeds.
 
 ** Running the algorithms
 
@@ -154,12 +158,13 @@ We need a way to represent the tree structure. How about having a mutable (ST) a
 
   -- | Mutable (ST) array's for keeping the state of all nodes
   -- Nodes 1, 2, 3 -> Array [(0, Nothing), (0, Just 0), (0, Just 1)]
-  type State s n = STUArray s Int (Node n)
+  type GraphState s n = STUArray s Int (Node n)
 #+END_SRC
 
 Requests are just a sequence of integers of node indices. Weights should be stored in an immutable 2-dim UArray. One runST per request series.
 
-Can we measure the competitive ratio by looping over the request sequence until the graph is in a state it already was? Will have to restrict to deterministic algorithms. https://en.wikipedia.org/wiki/Cycle_detection
+Can we measure the competitive ratio by looping over the request sequence until the graph is in a state it already was? Will have to restrict to deterministic algorithms. https://en.wikipedia.org/wiki/Cycle_detection.
+
 
 ** Generating the requests
 
@@ -167,5 +172,30 @@ Can we measure the competitive ratio by looping over the request sequence until 
 - Completely randomly
 - Randomly, but with a Pareto distribution, e.g. 80% of requests hit 20% of nodes. Realistic scenario.
 - Random walk, preferably choosing next nodes that are near to the current one. 
-- Advisory that always chooses the furthest away node
-- Choose the node that hasn't been visited for the longest time. Interesting because only when the algorithm visits nodes it can influence them.
+- Always choose the furthest away node. Furthest away by either the direct weight from request to token, or by summing all weights on the path (which makes the sequence depend on the algorithm).
+- Choose the node that hasn't been visited for the longest time. Interesting because only when the algorithm visits nodes it can influence them. Sequence depends on algorithm.
+
+Make sure to seed random algorithms. Let's use the mwc-random package for random numbers, which seems to be one of the fastest. Can use Polysemy.Random to interpret randomness in it (maybe even works with the ST variants, which would be neat)
+
+
+Can use something like pipes or conduits to generate these in a streaming fashion. What should the requests generator have access to? Potentially randomness, the weights, node indices.
+
+** Generating the weights
+
+- According to some underlying geometry, metric space
+  - Ring
+  - Grid/Torus
+  - Fully connected
+  - Clusters of nodes, intracluster fast, intercluster slow
+  - Can add some jitter to all of these ^
+- Mix weights up with some randomness, e.g. times a random number between 0.5 and 2
+- Completely random weights
+- Almost metric space, but add some wormholes here and there. Corresponds to expensive, extra fast wires in practice
+
+* Parameters
+
+- Initial tree state
+- Algorithm
+- Request sequence
+- Graph weights
+- (Metric)
