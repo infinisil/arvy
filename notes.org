@@ -1,37 +1,102 @@
 * Code architecture notes for Arrow/Ivy implementation and benchmarks
 
-We use the [[https://hackage.haskell.org/package/mono-traversable][mono-traversable]] library.
 
 ** What is the essence of a combination between Arrow and Ivy?
 
+From a node x a request gets sent towards node z which currently holds the token. The request message travels along this path, potentially being transformed during that. Nodes themselves can store a state which can get modified as well.
+
+So the essence is
+- Send a request with some initial message state
+- Forward a request in a node, potentially changing the request and the node's state
+- Node holding the token receives the request, potentially changing the node's state
+
 #+BEGIN_SRC haskell
-  -- | Selects a node to choose as predecessor
-  combination :: MonoFoldable s => NonNull s -> Element s
+
+  -- | Weights to all other nodes from some current node
+  -- Indexed by i such that you can access the weight to a specific other node if you know its i, which can be sent along with messages
+  type Weights i = UArray i Double
+
+  -- | Algorithm parametrized by the effects r it needs to run
+  -- | Not parametrized by the node and message states, as those are internal to the algorithm
+
+  -- | Base algorithm without node state, add state layer above that if needed. Stateless type:
+
+  data Algorithm r = forall m . Algorithm
+    { sendRequest
+      :: forall i . i -- | Current node index
+      -> Sem r (m i)
+    , forwardRequest
+      :: forall i . m i -- ^ Incoming message
+      -> i -- ^ Current node index
+      -> Sem r (i, m i) -- ^ Return the next predecessor and message
+    , recvRequest
+      :: forall i . m i -- ^ Incoming message
+      -> i -- ^ Current node index
+      -> Sem r i -- ^ Return the next predecessor
+    }
+
+  -- | These three fields have almost the same type, the only difference is whether they have an incoming and outgoing message
+  -- | Why (m a)? Because the message's state type m will probably want to pass along the current node somehow
+
+  -- | Stateful: (TODO: Make more flexible, combine multiple)
+
+  data StatefulAlgorithm r = forall n . StatefulAlgorithm
+    { initialNodeState
+      :: forall i . i
+      -> Sem r (n i)
+    , baseAlgorithm
+      :: forall i . Algorithm (State (n i) ': r)
+    }
+
+  newtype WithWeights r = WithWeights
+    { withoutWeights
+      :: forall i
+      => Ix i
+      -> Algorithm (Reader (Weights i) ': r)
+    }
 #+END_SRC
 
-Actually every algorithm might have different requirements
+Examples:
 
-*** Arrow
 #+BEGIN_SRC haskell
-  arrow :: MonoFoldable s => NonNull s -> Element s
-  arrow = last
-#+END_SRC
+  newtype ArrowMessage a = ArrowMessage a
 
-*** Ivy
-#+BEGIN_SRC haskell
-  ivy :: MonoFoldable s => NonNull s -> Element s
-  ivy = head
-#+END_SRC
+  arrow :: Algorithm []
+  arrow = Algorithm
+    { sendRequest = \myself ->
+        return (ArrowMessage myself)
+    , forwardRequest = \(ArrowMessage sender) myself ->
+        return (sender, ArrowMessage myself)
+    , recvRequest = \(ArrowMessage sender) myself ->
+        return sender
+    }
 
-*** Random
-#+BEGIN_SRC haskell
-  rnd :: (Member Random r, IsSequence s, Integral (Index s)) => NonNull s -> Sem r (Element s)
-  rnd nodes = do
-    index <- randomR (0, lengthIndex nodes - 1)
-    return (indexEx nodes index)
-#+END_SRC
 
-Needs effects.
+  newtype IvyMessage a = IvyMessage a
+
+  ivy :: Algorithm []
+  ivy = Algorithm
+    { sendRequest = \myself ->
+        return (IvyMessage myself)
+    , forwardRequest = \msg@(IvyMessage root) _ ->
+        return (root, msg)
+    , recvRequest = \msg@(IvyMessage root) _ ->
+        return root
+    }
+
+  newtype MiddleMessage a = MiddleMessage [a]
+
+  middle :: Algorithm []
+  middle = Algorithm
+    { sendRequest = \myself ->
+        return (MiddleMessage [myself])
+    , forwardRequest = \(MiddleMessage nodes) myself ->
+        return (nodes !! (length nodes `div` 2), MiddleMessage (myself : nodes))
+    , recvRequest = \(MiddleMessage nodes) myself ->
+        return (nodes !! (length nodes `div` 2))
+    }
+      
+#+END_SRC
 
 *** Choose depending on edge weights
 
@@ -42,36 +107,12 @@ What edge weights does a node have access to?
 
 Should have access to only one thing: Neighbors and their weights.
 
+But really, since we assume a complete graph, all nodes are neighbors and nodes should be able to get the weight to any of them.
+
 *** Depending on past requests
 
 Nodes might want to e.g. count how many requests they received and influence their choice based on that
 
-#+BEGIN_SRC haskell
-
-  -- Needed for running function below
-  class HasInitial a where
-    initial :: a
-
-  arrowWithCount :: (Member (State Int) r, MonoFoldable s) => NonNull s -> Sem r (Element s)
-  arrowWithCount seq = do
-    modify (+1)
-    return (lest seq)
-
-  -- | Algorithms have access to the node's state
-  type AlgorithmEffects s = Members '[State s, Random]
-
-  data Algorithm = forall s . Algorithm
-    { initialNodeState :: s
-    , generateRequest :: forall r . AlgorithmEffects s r => Sem r Request
-    , forward :: forall r . AlgorithmEffects s r => Request -> NonNull a -> Int -> Sem r (Element a, Request)
-    , reach :: forall r . AlgorithmEffects s r => Request -> NonNull a -> Sem r (Element a)
-    }
-#+END_SRC
-
-Do we need to control what state the message sends with it? Sending and receiving messages state can be used to implement getting weight from different nodes accross the wire, so it's a generalization.
-
-
-(much later) Hold on, do we need the ~NonNull a~ thing even? Because we can't realistically get it at zero cost and would have to put it in the messages anyways. So how about just having algorithms track this state in the messages itself.
 
 #+BEGIN_SRC haskell
   -- | arrow request this -> (nextPredecessor, nextRequest)
