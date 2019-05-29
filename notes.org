@@ -1,24 +1,21 @@
 * Code architecture notes for Arrow/Ivy implementation and benchmarks
 
+** Algorithm implementations
 
-** What is the essence of a combination between Arrow and Ivy?
-
-From a node x a request gets sent towards node z which currently holds the token. The request message travels along this path, potentially being transformed during that. Nodes themselves can store a state which can get modified as well.
+From a node x a request gets sent towards node y which currently holds the token. The request message travels along this path, potentially being transformed during that. Nodes themselves could have arbitrary effects (like randomness or state) when they do an action.
 
 So the essence is
 - Send a request with some initial message state
 - Forward a request in a node, potentially changing the request and the node's state
 - Node holding the token receives the request, potentially changing the node's state
 
+Of course, the algorithm's main goal is to select a node to use as the next predecessor (successor?). In order to have concurrency guarantees, it should only be allowed to reference previously traveled through nodes. If we were to choose integers as representations of nodes, we'd have a problem, because the algorithm could just create a new integer pointing to whatever node. We don't want the algorithm to rely on any such thing. So instead we use an abstract type ~i~, which you can't construct yourself, for the node indices. The only way you receive an ~i~ is by processing something on a node, in which case you get the ~i~ of the local node. You can send ~i~'s to the next predecessor as well. This way the algorithm only ever has access to the set of node indices ~i~ it the request traveled through already.
+
 #+BEGIN_SRC haskell
 
-  -- | Weights to all other nodes from some current node
-  -- Indexed by i such that you can access the weight to a specific other node if you know its i, which can be sent along with messages
-  type Weights i = UArray i Double
 
   -- | Algorithm parametrized by the effects r it needs to run
-  -- | Not parametrized by the node and message states, as those are internal to the algorithm
-
+  -- | Not parametrized by the message state, as this is internal to the algorithm
   -- | Base algorithm without node state, add state layer above that if needed. Stateless type:
 
   data Algorithm r = forall m . Algorithm
@@ -35,9 +32,19 @@ So the essence is
       -> Sem r i -- ^ Return the next predecessor
     }
 
+  -- | What's sendRequest used for? Can do initialization on current node
+  -- Can we combine forwardrequest and recvRequest? They both have the common thing of choosing an i
+
   -- | These three fields have almost the same type, the only difference is whether they have an incoming and outgoing message
   -- | Why (m a)? Because the message's state type m will probably want to pass along the current node somehow
 
+#+END_SRC
+
+*** State and weights
+
+These should be implementable as a layer atop the standard algorithm. Maybe like this:
+
+#+BEGIN_SRC haskell
   -- | Stateful: (TODO: Make more flexible, combine multiple)
 
   data StatefulAlgorithm r = forall n . StatefulAlgorithm
@@ -47,21 +54,27 @@ So the essence is
     , baseAlgorithm
       :: forall i . Algorithm (State (n i) ': r)
     }
+  
+  -- | Weights to all other nodes from some current node
+  -- Indexed by i such that you can access the weight to a specific other node if you know its i, which can be sent along with messages
+  type Weights i = i -> Double
 
   newtype WithWeights r = WithWeights
     { withoutWeights
-      :: forall i
-      => Ix i
+      :: forall i .
       -> Algorithm (Reader (Weights i) ': r)
     }
 #+END_SRC
 
-Examples:
+TODO: The ~forall i~ won't work.
+
+*** Arrow in this scheme
 
 #+BEGIN_SRC haskell
-  newtype ArrowMessage a = ArrowMessage a
+  -- Equivalent to Identity
+  newtype ArrowMessage i = ArrowMessage i
 
-  arrow :: Algorithm []
+  arrow :: Algorithm r
   arrow = Algorithm
     { sendRequest = \myself ->
         return (ArrowMessage myself)
@@ -71,10 +84,15 @@ Examples:
         return sender
     }
 
+#+END_SRC
 
-  newtype IvyMessage a = IvyMessage a
+*** Ivy in this scheme
 
-  ivy :: Algorithm []
+#+BEGIN_SRC haskell 
+  -- Equivalent to Identity
+  newtype IvyMessage i = IvyMessage i
+
+  ivy :: Algorithm r
   ivy = Algorithm
     { sendRequest = \myself ->
         return (IvyMessage myself)
@@ -84,9 +102,14 @@ Examples:
         return root
     }
 
+#+END_SRC
+
+*** Selected the node in the middle
+
+#+BEGIN_SRC haskell
   newtype MiddleMessage a = MiddleMessage [a]
 
-  middle :: Algorithm []
+  middle :: Algorithm r
   middle = Algorithm
     { sendRequest = \myself ->
         return (MiddleMessage [myself])
@@ -98,89 +121,51 @@ Examples:
       
 #+END_SRC
 
-*** Choose depending on edge weights
+** Initial tree state
 
-What edge weights does a node have access to?
-- It can't have access to all edges, because this would be a global view and be impossible to do distributively.
-- How about the edges right next to it? That makes sense to have. Space needed as many neighbors there are.
-- How about the weights of the edges the request already traveled through? Either accumulated (Monoid, constant space state in the message) or all of them (SetContainer, linear space state in the message). Edit: Not needed, implemented through message state.
+How do we determine the initial tree state?
+- Matters a lot for Arrow
+- Doesn't matter a lot for Ivy, the more request have happened the less part of the original tree is intact
+- Both of which are instances of our algorithm spectrum, so there can be many more algorithms where initial tree state matters
 
-Should have access to only one thing: Neighbors and their weights.
+So this should probably be part of the algorithm itself, because in any practical scenario, if you could choose the initial state, you might as well to get the best out of it.
 
-But really, since we assume a complete graph, all nodes are neighbors and nodes should be able to get the weight to any of them.
+Or even better: provide a set of algorithms and a set of initialization algorithms. Allow mix and matching them together.
 
-*** Depending on past requests
+*** Tree initialization algorithms
 
-Nodes might want to e.g. count how many requests they received and influence their choice based on that
+- Echo-algorithm to build a spanning tree from a specific root node
+- Randomized
+- Connect shortest edge, repeat until tree (and watch out for cycles)
+- Tree with lowest diameter (how?)
+- Tree that minimizes the summed distance between any pair of nodes (how?)
 
+** Running the algorithms
 
+We need a way to represent the tree structure. How about having a mutable (ST) array with an entry holding the predecessor for every node.
 #+BEGIN_SRC haskell
-  -- | arrow request this -> (nextPredecessor, nextRequest)
-  arrow :: a -> a -> Sem r (a, a)
-  arrow req this = return (req, this)
-
-  ivy :: a -> a -> Sem r (a, a)
-  ivy req this = return (req, req)
-
-  middle :: [a] -> a -> Sem r (a, [a])
-  middle req this = return (req !! (length req / 2), this : req)
-
-  alternating :: (a, Maybe a) -> a -> Sem r (a, (a, Maybe a))
-  alternating (root, alt) this = return $ case alt of
-    Nothing   -> (root, Just this)
-    Just prev -> (prev, Nothing)
-#+END_SRC
-
-^^ Very promising, can have convenience function for sequence based predecessor selection, since it's a specialization of this
-
-#+BEGIN_SRC haskell
-  -- | alg nodes message   chooses a node out of nodes as a new predecessor, while also receiving and determining the message contents
-  alg :: MonoFoldable s => NonNull s -> Message -> Sem r (Element s, Message)
-#+END_SRC
-
-Initial states? Maybe we need a data type for algorithms with fields for initial node state and initial message state. And the initial tree state! Can we run a separate algorithm just to determine the initial tree state? Probably the longer the request series, the less the initial state matters, so we could just choose a fixed initial state. Maybe the tree with lowest diameter in order to minimize the influence of the initial state. Or the tree that minimizes the summed distance between any pair of nodes. Can we even calculate that?
-
-
-
-We need a field for generating a start message, which generates an initial message and has access to and can change the root nodes state.
-
-
-Do we need access to the predecessor? Well I can't think of anything we could use this for, but why not.
-
-
-#+BEGIN_SRC haskell
-
-
-
-  data NodeState = NodeState
-    { nodePredecessor :: 
-
-  data Algorithm = Algorithm
-    { makeRequest :: Member (State NodeState) r => Sem r Message
+  data Node n = Node
+    { successor :: Maybe Int -- ^ Nothing if holding token
+    , state     :: n -- ^ Arbitrary state, chosen by the algorithm
     }
-#+END_SRC
 
-Want to use [[https://hackage.haskell.org/package/algebraic-graphs][algebraic-graphs]] library for polymorphic graphs.
-
-- By using [[https://hackage.haskell.org/package/algebraic-graphs-0.4/docs/Algebra-Graph-ToGraph.html][ToGraph]] we can write algorithms polymorphic in the underlying graph representation. But since algorithms might want to access edge weights, we need the [[https://hackage.haskell.org/package/algebraic-graphs-0.4/docs/Algebra-Graph-Labelled-AdjacencyMap.html][Algebra.Graph.Labelled.AdjacencyMap]] module.
-- How about instead, we use ToGraph for the underlying graph, but store the edge weights in a 2-dimensional immutable array for fast access (or it can even be mutable later on). We don't need the flexibility of changing edge weights.
-- But hold on, we have a complete graph, there's nothing underlying to store, because everything is connected to everything anyways! So we just need to store the edge weights and the spanning tree somehow.
-
-For the edge weights, we use the [[https://hackage.haskell.org/package/array][array]] library because it supports multiple dimensions and random access.
-
-What do to about the spanning tree?
-
-#+BEGIN_SRC haskell
-  data Node s = Node
-    { successor :: Maybe Int -- ^ Nothing if holding token or request made
-    , state     :: s -- ^ Arbitrary state, chosen by the algorithm
-    }
+  -- | TODO: Split state into separate array for being able to not have any state at all
 
 
   -- | Mutable (ST) array's for keeping the state of all nodes
   -- Nodes 1, 2, 3 -> Array [(0, Nothing), (0, Just 0), (0, Just 1)]
-  -- Requests come in as a sequence of integers
+  type State s n = STUArray s Int (Node n)
 #+END_SRC
 
+Requests are just a sequence of integers of node indices. Weights should be stored in an immutable 2-dim UArray. One runST per request series.
 
-One graph transformation per request, one runST per request series.
+Can we measure the competitive ratio by looping over the request sequence until the graph is in a state it already was? Will have to restrict to deterministic algorithms. https://en.wikipedia.org/wiki/Cycle_detection
+
+** Generating the requests
+
+- Split graph into 2, choose a node from each side interleaved. More partitions?
+- Completely randomly
+- Randomly, but with a Pareto distribution, e.g. 80% of requests hit 20% of nodes. Realistic scenario.
+- Random walk, preferably choosing next nodes that are near to the current one. 
+- Advisory that always chooses the furthest away node
+- Choose the node that hasn't been visited for the longest time. Interesting because only when the algorithm visits nodes it can influence them.
