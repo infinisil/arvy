@@ -29,11 +29,21 @@ import           Polysemy.Output
 import           Polysemy.Reader
 import           Polysemy.Trace
 
+{- |
+An Arvy algorithm, a combination between Arrow and Ivy.
+@r@ stands for the effects it runs in, chosen by the caller, but the algorithm can enforce certain constraints on it, like requiring randomness.
+@msg@ stands for the message type it sends between nodes, this can be arbitrarily chosen by the algorithm.
+@i@ stands for the node index type, which can be passed via messages and be has to be used to select which node to choose as the next successor.
 
-data Algorithm r = forall msg . Algorithm
-  { send     :: forall i . Sem (Reader i ': r) (msg i)
-  , transfer :: forall i . msg i -> Sem (Reader i ': r) (i, msg i)
-  , recv     :: forall i . msg i -> Sem (Reader i ': r) i
+- When a node @x@ initiates a request, 'arvyInitiate' is called to generate the initial message, which has access to the current node's index through a 'Reader i' effect.
+- This message gets passed along the path from @x@ to the current token holder @y@. For nodes the request travels *through*, 'arvyTransmit' is called, which can transform the message, potentially adding a reference to the current node's index.
+- Whenever a message arrives at a node, 'arvySelect' is called, which has to select a node index from the received message. For this selection, the algorithm does *not* have access to the current node's index. This is to ensure correctness of it, because only *previously* traversed nodes should be selected.
+
+-}
+data Arvy r = forall msg . Arvy
+  { arvyInitiate :: forall i . Sem (Reader i ': r) (msg i)
+  , arvyTransmit :: forall i . msg i -> Sem (Reader i ': r) (msg i)
+  , arvySelect   :: forall i . msg i -> Sem r i
   }
 
 data Tree i (m :: * -> *) a where
@@ -76,37 +86,38 @@ traceMessages = intercept @(Output (i, i)) $ \case
     trace $ show from ++ " -> " ++ show to
     output (from, to)
 
-runArvyLocal :: Members '[Trace, Tree i, Output (i, i)] r => Algorithm r -> i -> Sem r ()
-runArvyLocal (Algorithm s t rr) = runArvyLocal' (s, t, rr) where
+runArvyLocal :: Members '[Trace, Tree i, Output (i, i)] r => Arvy r -> i -> Sem r ()
+runArvyLocal (Arvy s t rr) = runArvyLocal' (s, t, rr) where
   runArvyLocal' :: forall i r msg
     . Members '[Trace, Tree i, Output (i, i)] r
     => ( Sem (Reader i ': r) (msg i)
-       , msg i -> Sem (Reader i ': r) (i, msg i)
-       , msg i -> Sem (Reader i ': r) i
+       , msg i -> Sem (Reader i ': r) (msg i)
+       , msg i -> Sem r i
        )
     -> i
     -> Sem r ()
-  runArvyLocal' (send, transfer, recv) r = do
+  runArvyLocal' (send, transfer, select) r = do
     trace "Initiating request"
     getSuccessor r >>= \case
       Nothing -> trace "Token is already here\n"
       Just n -> do
-        msg <- runReader r send
         setSuccessor r Nothing
+        msg <- runReader r send
         output (r, n)
         go msg n
-        where
-          go :: msg i -> i -> Sem r ()
-          go msg r = getSuccessor r >>= \case
-            Nothing -> do
-              res <- runReader r $ recv msg
-              trace "Request arrived at token holder\n"
-              setSuccessor r (Just res)
-            Just n -> do
-              (i, m) <- runReader r $ transfer msg
-              setSuccessor r (Just i)
-              output (r, n)
-              go m n
+    where
+      go :: msg i -> i -> Sem r ()
+      go msg r = do
+        nextSucc <- select msg
+        currentSucc <- getSuccessor r
+        setSuccessor r (Just nextSucc)
+        case currentSucc of
+          Nothing ->
+            trace "Request arrived at token holder\n"
+          Just n -> do
+            newMsg <- runReader r $ transfer msg
+            output (r, n)
+            go newMsg n
 
 -- | Measures distances
 measureDistances :: (Ix i, IArray arr n, Num n) => arr i n -> Sem (Output i ': r) a -> Sem r (Sum n, a)
@@ -125,26 +136,26 @@ traceTree = intercept @(Tree i) $ \case
 
 newtype ArrowMessage i = ArrowMessage i
 
-arrow :: Algorithm r
-arrow = Algorithm
-  { send =
+arrow :: Arvy r
+arrow = Arvy
+  { arvyInitiate =
       ArrowMessage <$> ask
-  , transfer = \(ArrowMessage sender) -> do
+  , arvyTransmit = \(ArrowMessage sender) -> do
       i <- ask
-      return (sender, ArrowMessage i)
-  , recv = \(ArrowMessage sender) ->
+      return (ArrowMessage i)
+  , arvySelect = \(ArrowMessage sender) ->
       return sender
   }
 
 newtype IvyMessage i = IvyMessage i
 
-ivy :: Algorithm r
-ivy = Algorithm
-  { send =
+ivy :: Arvy r
+ivy = Arvy
+  { arvyInitiate =
       IvyMessage <$> ask
-  , transfer = \(IvyMessage root) ->
-      return (root, IvyMessage root)
-  , recv = \(IvyMessage root) ->
+  , arvyTransmit = \(IvyMessage root) ->
+      return (IvyMessage root)
+  , arvySelect = \(IvyMessage root) ->
       return root
   }
 
