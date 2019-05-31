@@ -19,6 +19,7 @@ library
   exposed-modules:     Arvy
   -- other-modules:
   -- other-extensions:
+  ghc-options:         -Wall
   build-depends:       base ^>=4.12.0.0
                      , polysemy
                      , array

@@ -4,11 +4,14 @@
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE LambdaCase                #-}
+{-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeApplications          #-}
+{-# LANGUAGE TypeOperators             #-}
 
 module Arvy where
 
@@ -16,52 +19,151 @@ import           Control.Monad
 import           Control.Monad.ST
 import           Data.Array         (Array)
 import           Data.Array.IArray  (IArray, listArray, (!), (//))
+import           Data.Array.IO      (IOArray)
+import qualified Data.Array.MArray  as M
 import           Data.Array.ST
 import           Data.Array.Unboxed (UArray)
+import           Data.Monoid
 import qualified Debug.Trace        as D
+import           GHC.Generics
 import           Polysemy
 import           Polysemy.Output
+import           Polysemy.Reader
 import           Polysemy.State
 import           Polysemy.Trace
 
 
-
-
-data Algorithm r = forall m . Algorithm
-  { sendRequest
-    :: forall i . i -- | Current node index
-    -> Sem r (m i)
-  , forwardRequest
-    :: forall i . m i -- ^ Incoming message
-    -> i -- ^ Current node index
-    -> Sem r (i, m i) -- ^ Return the next predecessor and message
-  , recvRequest
-    :: forall i . m i -- ^ Incoming message
-    -> i -- ^ Current node index
-    -> Sem r i -- ^ Return the next predecessor
+data AlgorithmI r msg i = AlgorithmI
+  { send     :: Sem (Reader i ': r) (msg i)
+  , transfer :: msg i -> Sem (Reader i ': r) (i, msg i)
+  , recv     :: msg i -> Sem (Reader i ': r) i
   }
+
+data Tree i (m :: * -> *) a where
+  GetSuccessor :: i -> Tree i m (Maybe i)
+  SetSuccessor :: i -> Maybe i -> Tree i m ()
+
+makeSem ''Tree
+
+runTree :: forall i m arr r a .
+  ( Ix i
+  , M.MArray arr (Maybe i) m
+  , Member (Lift m) r)
+  => arr i (Maybe i)
+  -> Sem (Tree i ': r) a
+  -> Sem r a
+runTree arr = interpret $ \case
+  GetSuccessor i ->
+    sendM @m $ readArray arr i
+  SetSuccessor i succ ->
+    sendM @m $ writeArray arr i succ
+
+doTest :: IO ()
+doTest = do
+  x <- newListArray (0, 5) [Nothing, Just 0, Just 1, Just 2, Just 3] :: IO (IOArray Int (Maybe Int))
+  dist <- runM
+    $ runTraceIO
+    $ runTree @Int @IO x
+    $ traceTree @Int
+    $ forM (take 10 $ cycle [0..4]) (
+      measureDistances weights
+      . traceMessages @Int
+      . runArvyLocal @Int arrow
+    )
+  print dist
+  where weights = full 5
+
+traceMessages :: forall i r a . (Member Trace r, Member (Output (i, i)) r, Show i) => Sem r a -> Sem r a
+traceMessages = intercept @(Output (i, i)) $ \case
+  Output (from, to) -> do
+    trace $ show from ++ " -> " ++ show to
+    output (from, to)
+
+runArvyLocal :: Members '[Trace, Tree i, Output (i, i)] r => Algorithm r -> i -> Sem r ()
+runArvyLocal (Algorithm algi) = runArvyLocal' algi where
+  runArvyLocal' :: forall i r msg . Members '[Trace, Tree i, Output (i, i)] r => AlgorithmI r msg i -> i -> Sem r ()
+  runArvyLocal' AlgorithmI { send, recv, transfer } r = do
+    trace "Initiating request"
+    getSuccessor r >>= \case
+      Nothing -> trace "Token is already here\n"
+      Just n -> do
+        msg <- runReader r send
+        setSuccessor r Nothing
+        output (r, n)
+        go msg n
+        where
+          go :: msg i -> i -> Sem r ()
+          go msg r = getSuccessor r >>= \case
+            Nothing -> do
+              res <- runReader r $ recv msg
+              trace $ "Request arrived at token holder\n"
+              setSuccessor r (Just res)
+            Just n -> do
+              (i, m) <- runReader r $ transfer msg
+              setSuccessor r (Just i)
+              output (r, n)
+              go m n
+
+-- | Measures distances
+measureDistances :: (Ix i, IArray arr n, Num n) => arr i n -> Sem (Output i ': r) a -> Sem r (Sum n, a)
+measureDistances weights = runFoldMapOutput (Sum . (weights !))
+
+traceTree :: forall i r a . (Show i, Member (Tree i) r, Member Trace r) => Sem r a -> Sem r a
+traceTree = intercept @(Tree i) $ \case
+  GetSuccessor i -> do
+    succ <- getSuccessor i
+    trace $ "Getting successor for " ++ show i ++ ", which is " ++ show succ
+    return succ
+  SetSuccessor i succ -> do
+    trace $ "Setting successor for " ++ show i ++ " to " ++ show succ
+    setSuccessor i succ
+
+data Algorithm r = forall m . Algorithm (forall i . AlgorithmI r m i)
 
 newtype ArrowMessage i = ArrowMessage i
 
 arrow :: Algorithm r
-arrow = Algorithm
-  { sendRequest = return . ArrowMessage
-  , forwardRequest = \(ArrowMessage sender) myself ->
-      return (sender, ArrowMessage myself)
-  , recvRequest = \(ArrowMessage sender) myself ->
+arrow = Algorithm (AlgorithmI
+  { send = do
+      i <- ask
+      return (ArrowMessage i)
+  , transfer = \(ArrowMessage sender) -> do
+      i <- ask
+      return (sender, ArrowMessage i)
+  , recv = \(ArrowMessage sender) ->
       return sender
-  }
+  })
 
 newtype IvyMessage i = IvyMessage i
 
 ivy :: Algorithm r
-ivy = Algorithm
-  { sendRequest = return . IvyMessage
-  , forwardRequest = \(IvyMessage sender) myself ->
-      return (sender, IvyMessage sender)
-  , recvRequest = \(IvyMessage sender) myself ->
-      return sender
-  }
+ivy = Algorithm (AlgorithmI
+  { send = do
+      i <- ask
+      return (IvyMessage i)
+  , transfer = \(IvyMessage root) -> do
+      return (root, IvyMessage root)
+  , recv = \(IvyMessage root) ->
+      return root
+  })
+
+data AlgPart i a where
+  Init :: AlgPart i (msg i)
+  Transmit :: msg i -> AlgPart i (i, msg i)
+  Recv :: msg i -> AlgPart i i
+
+data Event a where
+  MakeRequest :: Event ()
+  ForwardRequest :: msg -> Event msg
+  RecvRequest :: msg -> Event ()
+
+handleEvent :: Event a -> a
+handleEvent MakeRequest          = ()
+handleEvent (ForwardRequest msg) = msg
+handleEvent (RecvRequest msg)    = ()
+
+type NewAlg r = forall a i . AlgPart i a -> Sem (Reader i ': r) a
+
 
 type GraphWeights = UArray (Int, Int) Double
 
@@ -89,10 +191,7 @@ newtype Node = Node
 
 type GraphState s = STArray s Int Node
 
-data STEffect s (m :: * -> *) a where
-  DoST :: ST s a -> STEffect s m a
-
-makeSem ''STEffect
+{-
 
 test :: forall s r . Member (Lift (ST s)) r => STArray s Int Int -> Sem r Int
 test arr = do
@@ -105,8 +204,6 @@ runit = do
   forM_ outputs putStrLn
   return result
 
-
-
 runTest :: forall s . ST s ([String], [Double])
 runTest = do
   let n = 100
@@ -116,53 +213,6 @@ runTest = do
     $ runTraceAsOutput
     $ runAlgorithm @s (full n) graphState (take 1000 $ requests n) ivy
 
-
-runAlgorithm :: forall s r . Members '[Trace, Lift (ST s)] r => GraphWeights -> GraphState s -> Requests -> Algorithm r -> Sem r [Double]
-runAlgorithm weights tree requests algorithm = forM requests (processRequest @s tree algorithm) where
-  processRequest :: forall s r . Members '[Trace, Lift (ST s)] r => GraphState s -> Algorithm r -> Int -> Sem r Double
-  processRequest tree alg@Algorithm { .. } nodeIndex = do
-    Node msucc <- sendM @(ST s) $ readArray tree nodeIndex
-    case msucc of
-      Nothing -> do
-        trace $ "Node " ++ show nodeIndex ++ " already has the token"
-        return 0
-      Just succ -> do
-        trace $ "Node " ++ show nodeIndex ++ " is sending a request towards " ++ show succ
-        initMsg <- sendRequest nodeIndex
-        let weight = weights ! (nodeIndex, succ)
-        sendM @(ST s) $ writeArray tree nodeIndex (Node Nothing)
-        restWeight <- sendMsg tree forwardRequest recvRequest initMsg succ
-
-        return $ weight + restWeight
-  sendMsg
-    :: forall s r m . Members '[Trace, Lift (ST s)] r
-    => GraphState s
-    -> (m Int
-      -> Int
-      -> Sem r (Int, m Int))
-    -> (m Int
-      -> Int
-      -> Sem r Int)
-    -> m Int
-    -> Int
-    -> Sem r Double
-  sendMsg tree forwardReq recvReq msg nodeIndex = do
-    Node msucc <- sendM @(ST s) $ readArray tree nodeIndex
-    case msucc of
-      Nothing -> do
-        trace $ "Node " ++ show nodeIndex ++ " received the request and has the token"
-        next <- recvReq msg nodeIndex
-        sendM @(ST s) $ writeArray tree nodeIndex (Node (Just next))
-        return 0
-      Just succ -> do
-        trace $ "Node " ++ show nodeIndex ++ " received the request and will forward it to " ++ show succ
-        (next, msg) <- forwardReq msg nodeIndex
-        sendM @(ST s) $ writeArray tree nodeIndex (Node (Just next))
-        let weight = weights ! (nodeIndex, succ)
-        restWeight <- sendMsg tree forwardReq recvReq msg succ
-        return $ weight + restWeight
-
-
-
 main :: IO ()
 main = putStrLn "Hello, Haskell!"
+-}
