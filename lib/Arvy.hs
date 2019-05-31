@@ -46,6 +46,23 @@ data Arvy r = forall msg . Arvy
   , arvySelect   :: forall i . msg i -> Sem r i
   }
 
+fromSelection :: (forall i . [i] -> Sem r i) -> Arvy r
+fromSelection select = Arvy
+  { arvyInitiate = do
+      i <- ask
+      return [i]
+  , arvyTransmit = \msg -> do
+      i <- ask
+      return $ i : msg
+  , arvySelect = select
+  }
+
+arrow' :: Arvy r
+arrow' = fromSelection (return . head)
+
+ivy' :: Arvy r
+ivy' = fromSelection (return . last)
+
 data Tree i (m :: * -> *) a where
   GetSuccessor :: i -> Tree i m (Maybe i)
   SetSuccessor :: i -> Maybe i -> Tree i m ()
@@ -140,9 +157,8 @@ arrow :: Arvy r
 arrow = Arvy
   { arvyInitiate =
       ArrowMessage <$> ask
-  , arvyTransmit = \(ArrowMessage sender) -> do
-      i <- ask
-      return (ArrowMessage i)
+  , arvyTransmit = \_ ->
+      ArrowMessage <$> ask
   , arvySelect = \(ArrowMessage sender) ->
       return sender
   }
@@ -153,8 +169,8 @@ ivy :: Arvy r
 ivy = Arvy
   { arvyInitiate =
       IvyMessage <$> ask
-  , arvyTransmit = \(IvyMessage root) ->
-      return (IvyMessage root)
+  , arvyTransmit =
+      return
   , arvySelect = \(IvyMessage root) ->
       return root
   }
