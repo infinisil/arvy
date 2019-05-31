@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE LambdaCase                #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
@@ -17,26 +18,22 @@ module Arvy where
 
 import           Control.Monad
 import           Control.Monad.ST
-import           Data.Array         (Array)
 import           Data.Array.IArray  (IArray, listArray, (!), (//))
 import           Data.Array.IO      (IOArray)
 import qualified Data.Array.MArray  as M
 import           Data.Array.ST
 import           Data.Array.Unboxed (UArray)
 import           Data.Monoid
-import qualified Debug.Trace        as D
-import           GHC.Generics
 import           Polysemy
 import           Polysemy.Output
 import           Polysemy.Reader
-import           Polysemy.State
 import           Polysemy.Trace
 
 
-data AlgorithmI r msg i = AlgorithmI
-  { send     :: Sem (Reader i ': r) (msg i)
-  , transfer :: msg i -> Sem (Reader i ': r) (i, msg i)
-  , recv     :: msg i -> Sem (Reader i ': r) i
+data Algorithm r = forall msg . Algorithm
+  { send     :: forall i . Sem (Reader i ': r) (msg i)
+  , transfer :: forall i . msg i -> Sem (Reader i ': r) (i, msg i)
+  , recv     :: forall i . msg i -> Sem (Reader i ': r) i
   }
 
 data Tree i (m :: * -> *) a where
@@ -55,8 +52,8 @@ runTree :: forall i m arr r a .
 runTree arr = interpret $ \case
   GetSuccessor i ->
     sendM @m $ readArray arr i
-  SetSuccessor i succ ->
-    sendM @m $ writeArray arr i succ
+  SetSuccessor i s ->
+    sendM @m $ writeArray arr i s
 
 doTest :: IO ()
 doTest = do
@@ -80,9 +77,16 @@ traceMessages = intercept @(Output (i, i)) $ \case
     output (from, to)
 
 runArvyLocal :: Members '[Trace, Tree i, Output (i, i)] r => Algorithm r -> i -> Sem r ()
-runArvyLocal (Algorithm algi) = runArvyLocal' algi where
-  runArvyLocal' :: forall i r msg . Members '[Trace, Tree i, Output (i, i)] r => AlgorithmI r msg i -> i -> Sem r ()
-  runArvyLocal' AlgorithmI { send, recv, transfer } r = do
+runArvyLocal (Algorithm s t rr) = runArvyLocal' (s, t, rr) where
+  runArvyLocal' :: forall i r msg
+    . Members '[Trace, Tree i, Output (i, i)] r
+    => ( Sem (Reader i ': r) (msg i)
+       , msg i -> Sem (Reader i ': r) (i, msg i)
+       , msg i -> Sem (Reader i ': r) i
+       )
+    -> i
+    -> Sem r ()
+  runArvyLocal' (send, transfer, recv) r = do
     trace "Initiating request"
     getSuccessor r >>= \case
       Nothing -> trace "Token is already here\n"
@@ -96,7 +100,7 @@ runArvyLocal (Algorithm algi) = runArvyLocal' algi where
           go msg r = getSuccessor r >>= \case
             Nothing -> do
               res <- runReader r $ recv msg
-              trace $ "Request arrived at token holder\n"
+              trace "Request arrived at token holder\n"
               setSuccessor r (Just res)
             Just n -> do
               (i, m) <- runReader r $ transfer msg
@@ -111,60 +115,41 @@ measureDistances weights = runFoldMapOutput (Sum . (weights !))
 traceTree :: forall i r a . (Show i, Member (Tree i) r, Member Trace r) => Sem r a -> Sem r a
 traceTree = intercept @(Tree i) $ \case
   GetSuccessor i -> do
-    succ <- getSuccessor i
-    trace $ "Getting successor for " ++ show i ++ ", which is " ++ show succ
-    return succ
-  SetSuccessor i succ -> do
-    trace $ "Setting successor for " ++ show i ++ " to " ++ show succ
-    setSuccessor i succ
+    s <- getSuccessor i
+    trace $ "Getting successor for " ++ show i ++ ", which is " ++ show s
+    return s
+  SetSuccessor i s -> do
+    trace $ "Setting successor for " ++ show i ++ " to " ++ show s
+    setSuccessor i s
 
-data Algorithm r = forall m . Algorithm (forall i . AlgorithmI r m i)
 
 newtype ArrowMessage i = ArrowMessage i
 
 arrow :: Algorithm r
-arrow = Algorithm (AlgorithmI
-  { send = do
-      i <- ask
-      return (ArrowMessage i)
+arrow = Algorithm
+  { send =
+      ArrowMessage <$> ask
   , transfer = \(ArrowMessage sender) -> do
       i <- ask
       return (sender, ArrowMessage i)
   , recv = \(ArrowMessage sender) ->
       return sender
-  })
+  }
 
 newtype IvyMessage i = IvyMessage i
 
 ivy :: Algorithm r
-ivy = Algorithm (AlgorithmI
-  { send = do
-      i <- ask
-      return (IvyMessage i)
-  , transfer = \(IvyMessage root) -> do
+ivy = Algorithm
+  { send =
+      IvyMessage <$> ask
+  , transfer = \(IvyMessage root) ->
       return (root, IvyMessage root)
   , recv = \(IvyMessage root) ->
       return root
-  })
-
-data AlgPart i a where
-  Init :: AlgPart i (msg i)
-  Transmit :: msg i -> AlgPart i (i, msg i)
-  Recv :: msg i -> AlgPart i i
-
-data Event a where
-  MakeRequest :: Event ()
-  ForwardRequest :: msg -> Event msg
-  RecvRequest :: msg -> Event ()
-
-handleEvent :: Event a -> a
-handleEvent MakeRequest          = ()
-handleEvent (ForwardRequest msg) = msg
-handleEvent (RecvRequest msg)    = ()
-
-type NewAlg r = forall a i . AlgPart i a -> Sem (Reader i ': r) a
+  }
 
 
+-- | TODO: https://hackage.haskell.org/package/repa seems like a better fit for this, because it supports taking slices
 type GraphWeights = UArray (Int, Int) Double
 
 -- | TODO: Implement https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm for https://hackage.haskell.org/package/algebraic-graphs, then use that to generate the weights
@@ -190,29 +175,3 @@ newtype Node = Node
   } deriving Show
 
 type GraphState s = STArray s Int Node
-
-{-
-
-test :: forall s r . Member (Lift (ST s)) r => STArray s Int Int -> Sem r Int
-test arr = do
-  x <- sendM @(ST s) $ readArray arr 0
-  return x
-
-runit :: IO [Double]
-runit = do
-  let (outputs, result) = runST runTest
-  forM_ outputs putStrLn
-  return result
-
-runTest :: forall s . ST s ([String], [Double])
-runTest = do
-  let n = 100
-  graphState <- initialTree n
-  runM
-    $ runFoldMapOutput (\i -> [i])
-    $ runTraceAsOutput
-    $ runAlgorithm @s (full n) graphState (take 1000 $ requests n) ivy
-
-main :: IO ()
-main = putStrLn "Hello, Haskell!"
--}
