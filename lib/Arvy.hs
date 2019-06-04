@@ -24,6 +24,8 @@ import qualified Data.Array.MArray  as M
 import           Data.Array.ST
 import           Data.Array.Unboxed (UArray)
 import           Data.Monoid
+import qualified Data.Set           as Set
+import qualified Data.Tree          as T
 import           Polysemy
 import           Polysemy.Output
 import           Polysemy.Reader
@@ -72,6 +74,24 @@ data Tree i (m :: * -> *) a where
 
 makeSem ''Tree
 
+-- | Interpret a 'State' with a mutable array element, where a 'Reader' gives the index.
+runStateMArray :: forall i arr n m r a .
+  ( Ix i
+  , M.MArray arr n m
+  , Member (Reader i) r
+  , Member (Lift m) r
+  )
+  => arr i n
+  -> Sem (State n ': r) a
+  -> Sem r a
+runStateMArray arr = interpret $ \case
+  Get -> do
+    i <- ask
+    sendM @m $ readArray arr i
+  Put value -> do
+    i <- ask
+    sendM @m $ writeArray arr i value
+
 runTree :: forall i m arr r a .
   ( Ix i
   , M.MArray arr (Maybe i) m
@@ -84,6 +104,56 @@ runTree arr = interpret $ \case
     sendM @m $ readArray arr i
   SetSuccessor i s ->
     sendM @m $ writeArray arr i s
+
+--- ####### Initial trees
+
+ring :: Int -> GraphWeights -> T.Tree Int
+ring nodeCount _ = ring' 0 (nodeCount - 1) where
+  ring' :: Int -> Int -> T.Tree Int
+  ring' n high = T.Node n children where
+    children
+      | n == high = []
+      | otherwise = [ring' (n + 1) high]
+
+mst :: Int -> GraphWeights -> T.Tree Int
+mst = undefined
+
+treeSet :: T.Tree Int -> Maybe (Set.Set Int)
+treeSet (T.Node n f) = do
+  f' <- forestSet f
+  if Set.member n f'
+    then Nothing
+    else return (Set.insert n f')
+  where
+    forestSet :: T.Forest Int -> Maybe (Set.Set Int)
+    forestSet [] = return Set.empty
+    forestSet (x:xs) = do
+      x' <- treeSet x
+      xs' <- forestSet xs
+      if Set.disjoint x' xs'
+        then return (Set.union x' xs')
+        else Nothing
+
+
+treeToArray :: forall i arr m . (Ix i, Num i, M.MArray arr (Maybe i) m) => i -> T.Tree i -> m (arr i (Maybe i))
+treeToArray count (T.Node n children) = do
+  arr <- newArray (0, count) Nothing :: m (arr i (Maybe i))
+  setChildren arr n children
+  return arr
+  where
+    setChildren :: arr i (Maybe i) -> i -> [T.Tree i] -> m ()
+    setChildren arr = go where
+      go _ [] = return ()
+      go parent (T.Node n children:xs) = do
+        readArray arr n >>= \case
+          Nothing -> return ()
+          Just _ -> error ""
+        writeArray arr n (Just parent)
+        go n children
+        go parent xs
+
+
+
 
 doTest :: IO ()
 doTest = do

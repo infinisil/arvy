@@ -23,6 +23,7 @@ library
   build-depends:       base ^>=4.12.0.0
                      , polysemy
                      , array
+                     , containers
   hs-source-dirs:      lib
   default-language:    Haskell2010
 
