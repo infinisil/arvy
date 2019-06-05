@@ -33,9 +33,9 @@ import           Polysemy.Reader
 import           Polysemy.State
 import           Polysemy.Trace
 
-import           Algorithm
-import           Tree
-import           Weights
+import           Arvy.Algorithm
+import           Arvy.Tree
+import           Arvy.Weights
 
 -- | Interpret a 'State' with a mutable array element, where a 'Reader' gives the index.
 runStateMArray :: forall i arr n m r a .

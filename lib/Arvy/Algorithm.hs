@@ -6,14 +6,14 @@
 {-# LANGUAGE TypeOperators             #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 
-module Algorithm where
+module Arvy.Algorithm where
 
 import           Polysemy
 import           Polysemy.Output
 import           Polysemy.Reader
 import           Polysemy.State
 import           Polysemy.Trace
-import           Tree
+import           Arvy.Tree
 
 {- |
 An Arvy algorithm, a combination between Arrow and Ivy.

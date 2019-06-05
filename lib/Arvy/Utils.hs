@@ -1,4 +1,4 @@
-module Utils where
+module Arvy.Utils where
 
 import           Data.Array.IArray
 

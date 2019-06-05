@@ -9,15 +9,15 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
-module Tree where
+module Arvy.Tree where
 
+import           Arvy.Weights
 import           Data.Array.MArray
 import           Data.Set          (Set)
 import qualified Data.Set          as Set
 import           Data.Tree
 import           Polysemy
 import           Polysemy.Trace
-import           Weights
 
 type InitialTree = Tree Int
 

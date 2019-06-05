@@ -5,17 +5,17 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
-module Requests where
+module Arvy.Requests where
 
 import Polysemy
-import Tree
-import Weights
+import Arvy.Tree
+import Arvy.Weights
 import Polysemy.Input
 import Data.Array.IArray
 import Polysemy.State
 import Data.Foldable (maximumBy)
 import Data.Ord (comparing)
-import Utils
+import Arvy.Utils
 
 
 type Requests r = Members '[SpanningTree Int] r => Int -> GraphWeights -> (forall a . Sem (Input (Maybe Int) ': r) a -> Sem r a)

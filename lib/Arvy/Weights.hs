@@ -1,4 +1,4 @@
-module Weights where
+module Arvy.Weights where
 
 import           Algebra.Graph.AdjacencyIntMap
 import           Control.Monad
@@ -38,3 +38,6 @@ shortestPathWeights graph = runSTUArray $ do
           writeArray arr (i, j) ikj
 
   return arr
+
+ringWeights :: Int -> GraphWeights
+ringWeights n = shortestPathWeights (circuit [0..n - 1])
