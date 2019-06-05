@@ -17,10 +17,11 @@
 
 module Arvy where
 
+import           Algebra.Graph.Class
 import           Control.Monad
 import           Data.Array.IArray
-import           Data.Array.IO     (IOArray)
-import qualified Data.Array.MArray as M
+import           Data.Array.IO       (IOArray)
+import qualified Data.Array.MArray   as M
 import           Data.Array.ST
 import           Data.List
 import           Data.Monoid
@@ -61,13 +62,14 @@ doTest = do
   dist <- runM
     $ runTraceIO
     $ runTree @Int @IO x
+    $ traceTree @Int
     $ forM (take 10 $ cycle [0..4]) (
       measureDistances weights
       . traceMessages @Int
       . runArvyLocal @Int arrow
     )
   print dist
-  where weights = full 5
+  where weights = shortestPathWeights (circuit [0..4])
 
 traceMessages :: forall i r a . (Member Trace r, Member (Output (i, i)) r, Show i) => Sem r a -> Sem r a
 traceMessages = intercept @(Output (i, i)) $ \case

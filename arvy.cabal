@@ -29,6 +29,7 @@ library
                      , polysemy-plugin
                      , array
                      , containers
+                     , algebraic-graphs
   hs-source-dirs:      lib
   default-language:    Haskell2010
 
