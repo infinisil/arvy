@@ -1,0 +1,2 @@
+# With algebraic-graphs, expressions like 0 * 1 can be used to construct graphs
+- ignore: {name: Evaluate}

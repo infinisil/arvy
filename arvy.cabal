@@ -33,3 +33,16 @@ library
   hs-source-dirs:      lib
   default-language:    Haskell2010
 
+
+test-suite arvy-tests
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  hs-source-dirs:      tests
+  ghc-options:         -Wall
+  build-depends:       base ^>=4.12.0.0
+                     , arvy
+                     , hspec
+                     , array
+  default-language:    Haskell2010
+
+  
