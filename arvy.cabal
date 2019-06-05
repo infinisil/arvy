@@ -17,11 +17,16 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:     Arvy
-  -- other-modules:
+                       Algorithm
+                       Weights
+                       Tree
+                       Requests
+                       Utils
   -- other-extensions:
-  ghc-options:         -Wall -O2 -flate-specialise -fspecialise-aggressively
+  ghc-options:         -Wall -O2 -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
   build-depends:       base ^>=4.12.0.0
                      , polysemy
+                     , polysemy-plugin
                      , array
                      , containers
   hs-source-dirs:      lib
