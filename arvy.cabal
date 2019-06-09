@@ -30,6 +30,7 @@ library
                      , array
                      , containers
                      , algebraic-graphs
+                     , heaps
   hs-source-dirs:      lib
   default-language:    Haskell2010
 

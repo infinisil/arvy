@@ -12,60 +12,51 @@
 module Arvy.Tree where
 
 import           Arvy.Weights
+import           Control.Monad
 import           Data.Array.MArray
-import           Data.Set          (Set)
-import qualified Data.Set          as Set
-import           Data.Tree
+import qualified Data.Heap         as H
 import           Polysemy
 import           Polysemy.Trace
 
-type InitialTree = Tree Int
+type TreeState arr = arr Word (Maybe Word)
 
-treeSet :: Tree Int -> Maybe (Set Int)
-treeSet (Node n f) = do
-  f' <- forestSet f
-  if Set.member n f'
-    then Nothing
-    else return (Set.insert n f')
-  where
-    forestSet :: Forest Int -> Maybe (Set Int)
-    forestSet [] = return Set.empty
-    forestSet (x:xs) = do
-      x' <- treeSet x
-      xs' <- forestSet xs
-      if Set.disjoint x' xs'
-        then return (Set.union x' xs')
-        else Nothing
+ring :: MArray arr (Maybe Word) m => Word -> m (TreeState arr)
+ring count = newListArray (0, count - 1) (Nothing : fmap Just [0..])
 
+type Edge = (Int, Int)
+type MSTEntry = H.Entry Double Edge
 
-treeToArray :: forall i arr m . (Ix i, Num i, MArray arr (Maybe i) m) => i -> Tree i -> m (arr i (Maybe i))
-treeToArray count (Node n children) = do
-  arr <- newArray (0, count) Nothing :: m (arr i (Maybe i))
-  setChildren arr n children
+-- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. /O(n^2)/.
+mst :: MArray arr (Maybe Int) m => Int -> GraphWeights -> m (arr Int (Maybe Int))
+mst count weights = do
+  arr <- newArray (0, count - 1) Nothing
+  forM_ (mstEdges count weights) $ \(x, y) ->
+    writeArray arr y (Just x)
   return arr
-  where
-    setChildren :: arr i (Maybe i) -> i -> [Tree i] -> m ()
-    setChildren arr = go where
-      go _ [] = return ()
-      go parent (Node n children:xs) = do
-        readArray arr n >>= \case
-          Nothing -> return ()
-          Just _ -> error ""
-        writeArray arr n (Just parent)
-        go n children
-        go parent xs
 
+-- | Calculates the edges of a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. /O(n^2)/.
+mstEdges :: Int -> GraphWeights -> [Edge]
+mstEdges count weights = go initialHeap where
+  -- | Initial heap containing the weights from node 0 to every other node, so 0 is arbitrarily
+  -- chosen as the initial node included in the MST. /O(n)/.
+  initialHeap :: H.Heap MSTEntry
+  initialHeap = H.fromList
+    [ H.Entry (weights ! (0, x)) (0, x)
+    | x <- [1 .. count - 1] ]
 
-ring :: Int -> GraphWeights -> Tree Int
-ring nodeCount _ = ring' 0 (nodeCount - 1) where
-  ring' :: Int -> Int -> Tree Int
-  ring' n high = Node n children where
-    children
-      | n == high = []
-      | otherwise = [ring' (n + 1) high]
+  -- | Calculates the edges of a minimum spanning tree by repeatedly taking the minimum edge in the heap and updating the heap with new weights. /O(n^2)/
+  go :: H.Heap MSTEntry -> [Edge]
+  go heap = case H.viewMin heap of
+    Nothing                            -> []
+    Just (H.Entry _ edge@(_, y), rest) -> edge : go (H.map (updateWeight y) rest)
 
-mst :: Int -> GraphWeights -> Tree Int
-mst = undefined
+  -- | Updates the minimum weight to a node by checking if the new node in the MST has a
+  -- smaller weight to it than all others. /O(1)/
+  updateWeight :: Int -> MSTEntry -> MSTEntry
+  updateWeight new entry@(H.Entry weight (_, dst))
+    | newWeight < weight = H.Entry newWeight (new, dst)
+    | otherwise = entry
+    where newWeight = weights ! (new, dst)
 
 
 -- | A tree state in a graph with nodes indices of type @i@. @w@ represents write access.
