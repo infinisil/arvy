@@ -6,6 +6,7 @@
 let
 
   inherit (pkgs) lib;
+  hlib = pkgs.haskell.lib;
 
   src = lib.sourceByRegex ./. [
     "lib.*"
@@ -14,7 +15,15 @@ let
     "arvy.cabal"
   ];
 
-  pkg = pkgs.haskell.packages.ghc864.callCabal2nix "arvy" src {};
+  hpkgs = pkgs.haskell.packages.ghc864.override (old: {
+    overrides = lib.composeExtensions (old.overrides or (self: super: {})) (self: super: {
+
+      arvy = super.callCabal2nix "arvy" src {};
+
+    });
+  });
+
+  pkg = hpkgs.arvy;
 
   env = pkg.env.overrideAttrs (old: {
     nativeBuildInputs = old.nativeBuildInputs or [] ++ [ pkgs.haskellPackages.cabal-install ];
