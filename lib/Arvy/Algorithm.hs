@@ -16,7 +16,10 @@
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE TypeOperators             #-}
 
-module Arvy.Algorithm where
+module Arvy.Algorithm
+  ( module Arvy.Algorithm
+  , module Polysemy.State
+  ) where
 
 import           Arvy.Weights
 import           Arvy.Tree
@@ -91,94 +94,6 @@ superSimpleArvy selector = Arvy
       raise . raise $ selector msg
   }
 
-newtype ArrowMessage i = ArrowMessage i
-
-arrow :: Arvy r
-arrow = Arvy
-  { arvyNodeInit = \_ -> return ()
-  , arvyInitiate = return . ArrowMessage
-  , arvyTransmit = \i (ArrowMessage sender) ->
-      return (sender, ArrowMessage i)
-  , arvyReceive = \_ (ArrowMessage sender) ->
-      return sender
-  }
-
-data RingMessage i
-  = BeforeCrossing
-      { root   :: i
-      , sender :: i
-      }
-  | Crossing
-      { root   :: i
-      }
-  | AfterCrossing
-      { sender :: i
-      }
-
-data RingNodeState
-  = SemiNode
-  | BridgeNode
-
-constantRing :: forall r . Int -> Arvy r
-constantRing firstBridge = Arvy
-  { arvyNodeInit = \i -> return $
-    if indexValue i == firstBridge
-        then BridgeNode
-        else SemiNode
-
-  , arvyInitiate = \i -> get >>= \case
-      SemiNode -> return (BeforeCrossing i i)
-      BridgeNode -> do
-        put SemiNode
-        return (Crossing i)
-  , arvyTransmit = \i -> \case
-      BeforeCrossing { root, sender } -> get >>= \case
-        SemiNode ->
-          return (sender, BeforeCrossing (forward root) i)
-        BridgeNode -> do
-          put SemiNode
-          return (sender, Crossing (forward root))
-      Crossing { root } -> do
-        put BridgeNode
-        return (root, AfterCrossing i)
-      AfterCrossing { sender } ->
-        return (sender, AfterCrossing i)
-  , arvyReceive = \_ -> \case
-      BeforeCrossing { sender } -> return sender
-      Crossing { root } -> do
-        put BridgeNode
-        return root
-      AfterCrossing { sender } -> return sender
-  }
-
-newtype IvyMessage i = IvyMessage i
-
-ivy :: Arvy r
-ivy = Arvy
-  { arvyNodeInit = \_ -> return ()
-  , arvyInitiate = return . IvyMessage
-  , arvyTransmit = \_ (IvyMessage root) ->
-      return (root, IvyMessage (forward root))
-  , arvyReceive = \_ (IvyMessage root) ->
-      return root
-  }
-
-
-
-main :: IO ()
-main = do
-  let count = 100
-  weights <- runM $ runRandomIO $ randomWeights count
-  requests <- runM $ runRandomIO $ randomRequests count 1000
-  tree <- mst count weights :: IO (IOArray Int (Maybe Int))
-  runM
-    $ runTraceIO
-    $ runOutputAsTrace @(Int, Int)
-    $ runListInput requests
-    $ runArvyLocal @IO @IOArray count weights tree ivy
-  
-
-  return ()
 
 runArvyLocal
   :: forall m narr r tarr

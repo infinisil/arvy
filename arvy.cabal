@@ -17,9 +17,12 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:     Arvy
-                       Arvy.Algorithm
                        Arvy.Weights
                        Arvy.Tree
+                       Arvy.Algorithm
+                       Arvy.Algorithm.Arrow
+                       Arvy.Algorithm.Ivy
+                       Arvy.Algorithm.ConstantRing
                        Arvy.Requests
                        Arvy.Utils
   -- other-extensions:
