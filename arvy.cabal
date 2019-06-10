@@ -23,7 +23,7 @@ library
                        Arvy.Requests
                        Arvy.Utils
   -- other-extensions:
-  ghc-options:         -Wall -O2 -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
+  ghc-options:         -Wall -O2 -flate-specialise -fspecialise-aggressively
   build-depends:       base ^>=4.12.0.0
                      , polysemy
                      , polysemy-plugin

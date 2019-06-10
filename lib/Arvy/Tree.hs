@@ -80,7 +80,7 @@ runTree arr = interpret $ \case
     sendM @m $ writeArray arr i s
 
 
-traceTree :: forall i w r a . (Show i, Member (SpanningTree i) r, Member Trace r) => Sem r a -> Sem r a
+traceTree :: forall i r a . (Show i, Member (SpanningTree i) r, Member Trace r) => Sem r a -> Sem r a
 traceTree = intercept @(SpanningTree i) $ \case
   GetSuccessor i -> do
     s <- getSuccessor i
