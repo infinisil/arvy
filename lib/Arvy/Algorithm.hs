@@ -202,61 +202,46 @@ runArvyLocal
   -> Arvy r
   -> Sem r ()
 runArvyLocal count tree Arvy { .. } = runArvyLocal' $ ExpandedArvy arvyNodeInit arvyInitiate arvyTransmit arvyReceive where
-  runArvyLocal'
-    :: forall msg s
-    . (Members '[ Input (Maybe Int)
-                , Lift m
-                , Trace
-                , Output (Int, Int) ] r
-      , MArray tarr (Maybe Int) m
-      , MArray narr s m)
-    => ExpandedArvy r msg s
-    -> Sem r ()
+  runArvyLocal' :: forall msg s . ExpandedArvy r msg s -> Sem r ()
   runArvyLocal' ExpandedArvy { .. } = do
     x <- traverse arvyNodeInit' [0 .. count - 1]
     res <- sendM @m $ newListArray (0, count - 1) x
     go res
+    
     where
-      go
-        :: (Members '[ Input (Maybe Int)
-                     , Lift m
-                     , Trace
-                     , Output (Int, Int) ] r)
-         => narr Int s
-         -> Sem r ()
-      go state = input @(Maybe Int) >>= \case
-        Nothing -> trace "All requests fulfilled"
-        Just i -> do
-          trace $ "Request from node " ++ show i
-          sendM @m (readArray tree i) >>= \case
-            Nothing -> trace "This node already has the token"
-            Just successor -> do
-              oldState <- sendM @m (readArray state i)
-              (newState, msg) <- runState oldState (arvyInitiate' i)
-              sendM @m (writeArray state i newState)
-              sendM @m (writeArray tree i Nothing)
-              output (i, successor)
-              send msg successor
-          go state
-        where
-          send :: (Members '[ Lift m
-                            , Trace
-                            , Output (Int, Int) ] r)
-                => msg Int -> Int -> Sem r ()
-          send msg i = do
-            sendM @m (readArray tree i) >>= \case
-              Nothing -> do
-                oldState <- sendM @m (readArray state i)
-                (newState, newSucc) <- runState oldState (arvyReceive' i msg)
-                sendM @m (writeArray state i newState)
-                sendM @m (writeArray tree i (Just newSucc))
-              Just successor -> do
-                oldState <- sendM @m (readArray state i)
-                (newState, (newSucc, newMsg)) <- runState oldState (arvyTransmit' i msg)
-                sendM @m (writeArray state i newState)
-                sendM @m (writeArray tree i (Just newSucc))
-                output (i, successor)
-                send newMsg successor
+      
+    go :: narr Int s -> Sem r ()
+    go state = input >>= \case
+      Nothing -> trace "All requests fulfilled"
+      Just i -> do
+        trace $ "Request from node " ++ show i
+        sendM @m (readArray tree i) >>= \case
+          Nothing -> trace "This node already has the token"
+          Just successor -> do
+            oldState <- sendM @m (readArray state i)
+            (newState, msg) <- runState oldState (arvyInitiate' i)
+            sendM @m (writeArray state i newState)
+            sendM @m (writeArray tree i Nothing)
+            output (i, successor)
+            send msg successor
+        go state
+        
+      where
+        
+      send :: msg Int -> Int -> Sem r ()
+      send msg i = sendM @m (readArray tree i) >>= \case
+        Nothing -> do
+          oldState <- sendM @m (readArray state i)
+          (newState, newSucc) <- runState oldState (arvyReceive' i msg)
+          sendM @m (writeArray state i newState)
+          sendM @m (writeArray tree i (Just newSucc))
+        Just successor -> do
+          oldState <- sendM @m (readArray state i)
+          (newState, (newSucc, newMsg)) <- runState oldState (arvyTransmit' i msg)
+          sendM @m (writeArray state i newState)
+          sendM @m (writeArray tree i (Just newSucc))
+          output (i, successor)
+          send newMsg successor
   
 --runArvyLocal weights tree alg@Arvy { .. } = input @(Maybe Word) >>= \case
 --  Nothing -> return ()
