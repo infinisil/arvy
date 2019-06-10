@@ -25,54 +25,58 @@ import           Data.Array.MArray
 import           Data.Array.IO
 import           Polysemy
 import           Polysemy.Input
-import           Polysemy.Reader
 import           Polysemy.Output
 import           Polysemy.Trace
 import           Polysemy.State
 import           Polysemy.Random
 
-
 {- |
+
 An Arvy algorithm, a combination between Arrow and Ivy.
 @r@ stands for the effects it runs in, chosen by the caller, but the algorithm can enforce certain constraints on it, like requiring randomness.
-@msg@ stands for the message type it sends between nodes, this can be arbitrarily chosen by the algorithm.
+@msg@ stands for the message type it sends between nodes, this can be arbitrarily chosen by the algorithm. It is parametrized by @i@ such that you can send node indices over messages.
+@s@ stands for the state type nodes can store, this can be arbitrarily chose by the algorithm.
 @i@ stands for the node index type, which can be passed via messages and be has to be used to select which node to choose as the next successor.
 
-- When a node @x@ initiates a request, 'arvyInitiate' is called to generate the initial message, which has access to the current node's index through a 'Reader i' effect.
-- This message gets passed along the path from @x@ to the current token holder @y@. For nodes the request travels *through*, 'arvyTransmit' is called, which can transform the message, potentially adding a reference to the current node's index.
-- Whenever a message arrives at a node, 'arvySelect' is called, which has to select a node index from the received message. For this selection, the algorithm does *not* have access to the current node's index. This is to ensure correctness of it, because only *previously* traversed nodes should be selected.
+- Before the algorithm runs, every node's state gets initialized by calling 'arvyNodeInit' with its index.
+- When a node initiates a request, 'arvyInitiate' is called to generate the initial message.
+- This message gets passed along the path to the current token holder. For nodes the request travels *through*, 'arvyTransmit' is called, which has to select a node index to set as a new successor and has to return a new message to forward.
+- When the request reaches the final node holding the token, 'arvyReceive' is called, which has to select a node index to set as a new successor.
+
+All methods have access to the node's index they run in and the weights to all other nodes. In addition, every method except 'arvyNodeInit' has read and write access to the current node's state.
+
+The types @i@ and @i'@ are used to ensure the algorithms correctness, in that they are chosen such that you can only select a new successor from already traveled through nodes.
 
 -}
-
-data Env i = Env
-  { nodeIndex      :: i
-  , nodeCount      :: Int
-  , neigborWeights :: Int -> Double
-  }
-
-
-
 data Arvy r = forall msg s . Arvy
-  { arvyNodeInit :: forall i . ToIx i => i -> Sem (LocalWeights ': r) s
-  -- ^ How to compute the initial state in all nodes
-  , arvyInitiate :: forall i . ToIx i => i -> Sem (LocalWeights ': State s ': r) (msg i)
+  { arvyNodeInit :: forall i . NodeIndex i => i -> Sem (LocalWeights ': r) s
+  -- ^ How to compute the initial state in nodes
+  , arvyInitiate :: forall i . NodeIndex i => i -> Sem (LocalWeights ': State s ': r) (msg i)
   -- ^ Initial request message contents
-  -- Accessible is the state of the node that sends the message and the index of it
-  , arvyTransmit :: forall i' i . TIx i' i => i -> msg i' -> Sem (LocalWeights ': State s ': r) (i', msg i)
-  -- ^ How to transmit a message when a node received one and has to pass it on
-  -- Accessible is the state of the node that receive the mess
-  , arvyReceive :: forall i' i . TIx i' i => i -> msg i' -> Sem (LocalWeights ': State s ': r) i'
-  -- ^ How to determine the new successor from a received message, this is the meat of an Arvy algorithm
-  -- Accessible is the state of the node that received the message and the index of it
-  -- However you can't use the index of the current node as a return value in order to ensure correctness of Arvy.
+  , arvyTransmit :: forall ir i . Forwardable ir i => i -> msg ir -> Sem (LocalWeights ': State s ': r) (ir, msg i)
+  -- ^ What to do when a message passes through this node, what new successor to choose and what message to forward
+  -- @ir@ stands for the node index type you received and need to select, which can be forwarded to @i@ which is the node index type of the current node and the message to send
+  , arvyReceive :: forall ir i . Forwardable ir i => i -> msg ir -> Sem (LocalWeights ': State s ': r) ir
+  -- ^ What to do when a message arrives at the node holding the token, what new successor to choose.
+  -- @ir@ stands for the node index type you received and need to select, which can be forwarded to @i@ which is the node index type of the current node and the message to send
   }
 
-data ExpandedArvy r msg s = ExpandedArvy
-  { arvyNodeInit' :: forall i . ToIx i => i -> Sem (LocalWeights ': r) s
-  , arvyInitiate' :: forall i . ToIx i => i -> Sem (LocalWeights ': State s ': r) (msg i)
-  , arvyTransmit' :: forall i' i . TIx i' i => i -> msg i' -> Sem (LocalWeights ': State s ': r) (i', msg i)
-  , arvyReceive' :: forall i' i . TIx i' i => i -> msg i' -> Sem (LocalWeights ': State s ': r) i'
-  }
+-- | A class for abstract node indices that can be converted to an 'Int'.
+class NodeIndex i where
+  -- | Extract the 'Int' value from the given abstract node index
+  indexValue :: i -> Int
+  default indexValue :: Integral i => i -> Int
+  indexValue = fromIntegral
+  
+-- | A class for node indices that can be forwarded in one direction. Having this class as a constraint on types @i@ and @i'@ is equivalent to passing a function @i -> i'@.
+class (NodeIndex i, NodeIndex i') => Forwardable i i' where
+  -- | Forward a node index
+  forward :: i -> i'
+  default forward :: i ~ i' => i -> i'
+  forward = id
+
+instance NodeIndex Int
+instance Forwardable Int Int
 
 
 -- TODO: Use mono-traversable for speedup
@@ -82,7 +86,7 @@ superSimpleArvy selector = Arvy
   , arvyInitiate = \i -> return [i]
   , arvyTransmit = \i msg -> do
       s <- raise . raise $ selector msg
-      return (s, i : fmap forwarded msg)
+      return (s, i : fmap forward msg)
   , arvyReceive = \_ msg ->
       raise . raise $ selector msg
   }
@@ -118,7 +122,7 @@ data RingNodeState
 constantRing :: forall r . Int -> Arvy r
 constantRing firstBridge = Arvy
   { arvyNodeInit = \i -> return $
-    if toIx i == firstBridge
+    if indexValue i == firstBridge
         then BridgeNode
         else SemiNode
 
@@ -130,10 +134,10 @@ constantRing firstBridge = Arvy
   , arvyTransmit = \i -> \case
       BeforeCrossing { root, sender } -> get >>= \case
         SemiNode ->
-          return (sender, BeforeCrossing (forwarded root) i)
+          return (sender, BeforeCrossing (forward root) i)
         BridgeNode -> do
           put SemiNode
-          return (sender, Crossing (forwarded root))
+          return (sender, Crossing (forward root))
       Crossing { root } -> do
         put BridgeNode
         return (root, AfterCrossing i)
@@ -154,23 +158,11 @@ ivy = Arvy
   { arvyNodeInit = \_ -> return ()
   , arvyInitiate = return . IvyMessage
   , arvyTransmit = \_ (IvyMessage root) ->
-      return (root, IvyMessage (forwarded root))
+      return (root, IvyMessage (forward root))
   , arvyReceive = \_ (IvyMessage root) ->
       return root
   }
 
-class (ToIx a, ToIx b) => TIx a b where
-  forwarded :: a -> b
-  default forwarded :: a ~ b => a -> b
-  forwarded = id
-
-instance TIx Int Int
-
-class ToIx a where
-  toIx :: a -> Int
-
-instance ToIx Int where
-  toIx = id
 
 
 main :: IO ()
@@ -188,7 +180,6 @@ main = do
 
   return ()
 
-
 runArvyLocal
   :: forall m narr r tarr
   . ( Members '[ Input (Maybe Int)
@@ -202,10 +193,16 @@ runArvyLocal
   -> tarr Int (Maybe Int)
   -> Arvy r
   -> Sem r ()
-runArvyLocal count weights tree Arvy { .. } = runArvyLocal' $ ExpandedArvy arvyNodeInit arvyInitiate arvyTransmit arvyReceive where
-  runArvyLocal' :: forall msg s . ExpandedArvy r msg s -> Sem r ()
-  runArvyLocal' ExpandedArvy { .. } = do
-    states <- traverse (\i -> runLocalWeights weights i (arvyNodeInit' i)) [0 .. count - 1]
+runArvyLocal count weights tree Arvy { .. } = runArvyLocal' arvyNodeInit arvyInitiate arvyTransmit arvyReceive where
+  runArvyLocal'
+    :: forall msg s
+     . (Int -> Sem (LocalWeights ': r) s)
+    -> (Int -> Sem (LocalWeights ': State s ': r) (msg Int))
+    -> (Int -> msg Int -> Sem (LocalWeights ': State s ': r) (Int, msg Int))
+    -> (Int -> msg Int -> Sem (LocalWeights ': State s ': r) Int)
+    -> Sem r ()
+  runArvyLocal' nodeInit initiate transmit receive = do
+    states <- traverse (\i -> runLocalWeights weights i (nodeInit i)) [0 .. count - 1]
     stateArray <- sendM @m $ newListArray (0, count - 1) states
     go stateArray
     
@@ -219,7 +216,7 @@ runArvyLocal count weights tree Arvy { .. } = runArvyLocal' $ ExpandedArvy arvyN
         getSuccessor i >>= \case
           Nothing -> trace "This node already has the token"
           Just successor -> do
-            msg <- runNode i (arvyInitiate' i)
+            msg <- runNode i (initiate i)
             setSuccessor i Nothing
             output (i, successor)
             send msg successor
@@ -230,10 +227,10 @@ runArvyLocal count weights tree Arvy { .. } = runArvyLocal' $ ExpandedArvy arvyN
       send :: msg Int -> Int -> Sem r ()
       send msg i = getSuccessor i >>= \case
         Nothing -> do
-          newSucc <- runNode i (arvyReceive' i msg)
+          newSucc <- runNode i (receive i msg)
           setSuccessor i (Just newSucc)
         Just successor -> do
-          (newSucc, newMsg) <- runNode i (arvyTransmit' i msg)
+          (newSucc, newMsg) <- runNode i (transmit i msg)
           setSuccessor i (Just newSucc)
           output (i, successor)
           send newMsg successor
