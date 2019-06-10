@@ -93,11 +93,7 @@ data RingNodeState
 
 constantRing :: forall r . Word -> Arvy r
 constantRing firstBridge = Arvy
-  { arvyNodeInit = do
-      -- i <- asks (toIx . nodeIndex)
-      return $ if undefined == firstBridge
-        then BridgeNode
-        else SemiNode
+  { arvyNodeInit = initial
   , arvyInitiate = do
       i <- asks nodeIndex
       get >>= \case
@@ -127,7 +123,13 @@ constantRing firstBridge = Arvy
         return root
       AfterCrossing { sender } -> return sender
   }
-
+  where
+    initial :: forall i . ToIx i => Sem (Reader (Env i) ': r) RingNodeState
+    initial = do
+      value <- asks @(Env i) (toIx . nodeIndex)
+      return $ if value == firstBridge
+        then BridgeNode
+        else SemiNode
 
 --newtype IvyMessage i = IvyMessage i
 --
