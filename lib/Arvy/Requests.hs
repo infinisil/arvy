@@ -20,7 +20,7 @@ import Arvy.Utils
 import Polysemy.Random
 
 
-type Requests r = Members '[SpanningTree Int] r => Int -> GraphWeights -> (forall a . Sem (Input (Maybe Int) ': r) a -> Sem r a)
+type Requests r = Members '[] r => Int -> GraphWeights -> (forall a . Sem (Input (Maybe Int) ': r) a -> Sem r a)
 
 requestsFromList :: [Int] -> Requests r
 requestsFromList list _ _ = runListInput list

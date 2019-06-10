@@ -1,6 +1,11 @@
+{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs            #-}
+{-# LANGUAGE KindSignatures   #-}
+{-# LANGUAGE LambdaCase       #-}
+{-# LANGUAGE TemplateHaskell  #-}
 {-# LANGUAGE TupleSections    #-}
+{-# LANGUAGE TypeOperators    #-}
 module Arvy.Weights
   ( module Arvy.Weights
   , (!)
@@ -18,6 +23,16 @@ import           Polysemy.Random
 
 type GraphWeights = UArray (Int, Int) Double
 
+-- | An effect for providing access to weights from a current node to others
+data LocalWeights (m :: * -> *) a where
+  WeightTo :: Int -> LocalWeights m Double
+
+makeSem ''LocalWeights
+
+-- | Run local weights with all weights in a matrix and a current node index
+runLocalWeights :: GraphWeights -> Int -> Sem (LocalWeights ': r) a -> Sem r a
+runLocalWeights weights source = interpret $ \case
+  WeightTo target -> return $ weights ! (source, target)
 
 -- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is O(n^3) with n being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
 shortestPathWeights :: AdjacencyIntMap -> GraphWeights

@@ -59,33 +59,3 @@ mstEdges count weights = go initialHeap where
     where newWeight = weights ! (new, dst)
 
 
--- | A tree state in a graph with nodes indices of type @i@. @w@ represents write access.
-data SpanningTree i (m :: * -> *) a where
-  GetSuccessor :: i -> SpanningTree i m (Maybe i)
-  SetSuccessor :: i -> Maybe i -> SpanningTree i m ()
-
-makeSem ''SpanningTree
-
-runTree :: forall i m arr r a .
-  ( Ix i
-  , MArray arr (Maybe i) m
-  , Member (Lift m) r)
-  => arr i (Maybe i)
-  -> Sem (SpanningTree i ': r) a
-  -> Sem r a
-runTree arr = interpret $ \case
-  GetSuccessor i ->
-    sendM @m $ readArray arr i
-  SetSuccessor i s ->
-    sendM @m $ writeArray arr i s
-
-
-traceTree :: forall i r a . (Show i, Member (SpanningTree i) r, Member Trace r) => Sem r a -> Sem r a
-traceTree = intercept @(SpanningTree i) $ \case
-  GetSuccessor i -> do
-    s <- getSuccessor i
-    trace $ "Getting successor for " ++ show i ++ ", which is " ++ show s
-    return s
-  SetSuccessor i s -> do
-    trace $ "Setting successor for " ++ show i ++ " to " ++ show s
-    setSuccessor i s
