@@ -18,9 +18,9 @@ import qualified Data.Heap         as H
 import           Polysemy
 import           Polysemy.Trace
 
-type TreeState arr = arr Word (Maybe Word)
+type TreeState arr = arr Int (Maybe Int)
 
-ring :: MArray arr (Maybe Word) m => Word -> m (TreeState arr)
+ring :: MArray arr (Maybe Int) m => Int -> m (TreeState arr)
 ring count = newListArray (0, count - 1) (Nothing : fmap Just [0..])
 
 type Edge = (Int, Int)

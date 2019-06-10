@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -16,12 +17,19 @@ import Polysemy.State
 import Data.Foldable (maximumBy)
 import Data.Ord (comparing)
 import Arvy.Utils
+import Polysemy.Random
 
 
 type Requests r = Members '[SpanningTree Int] r => Int -> GraphWeights -> (forall a . Sem (Input (Maybe Int) ': r) a -> Sem r a)
 
 requestsFromList :: [Int] -> Requests r
 requestsFromList list _ _ = runListInput list
+
+randomRequests :: Member Random r => Int -> Int -> Sem r [Int]
+randomRequests _ 0 = return []
+randomRequests n k = do
+  r <- randomR (0, n - 1)
+  (r:) <$> randomRequests n (k - 1)
 
 -- | TODO: Shouldn't take tree input like this. Pass it as an argument in Requests directly
 requestsWorst :: Int -> Array Int (Maybe Int) -> Requests r

@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes       #-}
+{-# LANGUAGE QuantifiedConstraints       #-}
 {-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE DefaultSignatures         #-}
 {-# LANGUAGE DeriveFunctor             #-}
@@ -17,9 +18,18 @@
 
 module Arvy.Algorithm where
 
+import           Arvy.Weights
+import           Arvy.Tree
+import           Arvy.Requests
+import           Data.Array.MArray
+import           Data.Array.IO
 import           Polysemy
+import           Polysemy.Input
 import           Polysemy.Reader
+import           Polysemy.Output
+import           Polysemy.Trace
 import           Polysemy.State
+import           Polysemy.Random
 
 
 {- |
@@ -36,42 +46,56 @@ An Arvy algorithm, a combination between Arrow and Ivy.
 
 data Env i = Env
   { nodeIndex      :: i
-  , nodeCount      :: Word
-  , neigborWeights :: Word -> Double
+  , nodeCount      :: Int
+  , neigborWeights :: Int -> Double
   }
 
+
+
 data Arvy r = forall msg s . Arvy
-  { arvyNodeInit :: forall i . ToIx i => Sem (Reader (Env i) ': r) s
-  -- ^ Initial state in all nodes
-  -- ACcessible is the index of the node
-  , arvyInitiate :: forall i . ToIx i => Sem (State s ': Reader (Env i) ': r) (msg i)
+  { arvyNodeInit :: forall i . ToIx i => i -> Sem r s
+  -- ^ How to compute the initial state in all nodes
+  , arvyInitiate :: forall i . ToIx i => i -> Sem (State s ': r) (msg i)
   -- ^ Initial request message contents
   -- Accessible is the state of the node that sends the message and the index of it
-  , arvyTransmit :: forall i' i . (TIx i' i) => msg i' -> Sem (State s ': Reader (Env i) ': r) (i', msg i)
+  , arvyTransmit :: forall i' i . TIx i' i => i -> msg i' -> Sem (State s ': r) (i', msg i)
   -- ^ How to transmit a message when a node received one and has to pass it on
   -- Accessible is the state of the node that receive the mess
-  , arvyReceive :: forall i' i . (TIx i' i) => msg i' -> Sem (State s ': Reader (Env i) ': r) i'
-
-
--- ^ How to determine the new successor from a received message, this is the meat of an Arvy algorithm
+  , arvyReceive :: forall i' i . TIx i' i => i -> msg i' -> Sem (State s ': r) i'
+  -- ^ How to determine the new successor from a received message, this is the meat of an Arvy algorithm
   -- Accessible is the state of the node that received the message and the index of it
   -- However you can't use the index of the current node as a return value in order to ensure correctness of Arvy.
   }
 
+data ExpandedArvy r msg s = ExpandedArvy
+  { arvyNodeInit' :: forall i . ToIx i => i -> Sem r s
+  , arvyInitiate' :: forall i . ToIx i => i -> Sem (State s ': r) (msg i)
+  , arvyTransmit' :: forall i' i . TIx i' i => i -> msg i' -> Sem (State s ': r) (i', msg i)
+  , arvyReceive' :: forall i' i . TIx i' i => i -> msg i' -> Sem (State s ': r) i'
+  }
+
+
+-- TODO: Use mono-traversable for speedup
+superSimpleArvy :: (forall i . [i] -> Sem r i) -> Arvy r
+superSimpleArvy selector = Arvy
+  { arvyNodeInit = \_ -> return ()
+  , arvyInitiate = \i -> return [i]
+  , arvyTransmit = \i msg -> do
+      s <- raise $ selector msg
+      return (s, i : fmap forwarded msg)
+  , arvyReceive = \_ msg ->
+      raise $ selector msg
+  }
+
 newtype ArrowMessage i = ArrowMessage i
-
-
-
 
 arrow :: Arvy r
 arrow = Arvy
-  { arvyNodeInit = return ()
-  , arvyInitiate =
-      ArrowMessage <$> asks nodeIndex
-  , arvyTransmit = \(ArrowMessage sender) -> do
-      i <- asks nodeIndex
+  { arvyNodeInit = \_ -> return ()
+  , arvyInitiate = return . ArrowMessage
+  , arvyTransmit = \i (ArrowMessage sender) ->
       return (sender, ArrowMessage i)
-  , arvyReceive = \(ArrowMessage sender) ->
+  , arvyReceive = \_ (ArrowMessage sender) ->
       return sender
   }
 
@@ -91,71 +115,169 @@ data RingNodeState
   = SemiNode
   | BridgeNode
 
-constantRing :: forall r . Word -> Arvy r
+constantRing :: forall r . Int -> Arvy r
 constantRing firstBridge = Arvy
-  { arvyNodeInit = initial
-  , arvyInitiate = do
-      i <- asks nodeIndex
-      get >>= \case
-        SemiNode -> return (BeforeCrossing i i)
-        BridgeNode -> do
-          put SemiNode
-          return (Crossing i)
-  , arvyTransmit = \case
+  { arvyNodeInit = \i -> return $
+    if toIx i == firstBridge
+        then BridgeNode
+        else SemiNode
+
+  , arvyInitiate = \i -> get >>= \case
+      SemiNode -> return (BeforeCrossing i i)
+      BridgeNode -> do
+        put SemiNode
+        return (Crossing i)
+  , arvyTransmit = \i -> \case
       BeforeCrossing { root, sender } -> get >>= \case
-        SemiNode -> do
-          i <- asks nodeIndex
+        SemiNode ->
           return (sender, BeforeCrossing (forwarded root) i)
         BridgeNode -> do
           put SemiNode
           return (sender, Crossing (forwarded root))
       Crossing { root } -> do
         put BridgeNode
-        i <- asks nodeIndex
         return (root, AfterCrossing i)
-      AfterCrossing { sender } -> do
-        i <- asks nodeIndex
+      AfterCrossing { sender } ->
         return (sender, AfterCrossing i)
-  , arvyReceive = \case
+  , arvyReceive = \_ -> \case
       BeforeCrossing { sender } -> return sender
       Crossing { root } -> do
         put BridgeNode
         return root
       AfterCrossing { sender } -> return sender
   }
-  where
-    initial :: forall i . ToIx i => Sem (Reader (Env i) ': r) RingNodeState
-    initial = do
-      value <- asks @(Env i) (toIx . nodeIndex)
-      return $ if value == firstBridge
-        then BridgeNode
-        else SemiNode
 
---newtype IvyMessage i = IvyMessage i
---
---ivy :: Arvy r
---ivy = Arvy
---  { arvyNodeInit = return ()
---  , arvyInitiate =
---      IvyMessage <$> ask
---  , arvyTransmit =
---      return
---  , arvySelect = \(IvyMessage root) ->
---      return root
---  }
+newtype IvyMessage i = IvyMessage i
+
+ivy :: Arvy r
+ivy = Arvy
+  { arvyNodeInit = \_ -> return ()
+  , arvyInitiate = return . IvyMessage
+  , arvyTransmit = \_ (IvyMessage root) ->
+      return (root, IvyMessage (forwarded root))
+  , arvyReceive = \_ (IvyMessage root) ->
+      return root
+  }
 
 class (ToIx a, ToIx b) => TIx a b where
   forwarded :: a -> b
   default forwarded :: a ~ b => a -> b
   forwarded = id
 
-class ToIx a where
-  toIx :: a -> Word
+instance TIx Int Int
 
-instance ToIx Word where
+class ToIx a where
+  toIx :: a -> Int
+
+instance ToIx Int where
   toIx = id
 
---
+
+main :: IO ()
+main = do
+  let count = 1000
+  weights <- runM $ runRandomIO $ randomWeights count
+  requests <- runM $ runRandomIO $ randomRequests count 1000
+  tree <- mst count weights :: IO (IOArray Int (Maybe Int))
+  runM
+    $ runTraceIO
+    $ runOutputAsTrace @(Int, Int)
+    $ runListInput requests
+    $ runArvyLocal @IO @IOArray count tree ivy
+  
+
+  return ()
+
+
+runArvyLocal
+  :: forall m narr r tarr
+  . ( Members '[ Input (Maybe Int)
+               , Lift m
+               , Trace
+               , Output (Int, Int) ] r
+    , MArray tarr (Maybe Int) m
+    , forall s . MArray narr s m)
+  => Int
+  -> tarr Int (Maybe Int)
+  -> Arvy r
+  -> Sem r ()
+runArvyLocal count tree Arvy { .. } = runArvyLocal' $ ExpandedArvy arvyNodeInit arvyInitiate arvyTransmit arvyReceive where
+  runArvyLocal'
+    :: forall msg s
+    . (Members '[ Input (Maybe Int)
+                , Lift m
+                , Trace
+                , Output (Int, Int) ] r
+      , MArray tarr (Maybe Int) m
+      , MArray narr s m)
+    => ExpandedArvy r msg s
+    -> Sem r ()
+  runArvyLocal' ExpandedArvy { .. } = do
+    x <- traverse arvyNodeInit' [0 .. count - 1]
+    res <- sendM @m $ newListArray (0, count - 1) x
+    go res
+    where
+      go
+        :: (Members '[ Input (Maybe Int)
+                     , Lift m
+                     , Trace
+                     , Output (Int, Int) ] r)
+         => narr Int s
+         -> Sem r ()
+      go state = input @(Maybe Int) >>= \case
+        Nothing -> trace "All requests fulfilled"
+        Just i -> do
+          trace $ "Request from node " ++ show i
+          sendM @m (readArray tree i) >>= \case
+            Nothing -> trace "This node already has the token"
+            Just successor -> do
+              oldState <- sendM @m (readArray state i)
+              (newState, msg) <- runState oldState (arvyInitiate' i)
+              sendM @m (writeArray state i newState)
+              sendM @m (writeArray tree i Nothing)
+              output (i, successor)
+              send msg successor
+          go state
+        where
+          send :: (Members '[ Lift m
+                            , Trace
+                            , Output (Int, Int) ] r)
+                => msg Int -> Int -> Sem r ()
+          send msg i = do
+            sendM @m (readArray tree i) >>= \case
+              Nothing -> do
+                oldState <- sendM @m (readArray state i)
+                (newState, newSucc) <- runState oldState (arvyReceive' i msg)
+                sendM @m (writeArray state i newState)
+                sendM @m (writeArray tree i (Just newSucc))
+              Just successor -> do
+                oldState <- sendM @m (readArray state i)
+                (newState, (newSucc, newMsg)) <- runState oldState (arvyTransmit' i msg)
+                sendM @m (writeArray state i newState)
+                sendM @m (writeArray tree i (Just newSucc))
+                output (i, successor)
+                send newMsg successor
+  
+--runArvyLocal weights tree alg@Arvy { .. } = input @(Maybe Word) >>= \case
+--  Nothing -> return ()
+--  Just index -> do
+--    sendM @m (readArray tree index) >>= \case
+--      Nothing -> return ()
+--      Just succ -> do
+--        return ()
+--    runArvyLocal @m weights tree alg
+      --res <- sendM @m $ newListArray @arr' (0, count - 1) x
+
+
+  --{ arvyNodeInit :: forall i . ToIx i => i -> Sem r s
+  ---- ^ How to compute the initial state in all nodes
+  --, arvyInitiate :: forall i . ToIx i => i -> Sem (State s ': r) (msg i)
+  ---- ^ Initial request message contents
+  ---- Accessible is the state of the node that sends the message and the index of it
+  --, arvyTransmit :: forall i' i . TIx i' i => i -> msg i' -> Sem (State s ': r) (i', msg i)
+  ---- ^ How to transmit a message when a node received one and has to pass it on
+  ---- Accessible is the state of the node that receive the mess
+  --, arvyReceive :: forall i' i . TIx i' i => i -> msg i' -> Sem (State s ': r) i'
 --runArvyLocal :: forall i r . Members '[Trace, SpanningTree i, Output (i, i)] r => Arvy r -> i -> Sem r ()
 --runArvyLocal (Arvy n s t rr) = runArvyLocal' (n, s, t, rr) where
 --  runArvyLocal' :: forall i r msg n
@@ -189,24 +311,4 @@ instance ToIx Word where
 --            (_, newMsg) <- runReader r $ runState undefined $ transfer msg
 --            output (r, n)
 --            go newMsg n
-
-
--- TODO: Use mono-traversable for speedup
---fromSelection :: (forall i . [i] -> Sem (State () ': r) i) -> Arvy r
---fromSelection select = Arvy
---  { arvyNodeInit = return ()
---  , arvyInitiate = do
---      i <- ask
---      return [i]
---  , arvyTransmit = \msg -> do
---      i <- ask
---      return $ i : msg
---  , arvySelect = select
---  }
-
---arrow' :: Arvy r
---arrow' = fromSelection (return . head)
---
---ivy' :: Arvy r
---ivy' = fromSelection (return . last)
 
