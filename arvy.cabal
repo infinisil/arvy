@@ -27,9 +27,9 @@ library
                        Arvy.Utils
   -- other-extensions:
   ghc-options:         -Wall -O2 -flate-specialise -fspecialise-aggressively
-  build-depends:       base ^>=4.12.0.0
+  build-depends:       base ^>=4.13.0.0
                      , polysemy
-                     , polysemy-plugin
+                     , polysemy-zoo
                      , array
                      , containers
                      , algebraic-graphs
@@ -43,10 +43,20 @@ test-suite arvy-tests
   main-is:             Main.hs
   hs-source-dirs:      tests
   ghc-options:         -Wall
-  build-depends:       base ^>=4.12.0.0
+  build-depends:       base ^>=4.13.0.0
                      , arvy
                      , hspec
                      , array
   default-language:    Haskell2010
 
   
+executable arvy-bench
+  hs-source-dirs:      bench
+  main-is:             Main.hs
+  ghc-options:         -prof -Wall -O2 -flate-specialise -fspecialise-aggressively
+  default-language:    Haskell2010
+  build-depends:       base ^>=4.13.0.0
+                     , arvy
+                     , polysemy
+                     , polysemy-zoo
+                     , array
