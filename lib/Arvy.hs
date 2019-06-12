@@ -9,32 +9,23 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE RankNTypes                #-}
-{-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
-{-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeApplications          #-}
 {-# LANGUAGE TypeOperators             #-}
 
 module Arvy where
 
-import           Algebra.Graph.Class
-import           Control.Monad
+import           Algebra.Graph.AdjacencyIntMap
 import           Data.Array.IArray
-import           Data.Array.IO       (IOArray)
-import qualified Data.Array.MArray   as M
-import           Data.Array.ST
-import           Data.List
+import           Data.Array.IO                 (IOArray)
 import           Data.Monoid
-import           Data.Ord
 import           Polysemy
-import           Polysemy.Input
 import           Polysemy.Output
 import           Polysemy.Random
-import           Polysemy.Reader
-import           Polysemy.State
 import           Polysemy.Trace
 
 import           Arvy.Algorithm
+import           Arvy.Algorithm.Arrow
 import           Arvy.Algorithm.Ivy
 import           Arvy.Requests
 import           Arvy.Tree
@@ -58,14 +49,19 @@ requests n = iterate (\i -> (i + 1) `mod` n) 0
 main :: IO ()
 main = do
   let count = 100
-  weights <- runM $ runRandomIO $ randomWeights count
-  requests <- runM $ runRandomIO $ randomRequests count 1000
+  let numberOfRequests = 10000
+  -- weights <- runM $ runRandomIO $ randomWeights count
+  let weights = shortestPathWeights (symmetricClosure (clique [ 0.. count - 1]))
   tree <- mst count weights :: IO (IOArray Int (Maybe Int))
-  runM
-    $ runTraceIO
-    $ runOutputAsTrace @(Int, Int)
-    $ runListInput requests
+
+  (Sum dist, _) <- runM
+    $ runIgnoringTrace
+    -- $ runOutputAsTrace @(Int, Int)
+    $ measureDistances weights
+    $ runRandomIO
+    $ randomRequests count numberOfRequests
+    -- $ requestsWorst @IO numberOfRequests weights tree
     $ runArvyLocal @IO @IOArray count weights tree ivy
 
-
+  print dist
   return ()
