@@ -50,3 +50,13 @@ test-suite arvy-tests
   default-language:    Haskell2010
 
   
+executable arvy-eval
+  hs-source-dirs:      eval
+  main-is:             Main.hs
+  ghc-options:         -Wall
+  build-depends:       base ^>=4.12.0.0
+                     , arvy
+                     , array
+                     , polysemy
+                     , algebraic-graphs
+  default-language:    Haskell2010

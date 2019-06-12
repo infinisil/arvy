@@ -14,7 +14,8 @@ module Arvy.Tree where
 import           Arvy.Weights
 import           Control.Monad
 import           Data.Array.MArray
-import qualified Data.Heap         as H
+import           Data.Array.Unboxed
+import qualified Data.Heap          as H
 import           Polysemy
 import           Polysemy.Trace
 
@@ -27,12 +28,14 @@ type Edge = (Int, Int)
 type MSTEntry = H.Entry Double Edge
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. /O(n^2)/.
-mst :: MArray arr (Maybe Int) m => Int -> GraphWeights -> m (arr Int (Maybe Int))
-mst count weights = do
-  arr <- newArray (0, count - 1) Nothing
-  forM_ (mstEdges count weights) $ \(x, y) ->
-    writeArray arr y (Just x)
-  return arr
+mst :: Int -> GraphWeights -> Array Int (Maybe Int)
+mst count weights = array (0, count - 1)
+  ((0, Nothing) : fmap edgeToElem edges)
+  where
+    edges = mstEdges count weights
+
+    edgeToElem :: Edge -> (Int, Maybe Int)
+    edgeToElem (x, y) = (y, Just x)
 
 -- | Calculates the edges of a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. /O(n^2)/.
 mstEdges :: Int -> GraphWeights -> [Edge]

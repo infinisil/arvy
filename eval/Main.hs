@@ -13,11 +13,7 @@
 {-# LANGUAGE TypeApplications          #-}
 {-# LANGUAGE TypeOperators             #-}
 
-module Arvy
-  ( module Arvy.Algorithm.Arrow
-  , module Arvy.Algorithm.Ivy
-  , module Arvy.Algorithm.ConstantRing
-  ) where
+module Main where
 
 import           Arvy.Algorithm.Arrow
 import           Arvy.Algorithm.ConstantRing
@@ -26,6 +22,7 @@ import           Arvy.Algorithm.Ivy
 import           Algebra.Graph.AdjacencyIntMap hiding (tree)
 import           Data.Array.IArray
 import           Data.Array.IO                 (IOArray)
+import           Data.Array.MArray
 import           Data.Monoid
 import           Polysemy
 import           Polysemy.Output
@@ -39,12 +36,20 @@ import           Arvy.Requests
 import           Arvy.Tree
 import           Arvy.Weights
 
-traceMessages :: forall i r a . (Member Trace r, Member (Output (i, i)) r, Show i) => Sem r a -> Sem r a
-traceMessages = intercept @(Output (i, i)) $ \case
-  Output (from, to) -> do
-    trace $ show from ++ " -> " ++ show to
-    output (from, to)
+main :: IO ()
+main = runM $ do
+  let count = 1000
+  let numberOfRequests = 100000
+  weights <- runRandomIO $ randomWeights count
+  --let weights = shortestPathWeights (symmetricClosure (clique [ 0.. count - 1]))
+  let tree = mst count weights
+  mutableTree <- sendM @IO (thaw tree :: IO (IOArray Int (Maybe Int)))
 
--- | Measures distances
-measureDistances :: (Ix i, IArray arr n, Num n) => arr i n -> Sem (Output i ': r) a -> Sem r (Sum n, a)
-measureDistances weights = runFoldMapOutput (Sum . (weights !))
+  runTraceIO
+    $ runIgnoringTrace
+    $ runOutputAsTrace @(Int, Int)
+    -- $ measureDistances weights
+    $ runRandomIO
+    $ randomRequests count numberOfRequests
+    -- $ requestsWorst @IO numberOfRequests weights tree
+    $ runArvyLocal @IO @IOArray count weights mutableTree ivy

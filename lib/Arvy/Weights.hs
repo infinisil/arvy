@@ -8,7 +8,6 @@
 {-# LANGUAGE TypeOperators    #-}
 module Arvy.Weights
   ( module Arvy.Weights
-  , (!)
   ) where
 
 import           Algebra.Graph.AdjacencyIntMap
