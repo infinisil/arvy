@@ -1,11 +1,13 @@
+{-# LANGUAGE TypeApplications #-}
+
 module Arvy.Algorithm.Ivy where
 
 import           Arvy.Algorithm
 
 newtype IvyMessage i = IvyMessage i
 
-ivy :: Arvy r
-ivy = Arvy
+ivy :: Arvy
+ivy = Arvy @IvyMessage @() ArvyInst
   { arvyNodeInit = \_ -> return ()
   , arvyInitiate = return . IvyMessage
   , arvyTransmit = \_ (IvyMessage root) ->

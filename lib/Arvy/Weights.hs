@@ -1,11 +1,16 @@
-{-# LANGUAGE DataKinds        #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs            #-}
-{-# LANGUAGE KindSignatures   #-}
-{-# LANGUAGE LambdaCase       #-}
-{-# LANGUAGE TemplateHaskell  #-}
-{-# LANGUAGE TupleSections    #-}
-{-# LANGUAGE TypeOperators    #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 module Arvy.Weights
   ( module Arvy.Weights
   ) where
@@ -19,6 +24,12 @@ import           Data.Bifunctor                (first)
 import           Data.Tuple                    (swap)
 import           Polysemy
 import           Polysemy.Random
+import           Polysemy.Reader
+
+data WeightsParameter = WeightsParameter
+  { weightsName :: String
+  , weightsGet  :: forall r . Member Random r => Int -> Sem r GraphWeights
+  }
 
 type GraphWeights = UArray (Int, Int) Double
 
@@ -32,6 +43,8 @@ makeSem ''LocalWeights
 runLocalWeights :: GraphWeights -> Int -> Sem (LocalWeights ': r) a -> Sem r a
 runLocalWeights weights source = interpret $ \case
   WeightTo target -> return $ weights ! (source, target)
+
+
 
 -- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is O(n^3) with n being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
 shortestPathWeights :: AdjacencyIntMap -> GraphWeights
@@ -86,27 +99,35 @@ euclidianWeights points = array ((low, low), (high, high))
 
 -- TODO: USe a good distributions in the random-fu package instead
 -- | Generates random weights in a graph. Weights from nodes to themselves are always 0 (aka the matrix' diagonal is 0), and weights are always the same in both edge directions (aka the matrix is symmetrical).
-randomWeights :: Member Random r => Int -> Sem r GraphWeights
-randomWeights count = do
-  weights <- traverse randomForEdge
-    -- All edges in one direction only
-    [ (i, j)
-    | i <- [0 .. count - 1]
-    , j <- [i + 1 .. count - 1] ]
+randomWeights :: WeightsParameter
+randomWeights = WeightsParameter
+  { weightsName = "random"
+  , weightsGet = get
+  } where
+  get :: Member Random r => Int -> Sem r GraphWeights
+  get count = do
+    weights <- traverse randomForEdge
+      -- All edges in one direction only
+      [ (i, j)
+      | i <- [0 .. count - 1]
+      , j <- [i + 1 .. count - 1] ]
 
-  return $ array
-    ((0, 0), (count - 1, count - 1))
-    (diagonal ++ -- The diagonals, aka the weights from a node to itself
-     weights ++ -- One half of the weights, going in one edge direction
-     map (first swap) weights) -- Node indices swapped around, going the other direction
-  where
-    -- | The diagonal of the weight matrix which is all 0
-    diagonal :: [((Int, Int), Double)]
-    diagonal = [ ((i, i), 0) | i <- [0 .. count - 1] ]
+    return $ array
+      ((0, 0), (count - 1, count - 1))
+      (diagonal ++ -- The diagonals, aka the weights from a node to itself
+      weights ++ -- One half of the weights, going in one edge direction
+      map (first swap) weights) -- Node indices swapped around, going the other direction
+    where
+      -- | The diagonal of the weight matrix which is all 0
+      diagonal :: [((Int, Int), Double)]
+      diagonal = [ ((i, i), 0) | i <- [0 .. count - 1] ]
 
-    -- | Generates a random weight and combines it with the given index in a tuple
-    randomForEdge :: Member Random r => i -> Sem r (i, Double)
-    randomForEdge x = (x,) <$> random
+      -- | Generates a random weight and combines it with the given index in a tuple
+      randomForEdge :: Member Random r => i -> Sem r (i, Double)
+      randomForEdge x = (x,) <$> random
 
-ringWeights :: Int -> GraphWeights
-ringWeights n = shortestPathWeights (symmetricClosure (circuit [0..n - 1]))
+ringWeights :: WeightsParameter
+ringWeights = WeightsParameter
+  { weightsName = "ring"
+  , weightsGet = \n -> return $ shortestPathWeights (symmetricClosure (circuit [0..n-1]))
+  }

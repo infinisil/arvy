@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase     #-}
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase       #-}
+{-# LANGUAGE NamedFieldPuns   #-}
+{-# LANGUAGE TypeApplications #-}
 module Arvy.Algorithm.ConstantRing where
 
 import           Arvy.Algorithm
@@ -20,8 +21,8 @@ data RingNodeState
   = SemiNode
   | BridgeNode
 
-constantRing :: Int -> Arvy r
-constantRing firstBridge = Arvy
+constantRing :: Int -> Arvy
+constantRing firstBridge = Arvy @RingMessage @RingNodeState ArvyInst
   { arvyNodeInit = \i -> return $
     if indexValue i == firstBridge
         then BridgeNode
