@@ -1,24 +1,10 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeOperators       #-}
 module Arvy.Tree where
 
 import           Arvy.Weights
-import           Control.Monad
-import           Data.Array.MArray
 import           Data.Array.Unboxed
 import qualified Data.Heap          as H
 import           Polysemy
 import           Polysemy.Random
-import           Polysemy.Trace
 
 type TreeState arr = arr Int (Maybe Int)
 

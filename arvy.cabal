@@ -25,7 +25,8 @@ library
                        Arvy.Algorithm.ConstantRing
                        Arvy.Requests
                        Arvy.Utils
-  -- other-extensions:
+  -- TODO: Enable -fplugin=Polysemy.Plugin to be able to remove a lot of type applications
+  -- once HIE is updated with https://github.com/alanz/ghc-mod/pull/20
   ghc-options:         -Wall -O2 -flate-specialise -fspecialise-aggressively
   build-depends:       base ^>=4.12.0.0
                      , polysemy
@@ -35,6 +36,22 @@ library
                      , containers
                      , algebraic-graphs
                      , heaps
+  default-extensions:  DataKinds
+                     , FlexibleContexts
+                     , GADTs
+                     , LambdaCase
+                     , PolyKinds
+                     , RankNTypes
+                     , ScopedTypeVariables
+                     , TypeApplications
+                     , TypeOperators
+                     , TypeFamilies
+                     , LambdaCase
+                     , QuantifiedConstraints
+                     , AllowAmbiguousTypes
+                     , RecordWildCards
+                     , NamedFieldPuns
+                     , TupleSections
   hs-source-dirs:      lib
   default-language:    Haskell2010
 
@@ -65,3 +82,19 @@ executable arvy-eval
                      , polysemy-zoo
                      , algebraic-graphs
   default-language:    Haskell2010
+  default-extensions:  DataKinds
+                     , FlexibleContexts
+                     , GADTs
+                     , LambdaCase
+                     , PolyKinds
+                     , RankNTypes
+                     , ScopedTypeVariables
+                     , TypeApplications
+                     , TypeOperators
+                     , TypeFamilies
+                     , LambdaCase
+                     , QuantifiedConstraints
+                     , AllowAmbiguousTypes
+                     , RecordWildCards
+                     , NamedFieldPuns
+                     , TupleSections

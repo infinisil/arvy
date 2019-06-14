@@ -1,16 +1,4 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE TupleSections         #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TemplateHaskell     #-}
 module Arvy.Weights
   ( module Arvy.Weights
   ) where
@@ -24,7 +12,6 @@ import           Data.Bifunctor                (first)
 import           Data.Tuple                    (swap)
 import           Polysemy
 import           Polysemy.Random
-import           Polysemy.Reader
 
 data WeightsParameter = WeightsParameter
   { weightsName :: String

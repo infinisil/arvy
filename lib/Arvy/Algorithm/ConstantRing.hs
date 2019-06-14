@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase       #-}
-{-# LANGUAGE NamedFieldPuns   #-}
-{-# LANGUAGE TypeApplications #-}
 module Arvy.Algorithm.ConstantRing where
 
 import           Arvy.Algorithm

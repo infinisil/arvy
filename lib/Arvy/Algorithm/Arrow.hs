@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
-
 module Arvy.Algorithm.Arrow where
 
 import           Arvy.Algorithm

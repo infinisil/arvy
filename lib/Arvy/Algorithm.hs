@@ -1,20 +1,6 @@
-{-# LANGUAGE AllowAmbiguousTypes       #-}
-{-# LANGUAGE QuantifiedConstraints       #-}
-{-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE DefaultSignatures         #-}
-{-# LANGUAGE DeriveFunctor             #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FlexibleContexts          #-}
-{-# LANGUAGE FlexibleInstances         #-}
-{-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
-{-# LANGUAGE NamedFieldPuns            #-}
-{-# LANGUAGE RankNTypes                #-}
-{-# LANGUAGE RecordWildCards           #-}
-{-# LANGUAGE ScopedTypeVariables       #-}
-{-# LANGUAGE TypeApplications          #-}
-{-# LANGUAGE TypeFamilies              #-}
-{-# LANGUAGE TypeOperators             #-}
 
 module Arvy.Algorithm
   ( module Arvy.Algorithm
@@ -22,10 +8,7 @@ module Arvy.Algorithm
   ) where
 
 import           Arvy.Weights
-import           Arvy.Tree
-import           Arvy.Requests
 import           Data.Array.MArray
-import           Data.Array.IO
 import           Polysemy
 import           Polysemy.Input
 import           Polysemy.Output
