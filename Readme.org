@@ -1,0 +1,50 @@
+* Arvy in Haskell
+
+This is going to be an implementation of the Arvy set of distributed directory algorithms in Haskell. This work is being done as part of my Computer Science bachelor's thesis at ETHZ with the assistance of Pankaj Khanchandani and András Papp Pál and under the direction of Roger Wattenhofer.
+
+** What is this?
+
+*** What is a distributed directory algorithm?
+
+This is an algorithm that manages a single resource in a graph of distributed nodes. Only one node can have the resource at any given time. Nodes that don't have the resource can request it, after which they should receive it eventually.
+
+*** What is Arvy and how does it work?
+
+The Arvy algorithm, introduced in a yet-unpublished paper by Pankaj Khanchandani and Roger Wattenhofer, is a generalization of [[https://doi.org/10.1007/BFb0056478][Arrow]] and [[https://doi.org/10.1145/75104.75105][Ivy]]. Both Arrow and Ivy have the same underlying idea: All nodes in the graph point towards the node currently holding the token (the root node) in a spanning tree. If a node needs the token, it sends a request to the node it points to, which will get forwarded on the path towards the root node. Once arrived at the root node, the token can be sent to the node that requested it.
+
+In order for the rooted spanning tree to persist, the node pointers need to be adjusted: If node 3 is the root node and node 1 requested it by sending a request to node 2, which forwarded the request to node 3, which then sent the token to node 1, the new root node needs to be 1 because that's where the token now is. In addition, the node pointers in node 2 and 3 need to be changed so they point towards the new root node 1 again. This is where Arrow and Ivy diverge in behavior: Arrow works by inverting the edges the request travels through, while Ivy adjusts all nodes in the path to point at the new root directly.
+
+Arvy is the generalization of that, in that when a request travels through a path with nodes 1, 2, ... n, nodes can choose to point to any previously traveled through node, so node 4 can newly point to either 1, 2 or 3, node k can newly point to 1, 2, ..., (k-1). Arrow is the special case of always choosing (k-1), while Ivy is the special case of always choosing 1.
+
+It's easy to see that these protocols are correct when there's only one request at any given time. It gets more complicated when multiple requests are being done concurrently. It is known that Arrow and Ivy still work correctly under concurrent requests, and in the Arvy paper it gets shown that Arvy also works correctly in such a setting.
+
+** Overview
+
+The implementation will consist of multiple parts:
+- A general ~Arvy~ type, which can represent (hopefully) all valid Arvy algorithms instances. By using Haskell's type system, it should guarantee that it's a valid algorithm.
+- A suite of Arvy instances, such as Arrow, Ivy and others. By choosing some smart rules for how to choose which nodes to point to, we hope to achieve better overall performance than Arrow or Ivy.
+- A suite of functions to generate weights of the graph the algorithm could be evaluated on. This can include random weights, weights based on a ring network or others. Some instances of Arvy might perform well on some graphs but not on others.
+- A suite of ways to generate the initial rooted spanning tree, such as by using the minimum spanning tree, a random tree or something else. For algorithms like Arrow, this very much matters, since it only ever flips edges in the spanning tree, never changes connections. For algorithms like Ivy, this probably won't matter much, since the tree constantly changes over requests.
+- A suite of ways to generate sequences of requests. This could include random requests, requests that always choose the node furthest away from the root node, or others. The performance of Arvy instances might very much depend on this.
+- Ways of evaluating the performance of an Arvy algorithm. This should include at least the distance traveled by requests, but can also include hop count or metrics to evaluate the spanning tree over time.
+
+This implementation is focusing on serial requests only, however it shouldn't be difficult to add support for concurrent requests, the code is written with this in mind.
+
+** Building the executable for evaluation
+
+This project uses [[https://nixos.org/nix/][Nix]] for development and building, which makes builds easy and reproducible. Only Linux is guaranteed to work, as this is what I'm developing this on, however chances are high it works no problem on macOS as well. Building is done with
+
+#+BEGIN_SRC bash
+nix-build
+#+END_SRC
+
+After which you can run the ~arvy-eval~ executable with
+
+#+BEGIN_SRC bash
+./result/bin/arvy-eval
+#+END_SRC
+
+** Implementation notes
+
+- The [[https://hackage.haskell.org/package/polysemy][polysemy]] library is used throughout, which is a nice (and eventually fast) library for encoding effects. However it is rather new and therefore might not be as stable and complete as other effect libraries.
+- While high performance isn't the main goal, it's definitely something desirable. Immutability (but not functional purity!) is therefore occasionally given up on, in order to not have horrible performance.
