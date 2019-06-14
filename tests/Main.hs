@@ -1,10 +1,18 @@
+{-# LANGUAGE DataKinds #-}
+
 module Main where
 
 import           Arvy.Utils
 import           Arvy.Weights
 import           Control.Exception
 import           Data.Array.Unboxed
+import           Polysemy
+import           Polysemy.Random
+import           System.Random      (mkStdGen)
 import           Test.Hspec
+
+withSeed :: Int -> Sem '[Random] a -> a
+withSeed seed = snd . run . runRandom (mkStdGen seed)
 
 main :: IO ()
 main = hspec $
@@ -26,7 +34,7 @@ main = hspec $
       shortestPathWeights 0 ! (0, 0) `shouldBe` 0
 
     it "correctly assigns weights to a 4-node ring" $
-      ringWeights 4 `shouldBe` listArray ((0, 0), (3, 3))
+      withSeed 0 (weightsGet ringWeights 4) `shouldBe` listArray ((0, 0), (3, 3))
         [ 0, 1, 2, 1
         , 1, 0, 1, 2
         , 2, 1, 0, 1

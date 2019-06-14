@@ -30,6 +30,7 @@ library
   build-depends:       base ^>=4.12.0.0
                      , polysemy
                      , polysemy-plugin
+                     , polysemy-zoo
                      , array
                      , containers
                      , algebraic-graphs
@@ -47,6 +48,9 @@ test-suite arvy-tests
                      , arvy
                      , hspec
                      , array
+                     , polysemy
+                     , polysemy-zoo
+                     , random
   default-language:    Haskell2010
 
   
@@ -58,5 +62,6 @@ executable arvy-eval
                      , arvy
                      , array
                      , polysemy
+                     , polysemy-zoo
                      , algebraic-graphs
   default-language:    Haskell2010
