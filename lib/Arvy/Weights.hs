@@ -13,11 +13,6 @@ import           Data.Tuple                    (swap)
 import           Polysemy
 import           Polysemy.Random
 
-data WeightsParameter = WeightsParameter
-  { weightsName :: String
-  , weightsGet  :: forall r . Member Random r => Int -> Sem r GraphWeights
-  }
-
 type GraphWeights = UArray (Int, Int) Double
 
 -- | An effect for providing access to weights from a current node to others
@@ -104,35 +99,27 @@ euclidianWeights points = array ((low, low), (high, high))
 
 -- TODO: USe a good distributions in the random-fu package instead
 -- | Generates random weights in a graph. Weights from nodes to themselves are always 0 (aka the matrix' diagonal is 0), and weights are always the same in both edge directions (aka the matrix is symmetrical).
-randomWeights :: WeightsParameter
-randomWeights = WeightsParameter
-  { weightsName = "random"
-  , weightsGet = get
-  } where
-  get :: Member Random r => Int -> Sem r GraphWeights
-  get count = do
-    weights <- traverse randomForEdge
-      -- All edges in one direction only
-      [ (i, j)
-      | i <- [0 .. count - 1]
-      , j <- [i + 1 .. count - 1] ]
+randomWeights :: Member Random r => Int -> Sem r GraphWeights
+randomWeights count = do
+  weights <- traverse randomForEdge
+    -- All edges in one direction only
+    [ (i, j)
+    | i <- [0 .. count - 1]
+    , j <- [i + 1 .. count - 1] ]
 
-    return $ array
-      ((0, 0), (count - 1, count - 1))
-      (diagonal ++ -- The diagonals, aka the weights from a node to itself
-      weights ++ -- One half of the weights, going in one edge direction
-      map (first swap) weights) -- Node indices swapped around, going the other direction
-    where
-      -- | The diagonal of the weight matrix which is all 0
-      diagonal :: [((Int, Int), Double)]
-      diagonal = [ ((i, i), 0) | i <- [0 .. count - 1] ]
+  return $ array
+    ((0, 0), (count - 1, count - 1))
+    (diagonal ++ -- The diagonals, aka the weights from a node to itself
+    weights ++ -- One half of the weights, going in one edge direction
+    map (first swap) weights) -- Node indices swapped around, going the other direction
+  where
+    -- | The diagonal of the weight matrix which is all 0
+    diagonal :: [((Int, Int), Double)]
+    diagonal = [ ((i, i), 0) | i <- [0 .. count - 1] ]
 
-      -- | Generates a random weight and combines it with the given index in a tuple
-      randomForEdge :: Member Random r => i -> Sem r (i, Double)
-      randomForEdge x = (x,) <$> random
+    -- | Generates a random weight and combines it with the given index in a tuple
+    randomForEdge :: Member Random r => i -> Sem r (i, Double)
+    randomForEdge x = (x,) <$> random
 
-ringWeights :: WeightsParameter
-ringWeights = WeightsParameter
-  { weightsName = "ring"
-  , weightsGet = \n -> return $ shortestPathWeights (symmetricClosure (circuit [0..n-1]))
-  }
+ringWeights :: Int -> GraphWeights
+ringWeights n = shortestPathWeights (symmetricClosure (circuit [0..n-1]))

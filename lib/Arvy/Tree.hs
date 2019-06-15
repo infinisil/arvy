@@ -3,53 +3,34 @@ module Arvy.Tree where
 import           Arvy.Weights
 import           Data.Array.Unboxed
 import qualified Data.Heap          as H
-import           Polysemy
-import           Polysemy.Random
-import           System.Random      (mkStdGen)
-import           Algebra.Graph.AdjacencyIntMap
 
 type TreeState arr = arr Int (Maybe Int)
 
-data InitialTreeParameter = InitialTreeParameter
-  { initialTreeName :: String
-  , initialTreeGet  :: forall r . Member Random r => Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
-  }
 
-instance Show InitialTreeParameter where
-  show (InitialTreeParameter { .. }) = "Initial tree: " ++ initialTreeName ++ ", on an 8-ring: "
-    ++ show (snd . run . runRandom (mkStdGen 0) $ initialTreeGet 8 (shortestPathWeights (symmetricClosure (circuit [0..7]))) )
-
-ring' :: InitialTreeParameter
-ring' = InitialTreeParameter
-  { initialTreeName = "ring"
-  , initialTreeGet = \count _weights -> return (listArray (0, count - 1) (Nothing : fmap Just [0..]))
-  }
+ringTree :: Int -> Array Int (Maybe Int)
+ringTree count = listArray (0, count - 1) (Nothing : fmap Just [0..])
 
 type Edge = (Int, Int)
 type MSTEntry = H.Entry Double Edge
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. /O(n^2)/.
-mst :: InitialTreeParameter
-mst = InitialTreeParameter
-  { initialTreeName = "minimum spanning tree"
-  , initialTreeGet = get
-  }
+mst :: Int -> GraphWeights -> Array Int (Maybe Int)
+mst count weights = array (0, count - 1)
+  ((0, Nothing) : fmap edgeToElem edges)
   where
-    get count weights = return $ array (0, count - 1)
-      ((0, Nothing) : fmap edgeToElem edges)
-      where edges = mstEdges count weights
+    edges = mstEdges count weights
 
     edgeToElem :: Edge -> (Int, Maybe Int)
     edgeToElem (x, y) = (y, Just x)
 
-semiCircles :: InitialTreeParameter
-semiCircles = InitialTreeParameter
-  { initialTreeName = "semi circles"
-  , initialTreeGet = \count _ -> let h = count `div` 2 in return $ array (0, count - 1)
+semiCircles :: Int -> Array Int (Maybe Int)
+semiCircles count = array (0, count - 1)
      ( [ (i, Just (i + 1)) | i <- [0 .. h - 1] ]
     ++ [ (h, Nothing) ]
     ++ [ (i, Just (i - 1)) | i <- [h + 1 .. count - 1] ] )
-  }
+  where
+    h = count `div` 2
+
 
 -- | Initially, we have
 -- p(v i ) = v i+1 for 1 ≤ i < n 2 , p(v i ) = v i−1 for n 2 < i ≤ n and

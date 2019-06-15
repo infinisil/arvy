@@ -12,45 +12,27 @@ import           Polysemy.Input
 import           Polysemy.Random
 import           Polysemy.State
 
-
-data RequestsParameter = RequestsParameter
-  { requestsName :: String
-  , requestsGet  :: forall r . Member Random r => Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
-  }
-
 runRequests
   :: forall m r arr a
   . ( Member (Lift m) r
     , MArray arr (Maybe Int) m
     , Member Random r )
-  => Int
-  -> GraphWeights
-  -> arr Int (Maybe Int)
-  -> RequestsParameter
+  => arr Int (Maybe Int)
+  -> (Member Random r => Array Int (Maybe Int) -> Sem r Int)
   -> Int
   -> Sem (Input (Maybe Int) ': r) a
   -> Sem r a
-runRequests nodeCount weights tree RequestsParameter { requestsGet } requestCount =
+runRequests tree getRequest requestCount =
   fmap snd . runState requestCount . reinterpret \case
     Input -> get @Int >>= \case
       0 -> return Nothing
       k -> do
         put (k - 1)
         immutableTree <- sendM @m (freeze tree)
-        request <- raise $ requestsGet nodeCount weights immutableTree
-        return $ Just request
+        Just <$> raise (getRequest immutableTree)
 
-randomRequests :: RequestsParameter
-randomRequests = RequestsParameter
-  { requestsName = "random"
-  , requestsGet = \n _ _ -> randomR (0, n - 1)
-  }
-
-worstRequests :: RequestsParameter
-worstRequests = RequestsParameter
-  { requestsName = "worst"
-  , requestsGet = \_ weights tree -> return $ worstRequest weights tree
-  }
+randomRequest :: Member Random r => Int -> Sem r Int
+randomRequest n = randomR (0, n - 1)
 
 -- | Computes the worst possible node to make a request by choosing the node that has the longest path to the root
 worstRequest :: GraphWeights -> Array Int (Maybe Int) -> Int

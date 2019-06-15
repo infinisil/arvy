@@ -34,7 +34,7 @@ main = hspec $
       shortestPathWeights 0 ! (0, 0) `shouldBe` 0
 
     it "correctly assigns weights to a 4-node ring" $
-      withSeed 0 (weightsGet ringWeights 4) `shouldBe` listArray ((0, 0), (3, 3))
+      ringWeights 4 `shouldBe` listArray ((0, 0), (3, 3))
         [ 0, 1, 2, 1
         , 1, 0, 1, 2
         , 2, 1, 0, 1
