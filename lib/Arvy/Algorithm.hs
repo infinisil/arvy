@@ -34,7 +34,7 @@ All methods have access to the node's index they run in and the weights to all n
 
 The types @i@ and @ir@ are used to ensure the algorithms correctness, in that they are chosen such that you can only select a new successor from already traveled through nodes.
 -}
-data ArvyInst msg s = ArvyInst
+data ArvyInst msg s = (forall i . Show i => Show (msg i), Show s) => ArvyInst
   { arvyNodeInit :: forall i . NodeIndex i => i -> ArvySem '[] s
   -- ^ How to compute the initial state in nodes
   , arvyInitiate :: forall i . NodeIndex i => i -> ArvySem '[State s] (msg i)
@@ -84,13 +84,32 @@ simpleArvy selector = Arvy @[] @() ArvyInst
   }
 
 
+data ArvyEvent
+  = RequestTravel Int Int String
+  | SuccessorChange Int (Maybe Int)
+  | StateChange Int String
+  | RequestMade Int
+  | RequestGranted GrantType
+
+data GrantType
+  = AlreadyHere Int
+  | GottenFrom Int Int
+
+instance Show ArvyEvent where
+  show (RequestTravel a b msg) = "[MSG] " ++ show a ++ " -> " ++ show b ++ " (" ++ msg ++ ")"
+  show (SuccessorChange i newSucc) = "[SUCC] " ++ show i ++ " changed its successor to " ++ show newSucc
+  show (StateChange i newState) = "[STATE] " ++ show i ++ " changed its state to " ++ show newState
+  show (RequestMade i) = "[REQ] " ++ show i ++ " made a request"
+  show (RequestGranted (AlreadyHere i)) = "[GRANT] The request from " ++ show i ++ " was fulfilled, the token was already there"
+  show (RequestGranted (GottenFrom i src)) = "[GRANT] The request from " ++ show i ++ " was fulfilled, the token came from " ++ show src
+
 -- | Run an Arvy algorithm locally, taking requests as input and outputting the edges where requests travel through.
 runArvyLocal
   :: forall m sarr tarr r
   . ( Members '[ Input (Maybe Int)
                , Lift m
                , Trace
-               , Output (Int, Int)
+               , Output ArvyEvent
                , Random ] r
       -- Quantified constraint because we need a mutable array to store the state of the nodes of /any/ possible algorithm, and every algorithm can choose its own state type
     , forall s . MArray sarr s m
@@ -114,42 +133,48 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
 
     go :: sarr Int s -> Sem r ()
     go state = input >>= \case
-      Nothing -> trace "All requests fulfilled"
+      Nothing -> return ()
       Just i -> do
-        trace $ "Request from node " ++ show i
+        output $ RequestMade i
         getSuccessor i >>= \case
-          Nothing -> trace "This node already has the token"
+          Nothing -> output $ RequestGranted (AlreadyHere i)
           Just successor -> do
             msg <- runNode i (arvyInitiate i)
             setSuccessor i Nothing
-            output (i, successor)
-            send msg successor
+            output $ RequestTravel i successor (show msg)
+            root <- send msg successor
+            output $ RequestGranted (GottenFrom i root)
         go state
         
       where
 
       -- | Simulate sending some message to a node
-      send :: msg Int -> Int -> Sem r ()
+      send :: msg Int -> Int -> Sem r Int
       send msg i = getSuccessor i >>= \case
         Just successor -> do
           (newSucc, newMsg) <- runNode i (arvyTransmit i msg)
           setSuccessor i (Just newSucc)
-          output (i, successor)
+          output $ RequestTravel i successor (show newMsg)
           send newMsg successor
         Nothing -> do
           newSucc <- runNode i (arvyReceive i msg)
           setSuccessor i (Just newSucc)
+          return i
 
       getSuccessor :: Int -> Sem r (Maybe Int)
       getSuccessor i = sendM @m (readArray tree i)
 
       setSuccessor :: Int -> Maybe Int -> Sem r ()
-      setSuccessor i newSucc = sendM @m (writeArray tree i newSucc)
+      setSuccessor i newSucc = do
+        output $ SuccessorChange i newSucc
+        sendM @m (writeArray tree i newSucc)
 
       runNodeState :: Int -> Sem (State s ': r) a -> Sem r a
       runNodeState i = interpret $ \case
         Get -> sendM @m (readArray state i)
-        Put s -> sendM @m (writeArray state i s)
+        Put s -> do
+          output $ StateChange i (show s)
+          sendM @m (writeArray state i s)
 
       runNode :: Int -> Sem (LocalWeights ': State s ': r) a -> Sem r a
       runNode i action = runNodeState i (runLocalWeights weights i action)

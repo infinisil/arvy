@@ -2,7 +2,7 @@ module Arvy.Algorithm.Arrow where
 
 import           Arvy.Algorithm
 
-newtype ArrowMessage i = ArrowMessage i
+newtype ArrowMessage i = ArrowMessage i deriving Show
 
 arrow :: Arvy
 arrow = Arvy @ArrowMessage @() ArvyInst

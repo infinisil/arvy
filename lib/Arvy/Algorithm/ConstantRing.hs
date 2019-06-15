@@ -13,10 +13,12 @@ data RingMessage i
   | AfterCrossing
       { sender :: i
       }
+  deriving Show
 
 data RingNodeState
   = SemiNode
   | BridgeNode
+  deriving Show
 
 constantRing :: Int -> Arvy
 constantRing firstBridge = Arvy @RingMessage @RingNodeState ArvyInst

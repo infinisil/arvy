@@ -64,6 +64,24 @@ shortestPathWeights graph = runSTUArray $ do
 
   return arr
 
+-- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is O(n^3) with n being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
+shortestPathWeights' :: GraphWeights -> GraphWeights
+shortestPathWeights' weights = runSTUArray $ do
+  let (_, (v, _)) = bounds weights
+  arr <- thaw weights
+
+  forM_ [0..v] $ \k ->
+    forM_ [0..v] $ \i ->
+      forM_ [0..v] $ \j -> do
+        ij <- readArray arr (i, j)
+        ik <- readArray arr (i, k)
+        kj <- readArray arr (k, j)
+        let ikj = ik + kj
+        when (ij > ikj) $
+          writeArray arr (i, j) ikj
+
+  return arr
+
 -- | Generates a number of random 2D points with coordinates from 0.0 to 1.0
 randomPoints :: Member Random r => Int -> Sem r (Array Int (Double, Double))
 randomPoints count = listArray (0, count - 1) <$> go count where

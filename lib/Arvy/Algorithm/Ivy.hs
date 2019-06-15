@@ -2,7 +2,7 @@ module Arvy.Algorithm.Ivy where
 
 import           Arvy.Algorithm
 
-newtype IvyMessage i = IvyMessage i
+newtype IvyMessage i = IvyMessage i deriving Show
 
 ivy :: Arvy
 ivy = Arvy @IvyMessage @() ArvyInst

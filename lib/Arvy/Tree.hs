@@ -5,6 +5,8 @@ import           Data.Array.Unboxed
 import qualified Data.Heap          as H
 import           Polysemy
 import           Polysemy.Random
+import           System.Random      (mkStdGen)
+import           Algebra.Graph.AdjacencyIntMap
 
 type TreeState arr = arr Int (Maybe Int)
 
@@ -12,6 +14,10 @@ data InitialTreeParameter = InitialTreeParameter
   { initialTreeName :: String
   , initialTreeGet  :: forall r . Member Random r => Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
   }
+
+instance Show InitialTreeParameter where
+  show (InitialTreeParameter { .. }) = "Initial tree: " ++ initialTreeName ++ ", on an 8-ring: "
+    ++ show (snd . run . runRandom (mkStdGen 0) $ initialTreeGet 8 (shortestPathWeights (symmetricClosure (circuit [0..7]))) )
 
 ring' :: InitialTreeParameter
 ring' = InitialTreeParameter
@@ -35,6 +41,19 @@ mst = InitialTreeParameter
 
     edgeToElem :: Edge -> (Int, Maybe Int)
     edgeToElem (x, y) = (y, Just x)
+
+semiCircles :: InitialTreeParameter
+semiCircles = InitialTreeParameter
+  { initialTreeName = "semi circles"
+  , initialTreeGet = \count _ -> let h = count `div` 2 in return $ array (0, count - 1)
+     ( [ (i, Just (i + 1)) | i <- [0 .. h - 1] ]
+    ++ [ (h, Nothing) ]
+    ++ [ (i, Just (i - 1)) | i <- [h + 1 .. count - 1] ] )
+  }
+
+-- | Initially, we have
+-- p(v i ) = v i+1 for 1 ≤ i < n 2 , p(v i ) = v i−1 for n 2 < i ≤ n and
+-- p(v n/2 ) = v n/2
 
 -- TODO: Implement with ST by using 2 mutable arrays, one with Double values, initially with weights to node 0, over time updated with shortest weights to other nodes. Second array with Int values representing the corresponding nodes with the shortest edge, initially all 0. The first array gets more infinity values over time, for every node that is included in the MST already. We get the minimum of it until we encounter infinity. When minimum found, update both arrays with updated edge weights and nodes.
 -- | Calculates the edges of a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. /O(n^2)/.

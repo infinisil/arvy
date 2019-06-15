@@ -12,6 +12,7 @@ import           Polysemy.Input
 import           Polysemy.Random
 import           Polysemy.State
 
+
 data RequestsParameter = RequestsParameter
   { requestsName :: String
   , requestsGet  :: forall r . Member Random r => Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
