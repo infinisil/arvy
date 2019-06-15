@@ -38,7 +38,7 @@ runParams Parameters
   runTraceIO
     $ runOutputAsTrace @(Int, Int)
     $ runRequests @IO nodeCount weights mutableTree requests requestCount
-    $ runArvyLocal @IO @IOArray nodeCount weights mutableTree algorithm
+    $ runArvyLocal @IO @IOArray weights mutableTree algorithm
 
 traceMessages :: forall i r a . (Member Trace r, Member (Output (i, i)) r, Show i) => Sem r a -> Sem r a
 traceMessages = intercept @(Output (i, i)) $ \case
