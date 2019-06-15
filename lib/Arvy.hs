@@ -10,10 +10,8 @@ import           Data.Array.MArray
 import           Data.Monoid
 import           Polysemy
 import           Polysemy.Output
-import Language.Haskell.TH
 import           Polysemy.Random
 import           Polysemy.Trace
-import qualified Debug.Trace as D
 import System.Random (mkStdGen)
 import Data.Time (getCurrentTime)
 
@@ -21,7 +19,6 @@ import           Arvy.Algorithm
 import           Arvy.Requests
 import           Arvy.Tree
 import           Arvy.Weights
-import TH
 
 data Parameters = Parameters
   { nodeCount    :: Int
