@@ -29,9 +29,11 @@ let
 
       arvy = super.callCabal2nix "arvy" src {};
 
-      polysemy = super.callCabal2nixWithOptions "polysemy" polysemySrc "--no-hpack" {
+      polysemy = (super.callCabal2nixWithOptions "polysemy" polysemySrc "--no-hpack" {
         th-abstraction = self.th-abstraction_0_3_1_0;
-      };
+      }).overrideAttrs (old: {
+        configureFlags = [ "-f -error-messages" ];
+      });
 
       polysemy-plugin = super.callCabal2nixWithOptions "polysemy-plugin" "${polysemySrc}/polysemy-plugin" "--no-hpack" {
         inspection-testing = self.inspection-testing_0_4_2;
