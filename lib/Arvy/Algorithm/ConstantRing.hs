@@ -20,8 +20,8 @@ data RingNodeState
   | BridgeNode
   deriving Show
 
-constantRing :: Int -> Arvy
-constantRing firstBridge = Arvy @RingMessage @RingNodeState ArvyInst
+constantRing :: Int -> Arvy r
+constantRing firstBridge = arvy @RingMessage @RingNodeState ArvyInst
   { arvyNodeInit = \i -> return $
     if indexValue i == firstBridge
         then BridgeNode

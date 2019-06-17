@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DefaultSignatures         #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
@@ -15,9 +16,6 @@ import           Polysemy.Input
 import           Polysemy.Output
 import           Polysemy.Trace
 import           Polysemy.State
-import           Polysemy.Random
-
--- TODO: It might make sense to parametrize ArvyInst by r after all, because we really don't care about which effects will be available, the algorithm's correctness should be guaranteed with the i's. Restricting the available effects only removes some potentially valid algorithms. We could e.g. have one that interactively asks the user to choose a node via a Console effect :).
 
 {- |
 An Arvy algorithm instance.
@@ -34,24 +32,28 @@ All methods have access to the node's index they run in and the weights to all n
 
 The types @i@ and @ir@ are used to ensure the algorithms correctness, in that they are chosen such that you can only select a new successor from already traveled through nodes.
 -}
-data ArvyInst msg s = (forall i . Show i => Show (msg i), Show s) => ArvyInst
-  { arvyNodeInit :: forall i . NodeIndex i => i -> ArvySem '[] s
+data ArvyInst msg s r = (forall i . Show i => Show (msg i), Show s) => ArvyInst
+  { arvyNodeInit :: forall i . NodeIndex i => i -> ArvySem r s
   -- ^ How to compute the initial state in nodes
-  , arvyInitiate :: forall i . NodeIndex i => i -> ArvySem '[State s] (msg i)
+  , arvyInitiate :: forall i . NodeIndex i => i -> ArvySem (State s ': r) (msg i)
   -- ^ Initial request message contents
-  , arvyTransmit :: forall ir i . Forwardable ir i => i -> msg ir -> ArvySem '[State s] (ir, msg i)
+  , arvyTransmit :: forall ir i . Forwardable ir i => i -> msg ir -> ArvySem (State s ': r) (ir, msg i)
   -- ^ What to do when a message passes through this node, what new successor to choose and what message to forward
   -- @ir@ stands for the node index type you received and need to select, which can be forwarded (with 'forward') to @i@ which is the node index type of the current node and the message to send
-  , arvyReceive :: forall ir i . Forwardable ir i => i -> msg ir -> ArvySem '[State s] ir
+  , arvyReceive :: forall ir i . Forwardable ir i => i -> msg ir -> ArvySem (State s ': r) ir
   -- ^ What to do when a message arrives at the node holding the token, what new successor to choose.
   -- @ir@ stands for the node index type you received and need to select, which can be forwarded (with 'forward') to @i@ which is the node index type of the current node and the message to send
   }
 
 -- | A convenience wrapper for the effects accessible in an Arvy algorithm. @l@ is a list of additional effects that should be available, @a@ is the result type
-type ArvySem (l :: [(* -> *) -> * -> *]) a = forall r . Members (LocalWeights ': Random ': l) r => Sem r a
+type ArvySem r a = Sem (LocalWeights ': r) a
 
 -- | An existential wrapper for an Arvy algorithm. This allows us to have the same type for algorithms that use different @msg@ and @s@ types, and enforcing our Arvy runners implementation to be agnostic to these types. With this we can even loop through a list of @[Arvy]@ values, for e.g. testing each of them.
-data Arvy = forall msg s . Arvy (ArvyInst msg s)
+data Arvy r = forall msg s . Arvy (ArvyInst msg s r)
+
+-- | Convenience function for flipping the type argument order of Arvy from @r@, @msg@, @s@ to @msg@, @s@, @r@
+arvy :: ArvyInst msg s r -> Arvy r
+arvy = Arvy
 
 -- | A class for abstract node indices that can be converted to an 'Int'.
 class NodeIndex i where
@@ -72,8 +74,8 @@ instance Forwardable Int Int
 
 -- TODO: Use mono-traversable for safety and speedup
 -- | A function for constructing an Arvy algorithm with just a function that selects the node to connect to out of a list of available ones.
-simpleArvy :: (forall i . NodeIndex i => [i] -> ArvySem '[] i) -> Arvy
-simpleArvy selector = Arvy @[] @() ArvyInst
+simpleArvy :: forall r . (forall i . NodeIndex i => [i] -> ArvySem (State () ': r) i) -> Arvy r
+simpleArvy selector = Arvy @r @[] @() ArvyInst
   { arvyNodeInit = \_ -> return ()
   , arvyInitiate = \i -> return [i]
   , arvyTransmit = \i msg -> do
@@ -103,23 +105,30 @@ instance Show ArvyEvent where
   show (RequestGranted (AlreadyHere i)) = "[GRANT] The request from " ++ show i ++ " was fulfilled, the token was already there"
   show (RequestGranted (GottenFrom i src)) = "[GRANT] The request from " ++ show i ++ " was fulfilled, the token came from " ++ show src
 
--- | Run an Arvy algorithm locally, taking requests as input and outputting the edges where requests travel through.
+-- TODO: Make it take inputs 'Int' instead of 'Maybe Int', because it returns no result, we just rely on the outputs to get results -> Can control request count from the caller
+{- |
+Run an Arvy algorithm locally, taking requests as input and outputting the edges where requests travel through.
+
+- @m@ is the underlying Monad to run in, either 'IO' or @'Control.Monad.ST.ST' s@, needed for mutating the tree state efficiently
+- @sarr@ is the array type used for storing the algorithm-specific state for nodes. Is probably always going to be 'Data.Array.IO.IOArray' for when @m@ is 'IO' and @'Data.Array.ST.STArray' s@ for when @m@ is @'Control.Monad.ST.ST' s@
+- @tarr@ is the array type used for storing the tree state, should probably be the same type used for @sarr@
+- @r@ is the effect stack the Arvy algorithm requires to run, which might include 'Polysemy.Random.Random'ness or others
+- @r'@ is the effect stack of the result, which in addition to having all the effects of @r@ also takes requests as 'Input' and 'Output's 'ArvyEvent's
+-}
 runArvyLocal
-  :: forall m sarr tarr r
-  . ( Members '[ Input (Maybe Int)
-               , Lift m
-               , Trace
-               , Output ArvyEvent
-               , Random ] r
+  :: forall m sarr tarr r r'
+  . ( Members '[ Lift m, Trace ] r
+      -- r represents the input effects, the one the Arvy algorithm needs. r' represents the output effects, which are the ones the algorithm needs plus it taking inputs and sending outputs. Lift and Trace are not included in these additional effects because the algorithm might need those itself.
+    , r' ~ (Input (Maybe Int) ': Output ArvyEvent ': r)
       -- Quantified constraint because we need a mutable array to store the state of the nodes of /any/ possible algorithm, and every algorithm can choose its own state type
     , forall s . MArray sarr s m
     , MArray tarr (Maybe Int) m )
   => GraphWeights -- ^ The graph weights, used for giving nodes access to their local weights
   -> tarr Int (Maybe Int) -- ^ The (initial) spanning tree, which this function modifies as requests are coming in. This is to allow request generators access to it from the outside.
-  -> Arvy -- ^ The Arvy algorithm to run
-  -> Sem r ()
+  -> Arvy r -- ^ The Arvy algorithm to run
+  -> Sem r' ()
 runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
-  runArvyLocal' :: forall msg s . ArvyInst msg s -> Sem r ()
+  runArvyLocal' :: forall msg s . ArvyInst msg s r -> Sem r' ()
   runArvyLocal' ArvyInst { .. } = do
     bounds <- sendM @m $ getBounds tree
     states <- traverse initiateState (range bounds)
@@ -128,10 +137,10 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
     
     where
 
-    initiateState :: Int -> Sem r s
-    initiateState i = runLocalWeights weights i (arvyNodeInit i)
+    initiateState :: Int -> Sem r' s
+    initiateState i = raise . raise $ runLocalWeights weights i (arvyNodeInit i)
 
-    go :: sarr Int s -> Sem r ()
+    go :: sarr Int s -> Sem r' ()
     go state = input >>= \case
       Nothing -> return ()
       Just i -> do
@@ -149,7 +158,7 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
       where
 
       -- | Simulate sending some message to a node
-      send :: msg Int -> Int -> Sem r Int
+      send :: msg Int -> Int -> Sem r' Int
       send msg i = getSuccessor i >>= \case
         Just successor -> do
           (newSucc, newMsg) <- runNode i (arvyTransmit i msg)
@@ -161,20 +170,20 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
           setSuccessor i (Just newSucc)
           return i
 
-      getSuccessor :: Int -> Sem r (Maybe Int)
+      getSuccessor :: Int -> Sem r' (Maybe Int)
       getSuccessor i = sendM @m (readArray tree i)
 
-      setSuccessor :: Int -> Maybe Int -> Sem r ()
+      setSuccessor :: Int -> Maybe Int -> Sem r' ()
       setSuccessor i newSucc = do
         output $ SuccessorChange i newSucc
         sendM @m (writeArray tree i newSucc)
 
-      runNodeState :: Int -> Sem (State s ': r) a -> Sem r a
-      runNodeState i = interpret $ \case
+      runNodeState :: Int -> Sem (State s ': r) a -> Sem r' a
+      runNodeState i = raise . reinterpret \case
         Get -> sendM @m (readArray state i)
         Put s -> do
           output $ StateChange i (show s)
           sendM @m (writeArray state i s)
 
-      runNode :: Int -> Sem (LocalWeights ': State s ': r) a -> Sem r a
+      runNode :: Int -> Sem (LocalWeights ': State s ': r) a -> Sem r' a
       runNode i action = runNodeState i (runLocalWeights weights i action)

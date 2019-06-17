@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE BlockArguments #-}
 
@@ -18,35 +19,35 @@ import Data.Time (getCurrentTime)
 import Algebra.Graph.AdjacencyIntMap hiding (tree)
 import System.Random (mkStdGen)
 
-data WeightsParameter = WeightsParameter
+data WeightsParameter r = WeightsParameter
   { weightsName :: String
-  , weightsGet  :: forall r . Member Random r => Int -> Sem r GraphWeights
+  , weightsGet  :: Int -> Sem r GraphWeights
   }
 
-data InitialTreeParameter = InitialTreeParameter
+data InitialTreeParameter r = InitialTreeParameter
   { initialTreeName :: String
-  , initialTreeGet  :: forall r . Member Random r => Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
+  , initialTreeGet  :: Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
   }
 
-instance Show InitialTreeParameter where
+instance Show (InitialTreeParameter '[Random]) where
   show (InitialTreeParameter { .. }) = "Initial tree: " ++ initialTreeName ++ ", on an 8-ring: "
     ++ show (snd . run . runRandom (mkStdGen 0) $ initialTreeGet 8 (shortestPathWeights (symmetricClosure (circuit [0..7]))) )
 
-data RequestsParameter = RequestsParameter
+data RequestsParameter r = RequestsParameter
   { requestsName :: String
-  , requestsGet  :: forall r . Member Random r => Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
+  , requestsGet  :: Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
   }
 
-data Parameters = Parameters
+data Parameters r = Parameters
   { nodeCount    :: Int
-  , weights      :: WeightsParameter
-  , initialTree  :: InitialTreeParameter
+  , weights      :: WeightsParameter r
+  , initialTree  :: InitialTreeParameter r
   , requestCount :: Int
-  , requests     :: RequestsParameter
-  , algorithm    :: Arvy
+  , requests     :: RequestsParameter r
+  , algorithm    :: Arvy r
   }
 
-instance Show Parameters where
+instance Show (Parameters r) where
   show (Parameters { .. }) = "Parameters:\n" ++
     "\tNode count: " ++ show nodeCount ++ "\n" ++
     "\tWeights: " ++ weightsName weights ++ "\n" ++
@@ -55,7 +56,7 @@ instance Show Parameters where
     "\tRequests: " ++ requestsName requests ++ "\n" ++
     "\tAlgorithm: " ++ "TODO\n"
 
-runParams :: Int -> Parameters -> IO ()
+runParams :: Member (Lift IO) r => Int -> Parameters (Trace ': Random ': r) -> Sem r ()
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }
@@ -63,7 +64,7 @@ runParams seed params@Parameters
   , requestCount
   , requests = RequestsParameter { requestsGet }
   , algorithm = algorithm
-  } = runM . fmap snd . runRandom (mkStdGen seed) . runTraceIO . timestampTraces $ do
+  } = fmap snd . runRandom (mkStdGen seed) . runTraceIO . timestampTraces $ do
   trace $ "Random seed: " ++ show seed
   trace $ show params
 
@@ -77,13 +78,14 @@ runParams seed params@Parameters
   
   trace $ "Generating initial tree.."
   !tree <- initialTreeGet nodeCount weights
+  trace $ show tree
   mutableTree <- sendM (thaw tree :: IO (IOArray Int (Maybe Int)))
 
   trace $ "Running arvy.."
   (Sum s, (n, _)) <- runFoldMapOutput Sum
     $ runIgnoringOutput
     $ measureRatio weights shortestPaths
-    $ runRequests @IO mutableTree (requestsGet nodeCount weights) requestCount
+    $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
     $ runArvyLocal @IO @IOArray weights mutableTree algorithm
   trace $ "Average (request path length) / (optimal path length): " ++ show (s / fromIntegral n)
 

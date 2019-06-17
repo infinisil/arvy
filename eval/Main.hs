@@ -1,20 +1,25 @@
 module Main where
 
+import           Arvy.Algorithm.Arrow
+import           Arvy.Algorithm.ConstantRing
+import           Arvy.Algorithm.Half
 import           Arvy.Algorithm.Ivy
 
 import           Parameters
 import           ParametersLibrary
+import           Polysemy
+import           Polysemy.Random
 
-testParams :: Parameters
+testParams :: Members '[Random, Lift IO] r => Parameters r
 testParams = Parameters
   { nodeCount = 10
   , weights = pRingWeights
-  , initialTree = pMst
-  , requestCount = 10
+  , initialTree = pSemiCircles
+  , requestCount = 100
   , requests = pRandomRequests
-  , algorithm = ivy
+  , algorithm = constantRing 4
   }
 
 
 main :: IO ()
-main = runParams 0 testParams
+main = runM $ runParams 0 testParams

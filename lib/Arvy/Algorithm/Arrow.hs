@@ -4,8 +4,8 @@ import           Arvy.Algorithm
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
-arrow :: Arvy
-arrow = Arvy @ArrowMessage @() ArvyInst
+arrow :: Arvy r
+arrow = arvy @ArrowMessage @() ArvyInst
   { arvyNodeInit = \_ -> return ()
   , arvyInitiate = return . ArrowMessage
   , arvyTransmit = \i (ArrowMessage sender) ->

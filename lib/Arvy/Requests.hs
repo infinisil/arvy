@@ -11,14 +11,15 @@ import           Polysemy
 import           Polysemy.Input
 import           Polysemy.Random
 import           Polysemy.State
+import qualified Data.Tree as T
+import Arvy.Tree
 
 runRequests
   :: forall m r arr a
   . ( Member (Lift m) r
-    , MArray arr (Maybe Int) m
-    , Member Random r )
+    , MArray arr (Maybe Int) m )
   => arr Int (Maybe Int)
-  -> (Member Random r => Array Int (Maybe Int) -> Sem r Int)
+  -> (Array Int (Maybe Int) -> Sem r Int)
   -> Int
   -> Sem (Input (Maybe Int) ': r) a
   -> Sem r a
