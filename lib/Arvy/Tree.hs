@@ -3,12 +3,39 @@ module Arvy.Tree where
 import           Arvy.Weights
 import           Data.Array.Unboxed
 import qualified Data.Heap          as H
+import qualified Data.Map           as M
+import           Data.Maybe
+import qualified Data.Tree          as T
 
 type TreeState arr = arr Int (Maybe Int)
 
 
 ringTree :: Int -> Array Int (Maybe Int)
 ringTree count = listArray (0, count - 1) (Nothing : fmap Just [0..])
+
+
+-- | Converts a rooted spanning tree in the form of a pointer array to a 'T.Tree' value, useful for processing or display with 'T.drawTree'.
+-- Throws an error when there's multiple or no roots. Does *not* throw an error when some nodes don't transitively point to the root, instead those nodes are just not included in the final tree structure.
+treeStructure :: Array Int (Maybe Int) -> T.Tree Int
+treeStructure tree = T.unfoldTree predecessors root where
+
+  predecessors :: Int -> (Int, [Int])
+  predecessors node = (node, M.findWithDefault [] node predecessorMap )
+
+  (mroot, predecessorMap) = invert (assocs tree)
+  root = fromMaybe (error "Tree has no root") mroot
+
+  -- | Inverts an (node index, successor pointer) list to a (root, predecessor mapping) value
+  invert :: [(Int, Maybe Int)] -> (Maybe Int, M.Map Int [Int])
+  invert []                   = (Nothing, M.empty)
+  invert ((i, pointer):rest) = case pointer of
+    Nothing        -> (case root' of
+                         Nothing -> Just i
+                         Just i' -> error $ "Tree has multiple roots at both node " ++ show i ++ " and " ++ show i'
+                      , rest')
+    Just successor -> (root'
+                      , M.insertWith (++) successor [i] rest')
+    where (root', rest') = invert rest
 
 type Edge = (Int, Int)
 type MSTEntry = H.Entry Double Edge

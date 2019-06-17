@@ -71,6 +71,8 @@ test-suite arvy-tests
                      , polysemy
                      , polysemy-zoo
                      , random
+                     , containers
+                     , deepseq
   default-language:    Haskell2010
 
   
