@@ -46,3 +46,8 @@ lengthsToRoot weights tree = loeb fs
     fs = amap' (\i v -> \others -> maybe 0 (\o -> others ! o + weights ! (i, o)) v)
                 tree
 
+-- TODO: Use haskeline, add haskeline effect to polysemy
+interactiveRequests :: Member (Lift IO) r => Array Int (Maybe Int) -> Sem r Int
+interactiveRequests tree = do
+  sendM $ putStrLn $ T.drawTree $ fmap show $ treeStructure tree
+  read <$> sendM getLine
