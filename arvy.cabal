@@ -39,6 +39,7 @@ library
                      , random
                      , time
                      , template-haskell
+                     , deepseq
   default-extensions:  DataKinds
                      , FlexibleContexts
                      , GADTs

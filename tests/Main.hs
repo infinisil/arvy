@@ -1,4 +1,9 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module Main where
 
@@ -7,6 +12,9 @@ import           Arvy.Utils
 import           Arvy.Weights
 import           Control.DeepSeq
 import           Control.Exception
+import           Control.Monad.ST
+import           Data.Array.IO
+import           Data.Array.ST
 import           Data.Array.Unboxed
 import qualified Data.Tree          as T
 import           Polysemy
@@ -68,3 +76,43 @@ main = hspec $ do
 
     it "doesn't error on lost nodes" $
       treeStructure (listArray (0, 3) [Nothing, Just 0, Just 3, Just 2]) `shouldBe` T.Node 0 [T.Node 1 []]
+
+  testWithFrozen
+
+testWithFrozen :: Spec
+testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
+  it "doesn't evaluate results lazily" $
+    testWhnfIO `shouldReturn` 0
+
+  it "fully evaluates results to normal form" $
+    testNfIO `shouldReturn` [0]
+
+  it "works with strict ST" $
+    runST testST `shouldBe` [0]
+
+  where
+
+    testWhnfIO :: IO Int
+    testWhnfIO = runM $ do
+      arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
+      res <- withFrozen @Array @IO arr $ \f a ->
+        return $ f (a ! 0)
+      sendM @IO $ writeArray arr 0 1
+      return res
+
+
+    testNfIO :: IO [Int]
+    testNfIO = runM $ do
+      arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
+      res <- withFrozen @Array @IO arr $ \f a ->
+        return [f (a ! 0)]
+      sendM @IO $ writeArray arr 0 1
+      return res
+
+    testST :: forall s . ST s [Int]
+    testST = runM $ do
+      arr <- sendM (newArray (0, 0) 0 :: ST s (STArray s Int Int))
+      res <- withFrozen @Array @(ST s) arr $ \f a ->
+        return [f (a ! 0)]
+      sendM @(ST s) $ writeArray arr 0 1
+      return res
