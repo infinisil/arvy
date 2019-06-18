@@ -20,19 +20,19 @@ infinity = read "Infinity"
 
 
 -- | Temporarily get access to an immutable version of a mutable array.
--- Only safe if this is the only thread that has access to the given mutable array.
--- Or if other threads promise to not modify the mutable array while the given function is running.
+-- Only safe if the mutable array doesn't get modified while the given function is running.
 {-# INLINE withFrozen #-}
 withFrozen
-  :: forall m x a i e r
+  :: forall m b x a i e r
   . ( Member (Lift m) r
     , NFData x
     , Ix i
-    , MArray a e m )
+    , MArray a e m
+    , IArray b e )
   => a i e -- ^ The mutable array to get an immutable version from
-  -> (forall b . IArray b e => b i e -> Sem r x) -- ^ The function to call on the immutable version
+  -> (forall b' . IArray b' e => b' i e -> Sem r x) -- ^ The function to call on the immutable version
   -> Sem r x
 withFrozen arr fun = do
   frozen <- sendM @m (unsafeFreeze arr)
-  res <- fun (frozen :: Array i e)
+  res <- fun (frozen :: b i e)
   return $!! res
