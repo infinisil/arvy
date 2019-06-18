@@ -95,8 +95,8 @@ testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
     testWhnfIO :: IO Int
     testWhnfIO = runM $ do
       arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
-      res <- withFrozen @Array @IO arr $ \f a ->
-        return $ f (a ! 0)
+      res <- withFrozen @IO arr $ \a ->
+        return $ a ! 0
       sendM @IO $ writeArray arr 0 1
       return res
 
@@ -104,15 +104,15 @@ testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
     testNfIO :: IO [Int]
     testNfIO = runM $ do
       arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
-      res <- withFrozen @Array @IO arr $ \f a ->
-        return [f (a ! 0)]
+      res <- withFrozen @IO arr $ \a ->
+        return [a ! 0]
       sendM @IO $ writeArray arr 0 1
       return res
 
     testST :: forall s . ST s [Int]
     testST = runM $ do
       arr <- sendM (newArray (0, 0) 0 :: ST s (STArray s Int Int))
-      res <- withFrozen @Array @(ST s) arr $ \f a ->
-        return [f (a ! 0)]
+      res <- withFrozen @(ST s) arr $ \a ->
+        return [a ! 0]
       sendM @(ST s) $ writeArray arr 0 1
       return res
