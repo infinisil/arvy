@@ -23,6 +23,7 @@ library
                        Arvy.Algorithm.Arrow
                        Arvy.Algorithm.Ivy
                        Arvy.Algorithm.ConstantRing
+                       Arvy.Algorithm.Half
                        Arvy.Requests
                        Arvy.Utils
   -- TODO: Enable -fplugin=Polysemy.Plugin to be able to remove a lot of type applications
