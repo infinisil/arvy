@@ -25,11 +25,11 @@ runRequests
   -> Sem r a
 runRequests tree getRequest requestCount =
   fmap snd . runState requestCount . reinterpret \case
-    Input -> get @Int >>= \case
+    Input -> get >>= \case
       0 -> return Nothing
       k -> do
         put (k - 1)
-        immutableTree <- sendM @m (freeze tree)
+        immutableTree <- sendM $ freeze tree
         Just <$> raise (getRequest immutableTree)
 
 randomRequest :: Member Random r => Int -> Sem r Int

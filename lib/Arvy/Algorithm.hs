@@ -130,9 +130,9 @@ runArvyLocal
 runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
   runArvyLocal' :: forall msg s . ArvyInst msg s r -> Sem r' ()
   runArvyLocal' ArvyInst { .. } = do
-    bounds <- sendM @m $ getBounds tree
+    bounds <- sendM $ getBounds tree
     states <- traverse initiateState (range bounds)
-    stateArray <- sendM @m $ newListArray bounds states
+    stateArray <- sendM $ newListArray bounds states
     go stateArray
     
     where
@@ -171,19 +171,19 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
           return i
 
       getSuccessor :: Int -> Sem r' (Maybe Int)
-      getSuccessor i = sendM @m (readArray tree i)
+      getSuccessor i = sendM $ readArray tree i
 
       setSuccessor :: Int -> Maybe Int -> Sem r' ()
       setSuccessor i newSucc = do
         output $ SuccessorChange i newSucc
-        sendM @m (writeArray tree i newSucc)
+        sendM $ writeArray tree i newSucc
 
       runNodeState :: Int -> Sem (State s ': r) a -> Sem r' a
       runNodeState i = raise . reinterpret \case
-        Get -> sendM @m (readArray state i)
+        Get -> sendM $ readArray state i
         Put s -> do
           output $ StateChange i (show s)
-          sendM @m (writeArray state i s)
+          sendM $ writeArray state i s
 
       runNode :: Int -> Sem (LocalWeights ': State s ': r) a -> Sem r' a
       runNode i action = runNodeState i (runLocalWeights weights i action)
