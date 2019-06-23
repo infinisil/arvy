@@ -12,6 +12,7 @@ import           Arvy.Utils
 import           Arvy.Weights
 import           Control.DeepSeq
 import           Control.Exception
+import           Control.Monad
 import           Control.Monad.ST
 import           Data.Array.IO
 import           Data.Array.ST
@@ -79,7 +80,33 @@ main = hspec $ do
     it "doesn't error on lost nodes" $
       treeStructure (listArray (0, 3) [Nothing, Just 0, Just 3, Just 2]) `shouldBe` T.Node 0 [T.Node 1 []]
 
+
+  describe "Arvy.Tree.avgTreeStretch" $ do
+    it "works on a 3-node ring tree and graph" $
+      avgTreeStretch 3 (ringWeights 3) (ringTree 3) `shouldBeAbout` (1 + 1 / 3)
+
+    it "works on a 5-node ring tree and graph" $
+      avgTreeStretch 5 (ringWeights 5) (ringTree 5) `shouldBeAbout` 1.4
+
+    it "is greater or equal to 1 for 100 random samples" $
+      runM (fmap snd $ runRandom (mkStdGen 0) $ replicateM 100 randomStretch) `shouldSatisfyReturn` all (>= 1)
+
+
   testWithFrozen
+
+randomStretch :: Member Random r => Sem r Double
+randomStretch = do
+  n <- randomR (1, 100)
+  points <- randomPoints n
+  let weights = euclidianWeights points
+  let tree = mst n weights
+  return $ avgTreeStretch n weights tree
+
+shouldSatisfyReturn :: (HasCallStack, Show a, Eq a) => IO a -> (a -> Bool) -> Expectation
+shouldSatisfyReturn action expected = action >>= (`shouldSatisfy` expected)
+
+shouldBeAbout :: (HasCallStack, Show a, Ord a, Fractional a) => a -> a -> Expectation
+shouldBeAbout v e = v `shouldSatisfy` (< 0.000001) . abs . subtract e
 
 testWithFrozen :: Spec
 testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
@@ -125,7 +152,7 @@ testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
     testOutput :: Members '[Output Int, Lift IO] r => Sem r ()
     testOutput = do
       arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
-      res <- withFrozen @IO @Array arr $ \a ->
+      withFrozen @IO @Array arr $ \a ->
         output (a ! 0)
       sendM @IO $ writeArray arr 0 1
 

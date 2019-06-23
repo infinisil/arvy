@@ -1,5 +1,6 @@
 module Arvy.Tree where
 
+import           Arvy.Utils
 import           Arvy.Weights
 import           Data.Array.Unboxed
 import qualified Data.Heap          as H
@@ -7,12 +8,28 @@ import qualified Data.Map           as M
 import           Data.Maybe
 import qualified Data.Tree          as T
 
-type TreeState arr = arr Int (Maybe Int)
-
+type Tree = Array Int (Maybe Int)
 
 ringTree :: Int -> Array Int (Maybe Int)
 ringTree count = listArray (0, count - 1) (Nothing : fmap Just [0..])
 
+
+avgTreeStretch :: Int -> GraphWeights -> Tree -> Double
+avgTreeStretch n weights tree = sum stretches / (fromIntegral n * (fromIntegral n - 1) / 2)
+  where
+
+    stretches = [ stretch u v | u <- [0 .. n - 1], v <- [u + 1 .. n - 1] ]
+
+    stretch :: Int -> Int -> Double
+    stretch u v = treeDistances ! (u, v) / weights ! (u, v)
+
+    w = accumArray (flip const) infinity ((0, 0), (n - 1, n - 1))
+      (concat [ [ ((x, y), weight)
+                , ((y, x), weight) ]
+      | (x, Just y) <- assocs tree
+      , let weight = weights ! (x, y)
+      ])
+    treeDistances = shortestPathWeights' w
 
 -- | Converts a rooted spanning tree in the form of a pointer array to a 'T.Tree' value, useful for processing or display with 'T.drawTree'.
 -- Throws an error when there's multiple or no roots. Does *not* throw an error when some nodes don't transitively point to the root, instead those nodes are just not included in the final tree structure.
