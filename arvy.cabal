@@ -81,6 +81,7 @@ executable arvy-eval
   hs-source-dirs:      eval
   other-modules:       Parameters
                      , ParametersLibrary
+                     , Evaluation
   main-is:             Main.hs
   ghc-options:         -Wall
   build-depends:       base ^>=4.12.0.0

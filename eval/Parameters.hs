@@ -18,6 +18,7 @@ import Polysemy.Trace
 import Data.Time (getCurrentTime)
 import Algebra.Graph.AdjacencyIntMap hiding (tree)
 import System.Random (mkStdGen)
+import Evaluation
 
 data WeightsParameter r = WeightsParameter
   { weightsName :: String
@@ -56,7 +57,7 @@ instance Show (Parameters r) where
     "\tRequests: " ++ requestsName requests ++ "\n" ++
     "\tAlgorithm: " ++ "TODO\n"
 
-runParams :: Member (Lift IO) r => Int -> Parameters (Trace ': Random ': r) -> Sem r ()
+runParams :: (Monoid res, Members '[Lift IO, Trace] r) => Int -> Parameters (Random ': r) -> Evaluation ArvyEvent res -> Sem r res
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }
@@ -64,7 +65,7 @@ runParams seed params@Parameters
   , requestCount
   , requests = RequestsParameter { requestsGet }
   , algorithm = algorithm
-  } = fmap snd . runRandom (mkStdGen seed) . runTraceIO . timestampTraces $ do
+  } evaluation = fmap snd . runRandom (mkStdGen seed) $ do
   trace $ "Random seed: " ++ show seed
   trace $ show params
 
@@ -78,19 +79,16 @@ runParams seed params@Parameters
   
   trace $ "Generating initial tree.."
   !tree <- initialTreeGet nodeCount weights
-  trace $ show tree
   mutableTree <- sendM (thaw tree :: IO (IOArray Int (Maybe Int)))
 
   trace $ "Running arvy.."
-  (Sum s, (n, _)) <- runFoldMapOutput Sum
-    $ runIgnoringOutput
-    $ measureRatio weights shortestPaths
+  fmap fst
+    $ runEvaluation @IO weights mutableTree evaluation id 
     $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
     $ runArvyLocal @IO @IOArray weights mutableTree algorithm
-  trace $ "Average (request path length) / (optimal path length): " ++ show (s / fromIntegral n)
 
-timestampTraces :: Member (Lift IO) r => Sem (Trace ': r) a -> Sem (Trace ': r) a
-timestampTraces = reinterpret \case
+timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
+timestampTraces = interpret \case
   Trace v -> do
     time <- sendM getCurrentTime
     trace $ "[" ++ show time ++ "] " ++ v
