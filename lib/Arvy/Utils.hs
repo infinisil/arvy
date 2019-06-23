@@ -33,6 +33,6 @@ withFrozen
   -> (forall b' . IArray b' e => b' i e -> Sem r x) -- ^ The function to call on the immutable version
   -> Sem r x
 withFrozen arr fun = do
-  frozen <- sendM $ unsafeFreeze arr
+  frozen <- sendM $ freeze arr
   res <- fun (frozen :: b i e)
   return $!! res

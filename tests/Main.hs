@@ -18,7 +18,9 @@ import           Data.Array.ST
 import           Data.Array.Unboxed
 import qualified Data.Tree          as T
 import           Polysemy
+import           Polysemy.Output
 import           Polysemy.Random
+import           Polysemy.Trace
 import           System.Random      (mkStdGen)
 import           Test.Hspec
 
@@ -90,6 +92,9 @@ testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
   it "works with strict ST" $
     runST testST `shouldBe` [0]
 
+  it "works with output effects" $
+    runM (runTraceIO $ runFoldMapOutput @Int (:[]) testOutput) `shouldReturn` ([0], ())
+
   where
 
     testWhnfIO :: IO Int
@@ -116,3 +121,11 @@ testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
         return [a ! 0]
       sendM @(ST s) $ writeArray arr 0 1
       return res
+
+    testOutput :: Members '[Output Int, Lift IO] r => Sem r ()
+    testOutput = do
+      arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
+      res <- withFrozen @IO @Array arr $ \a ->
+        output (a ! 0)
+      sendM @IO $ writeArray arr 0 1
+
