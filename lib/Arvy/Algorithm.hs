@@ -119,7 +119,7 @@ runArvyLocal
   :: forall m sarr tarr r r'
   . ( Members '[ Lift m, Trace ] r
       -- r represents the input effects, the one the Arvy algorithm needs. r' represents the output effects, which are the ones the algorithm needs plus it taking inputs and sending outputs. Lift and Trace are not included in these additional effects because the algorithm might need those itself.
-    , r' ~ (Input (Maybe Int) ': Output ArvyEvent ': r)
+    , r' ~ (Input (Maybe Int) ': Output (Maybe ArvyEvent) ': r)
       -- Quantified constraint because we need a mutable array to store the state of the nodes of /any/ possible algorithm, and every algorithm can choose its own state type
     , forall s . MArray sarr s m
     , MArray tarr (Maybe Int) m )
@@ -134,6 +134,7 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
     states <- traverse initiateState (range bounds)
     stateArray <- sendM $ newListArray bounds states
     go stateArray
+    output Nothing
     
     where
 
@@ -144,15 +145,15 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
     go state = input >>= \case
       Nothing -> return ()
       Just i -> do
-        output $ RequestMade i
+        output $ Just $ RequestMade i
         getSuccessor i >>= \case
-          Nothing -> output $ RequestGranted (AlreadyHere i)
+          Nothing -> output $ Just $ RequestGranted (AlreadyHere i)
           Just successor -> do
             msg <- runNode i (arvyInitiate i)
             setSuccessor i Nothing
-            output $ RequestTravel i successor (show msg)
+            output $ Just $ RequestTravel i successor (show msg)
             root <- send msg successor
-            output $ RequestGranted (GottenFrom i root)
+            output $ Just $ RequestGranted (GottenFrom i root)
         go state
         
       where
@@ -163,7 +164,7 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
         Just successor -> do
           (newSucc, newMsg) <- runNode i (arvyTransmit i msg)
           setSuccessor i (Just newSucc)
-          output $ RequestTravel i successor (show newMsg)
+          output $ Just $ RequestTravel i successor (show newMsg)
           send newMsg successor
         Nothing -> do
           newSucc <- runNode i (arvyReceive i msg)
@@ -175,14 +176,14 @@ runArvyLocal weights tree (Arvy inst) = runArvyLocal' inst where
 
       setSuccessor :: Int -> Maybe Int -> Sem r' ()
       setSuccessor i newSucc = do
-        output $ SuccessorChange i newSucc
+        output $ Just $ SuccessorChange i newSucc
         sendM $ writeArray tree i newSucc
 
       runNodeState :: Int -> Sem (State s ': r) a -> Sem r' a
       runNodeState i = raise . reinterpret \case
         Get -> sendM $ readArray state i
         Put s -> do
-          output $ StateChange i (show s)
+          output $ Just $ StateChange i (show s)
           sendM $ writeArray state i s
 
       runNode :: Int -> Sem (LocalWeights ': State s ': r) a -> Sem r' a

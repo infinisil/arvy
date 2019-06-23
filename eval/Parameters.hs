@@ -7,6 +7,7 @@ module Parameters where
 import Polysemy
 import Polysemy.Random
 import Arvy.Weights
+import Control.DeepSeq
 import Arvy.Algorithm
 import Data.Array hiding ((!))
 import Data.Array.Unboxed ((!))
@@ -18,6 +19,7 @@ import Polysemy.Trace
 import Data.Time (getCurrentTime)
 import Algebra.Graph.AdjacencyIntMap hiding (tree)
 import System.Random (mkStdGen)
+import Evaluation
 
 data WeightsParameter r = WeightsParameter
   { weightsName :: String
@@ -56,7 +58,7 @@ instance Show (Parameters r) where
     "\tRequests: " ++ requestsName requests ++ "\n" ++
     "\tAlgorithm: " ++ "TODO\n"
 
-runParams :: Member (Lift IO) r => Int -> Parameters (Trace ': Random ': r) -> Sem r ()
+runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Int -> Parameters (Random ': r) -> (Int -> GraphWeights -> Eval ArvyEvent res) -> Sem r ()
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }
@@ -64,7 +66,7 @@ runParams seed params@Parameters
   , requestCount
   , requests = RequestsParameter { requestsGet }
   , algorithm = algorithm
-  } = fmap snd . runRandom (mkStdGen seed) . runTraceIO . timestampTraces $ do
+  } evaluation = fmap snd . runRandom (mkStdGen seed) $ do
   trace $ "Random seed: " ++ show seed
   trace $ show params
 
@@ -78,19 +80,17 @@ runParams seed params@Parameters
   
   trace $ "Generating initial tree.."
   !tree <- initialTreeGet nodeCount weights
-  trace $ show tree
   mutableTree <- sendM (thaw tree :: IO (IOArray Int (Maybe Int)))
 
+  let eval = evaluation nodeCount weights
+
   trace $ "Running arvy.."
-  (Sum s, (n, _)) <- runFoldMapOutput Sum
-    $ runIgnoringOutput
-    $ measureRatio weights shortestPaths
+  runEval @IO eval mutableTree
     $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
     $ runArvyLocal @IO @IOArray weights mutableTree algorithm
-  trace $ "Average (request path length) / (optimal path length): " ++ show (s / fromIntegral n)
 
-timestampTraces :: Member (Lift IO) r => Sem (Trace ': r) a -> Sem (Trace ': r) a
-timestampTraces = reinterpret \case
+timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
+timestampTraces = interpret \case
   Trace v -> do
     time <- sendM getCurrentTime
     trace $ "[" ++ show time ++ "] " ++ v

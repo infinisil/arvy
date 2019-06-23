@@ -81,16 +81,19 @@ executable arvy-eval
   hs-source-dirs:      eval
   other-modules:       Parameters
                      , ParametersLibrary
+                     , Evaluation
   main-is:             Main.hs
-  ghc-options:         -Wall
+  ghc-options:         -Wall -fplugin=Polysemy.Plugin
   build-depends:       base ^>=4.12.0.0
                      , arvy
                      , array
                      , polysemy
                      , polysemy-zoo
+                     , polysemy-plugin
                      , algebraic-graphs
                      , time
                      , random
+                     , deepseq
   default-language:    Haskell2010
   default-extensions:  DataKinds
                      , FlexibleContexts
