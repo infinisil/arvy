@@ -23,6 +23,7 @@ library
                        Arvy.Algorithm.Arrow
                        Arvy.Algorithm.Ivy
                        Arvy.Algorithm.ConstantRing
+                       Arvy.Algorithm.Shortest
                        Arvy.Algorithm.Half
                        Arvy.Requests
                        Arvy.Utils

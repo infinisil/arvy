@@ -2,6 +2,7 @@ module Main where
 
 import           Arvy.Algorithm.Arrow
 import           Arvy.Algorithm.ConstantRing
+import           Arvy.Algorithm.Shortest
 import           Arvy.Algorithm.Half
 import           Arvy.Algorithm.Ivy
 

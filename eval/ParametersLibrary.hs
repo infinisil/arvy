@@ -15,6 +15,15 @@ pRandomWeights = WeightsParameter
   , weightsGet = randomWeights
   }
 
+pWorstRequests :: RequestsParameter r
+pWorstRequests = RequestsParameter
+  { requestsName = "worst"
+  , requestsGet = get
+  } where
+  get :: Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
+  get _ weights tree = return $ worstRequest weights tree
+  
+
 pRandomRequests :: Member Random r => RequestsParameter r
 pRandomRequests = RequestsParameter
   { requestsName = "random"
