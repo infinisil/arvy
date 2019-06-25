@@ -5,7 +5,7 @@ import Algebra.Graph.AdjacencyIntMap hiding (edge)
 import Arvy.Utils
 import Control.Monad
 import Data.Array.ST
-import Data.Array.Unboxed
+import Data.Array.Base
 import Polysemy
 import Data.Graph.Generators.Random.BarabasiAlbert
 
@@ -43,12 +43,12 @@ floydWarshall n weights =
   forM_ [0..n - 1] $ \k ->
     forM_ [0..n - 1] $ \i ->
       forM_ [0..n - 1] $ \j -> do
-        ij <- readArray weights (i, j)
-        ik <- readArray weights (i, k)
-        kj <- readArray weights (k, j)
+        ij <- unsafeRead weights (i * n + j)
+        ik <- unsafeRead weights (i * n + k)
+        kj <- unsafeRead weights (k * n + j)
         let ikj = ik + kj
         when (ij > ikj) $
-          writeArray weights (i, j) ikj
+          unsafeWrite weights (i * n + j) ikj
 
 -- TODO: Does this really not use any additional storage?
 -- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is /O(m + n^3)/ with n being the number of vertices and m being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
