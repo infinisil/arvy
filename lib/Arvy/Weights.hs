@@ -8,6 +8,8 @@ import Data.Array.ST
 import Data.Array.Base
 import Polysemy
 import Data.Graph.Generators.Random.BarabasiAlbert
+import Data.Graph.Generators.Random.ErdosRenyi
+import Algebra.Graph.ToGraph (toGraph)
 
 
 -- | The type of our nodes (indices)
@@ -57,6 +59,10 @@ shortestPathWeights :: NodeCount -> AdjacencyIntMap -> GraphWeights
 shortestPathWeights n graph = runSTUArray $ do
   -- Initialize array with all edges being infinity, representing no paths between any nodes
   weights <- newArray ((0, 0), (n - 1, n - 1)) infinity
+  
+  -- Set all known edges to weight 1
+  forM_ (edgeList graph) $ \edge ->
+    writeArray weights edge 1
 
   -- Set all weights from nodes to themselves to 0
   forM_ (vertexList graph) $ \x ->
@@ -69,9 +75,6 @@ shortestPathWeights n graph = runSTUArray $ do
       ++ ", shift all node indices down to fill the range."
     else writeArray weights (x, x) 0
 
-  -- Set all known edges to weight 1
-  forM_ (edgeList graph) $ \edge ->
-    writeArray weights edge 1
 
   -- Compute shortest paths
   floydWarshall n weights
@@ -80,6 +83,7 @@ shortestPathWeights n graph = runSTUArray $ do
 
 
 -- TODO: Rewrite graph-generators in terms of polysemy's RandomFu
+-- TODO: Implement in terms of algebraic-graphs, see also https://github.com/snowleopard/alga/issues/196
 -- | Barabasi-Albert graph generator from graph-generators
 barabasiAlbert
   :: Member (Lift IO) r
@@ -89,6 +93,22 @@ barabasiAlbert
 barabasiAlbert n m = do
   graphInfo <- sendM $ barabasiAlbertGraph' n m
   return $ shortestPathWeights n $ symmetricClosure $ infoToGraph graphInfo
+  
+-- TODO: Rewrite graph-generators in terms of polysemy's RandomFu
+-- | Erdős-Rényi graph generator from graph-generators
+erdosRenyi
+  :: Member (Lift IO) r
+  => NodeCount -- ^ The number of total nodes
+  -> Sem r GraphWeights
+erdosRenyi n = do
+  -- According to Erdos and Renyi, a graph is very likely to be connected with p > (1 + e) ln n / n
+  let p = log (fromIntegral n) / fromIntegral n
+  graphInfo <- sendM $ erdosRenyiGraph' n p
+  let graph = vertices [0 .. n - 1] `overlay` (symmetricClosure $ infoToGraph graphInfo)
+  sendM $ print graph
+  if isConnected (toGraph graph)
+    then return $ shortestPathWeights n graph
+    else erdosRenyi n
 
 -- | Ring weights
 ringWeights :: NodeCount -> GraphWeights

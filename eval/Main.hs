@@ -19,7 +19,7 @@ import           System.IO
 params :: Members '[Random, Lift IO] r => [Parameters r]
 params =
   [ Parameters
-    { nodeCount = 100
+    { nodeCount = 500
     , weights = pBarabasiWeights 1
     , initialTree = pMst
     , requestCount = 10000
