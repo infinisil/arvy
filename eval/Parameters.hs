@@ -58,7 +58,7 @@ instance Show (Parameters r) where
     "\tRequests: " ++ requestsName requests ++ "\n" ++
     "\tAlgorithm: " ++ "TODO\n"
 
-runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Int -> Parameters (Random ': r) -> (Int -> GraphWeights -> Eval ArvyEvent res) -> Sem r ()
+runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Int -> Parameters (Random ': r) -> (Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent res) -> Sem r ()
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }
@@ -75,17 +75,14 @@ runParams seed params@Parameters
   trace $ "Generating weights.."
   !weights <- weightsGet nodeCount
   
-  trace $ "Computing shortest paths.."
-  let !shortestPaths = shortestPathWeights' weights
-  
   trace $ "Generating initial tree.."
   !tree <- initialTreeGet nodeCount weights
   mutableTree <- sendM (thaw tree :: IO (IOArray Int (Maybe Int)))
 
-  let eval = evaluation nodeCount weights
+  let eval = evaluation nodeCount weights mutableTree
 
   trace $ "Running arvy.."
-  runEval @IO eval mutableTree
+  runEval eval
     $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
     $ runArvyLocal @IO @IOArray weights mutableTree algorithm
 

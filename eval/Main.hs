@@ -15,6 +15,7 @@ import           Polysemy.Random
 import           Polysemy.Output
 import           Polysemy.Trace
 import Control.Category
+import Control.Monad
 import Data.Monoid
 import qualified Debug.Trace as D
 import Control.Applicative
@@ -22,23 +23,24 @@ import Arvy.Algorithm
 import Evaluation
 import System.IO
 
-testParams :: Members '[Random, Lift IO] r => Parameters r
-testParams = Parameters
-  { nodeCount = 100
-  , weights = pRandom2DWeights
-  , initialTree = pRing
-  , requestCount = 100000
-  , requests = pRandomRequests
-  , algorithm = half
-  }
+params :: Members '[Random, Lift IO] r => [Parameters r]
+params =
+  [ Parameters
+    { nodeCount = 400
+    , weights = pBarabasiWeights 1
+    , initialTree = pMst
+    , requestCount = 10000
+    , requests = pRandomRequests
+    , algorithm = ivy
+    }
+  ]
 
 main :: IO ()
-main = runM
+main = forM_ params $ \par -> runM
   $ runTraceIO
-  $ runOutputToFile "eval-output"
-  $ mapOutput show
-  $ runParams 0 testParams
-  $ \n w -> everyNth 10 >>> treeStretch n w
+  $ runOutputAsTrace
+  $ runParams 0 par
+  $ \n w t -> everyNth 100 >>> treeStretch n w t
 
 mapOutput :: Member (Output y) r => (x -> y) -> Sem (Output x ': r) a -> Sem r a
 mapOutput f = interpret \case Output x -> output $ f x

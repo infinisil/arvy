@@ -57,3 +57,10 @@ pRandom2DWeights = WeightsParameter
       points <- randomPoints n
       return $ euclidianWeights points
   }
+
+pBarabasiWeights :: Member (Lift IO) r => Int -> WeightsParameter r
+pBarabasiWeights m = WeightsParameter
+  { weightsName = "barabasi albert"
+  , weightsGet = \n -> barabasiAlbert n m
+  }
+      

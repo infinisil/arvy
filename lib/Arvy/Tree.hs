@@ -1,3 +1,6 @@
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE BangPatterns #-}
+
 module Arvy.Tree where
 
 import           Arvy.Utils
@@ -7,15 +10,20 @@ import qualified Data.Heap          as H
 import qualified Data.Map           as M
 import           Data.Maybe
 import qualified Data.Tree          as T
+import Polysemy
+import Control.Exception
+import Data.Array.MArray
+import Data.Array.Base
+import Control.Monad.ST
+import Control.Monad
 
 type Tree = Array Int (Maybe Int)
 
 ringTree :: Int -> Array Int (Maybe Int)
 ringTree count = listArray (0, count - 1) (Nothing : fmap Just [0..])
 
-
-avgTreeStretch :: Int -> GraphWeights -> Tree -> Double
-avgTreeStretch n weights tree = sum stretches / (fromIntegral n * (fromIntegral n - 1) / 2)
+avgTreeStretch' :: Int -> GraphWeights -> Tree -> Double
+avgTreeStretch' n weights tree = sum stretches / (fromIntegral n * (fromIntegral n - 1) / 2)
   where
 
     stretches = [ stretch u v | u <- [0 .. n - 1], v <- [u + 1 .. n - 1] ]
@@ -30,6 +38,39 @@ avgTreeStretch n weights tree = sum stretches / (fromIntegral n * (fromIntegral 
       , let weight = weights ! (x, y)
       ])
     treeDistances = shortestPathWeights' w
+
+avgTreeStretch :: Int -> GraphWeights -> Tree -> Double
+avgTreeStretch n weights tree = runST go where
+  go :: forall s . ST s Double
+  go = do
+    arr :: STUArray s (Int, Int) Double <- newArray ((0, 0), (n - 1, n - 1)) infinity
+    let (lower, upper) = bounds tree
+    forM_ [lower..upper] $ \src -> do
+      let mdst = tree ! src
+      case mdst of
+        Nothing -> return ()
+        Just dst -> do
+          let weight = weights ! (src, dst)
+          writeArray arr (src, dst) weight
+          writeArray arr (dst, src) weight
+
+    forM_ [0 .. n - 1] $ \k ->
+      forM_ [0 .. n - 1] $ \i ->
+        forM_ [0 .. n - 1] $ \j -> do
+          ij <- unsafeRead arr (i * n + j)
+          ik <- unsafeRead arr (i * n + k)
+          kj <- unsafeRead arr (k * n + j)
+          --let ikj = {-# SCC letd #-} ik + kj
+          when (ij > ik + kj) $
+            unsafeWrite arr (i * n + j) (ik + kj)
+
+    res <- foldM (\acc u ->
+              foldM (\acc' v -> do
+                        treePath <- readArray arr (u, v)
+                        return $ acc' + treePath / weights ! (u, v)
+                    ) acc [u + 1 .. n - 1]
+          ) 0 [0 .. n - 1]
+    return $ res / (fromIntegral n * (fromIntegral n - 1) / 2)
 
 -- | Converts a rooted spanning tree in the form of a pointer array to a 'T.Tree' value, useful for processing or display with 'T.drawTree'.
 -- Throws an error when there's multiple or no roots. Does *not* throw an error when some nodes don't transitively point to the root, instead those nodes are just not included in the final tree structure.

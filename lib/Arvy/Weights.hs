@@ -4,6 +4,7 @@ module Arvy.Weights
   ) where
 
 import           Algebra.Graph.AdjacencyIntMap
+import           qualified Algebra.Graph.Class as GC
 import           Arvy.Utils
 import           Control.Monad
 import           Data.Array.ST
@@ -12,6 +13,8 @@ import           Data.Bifunctor                (first)
 import           Data.Tuple                    (swap)
 import           Polysemy
 import           Polysemy.Random
+import Data.Graph.Generators.Random.BarabasiAlbert
+import qualified Data.Graph.Generators as GG
 
 type GraphWeights = UArray (Int, Int) Double
 
@@ -28,7 +31,7 @@ runLocalWeights weights source = interpret $ \case
 
 
 
--- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is O(n^3) with n being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
+-- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is O(m + n^3) with n being the number of vertices and m being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
 shortestPathWeights :: AdjacencyIntMap -> GraphWeights
 shortestPathWeights graph = runSTUArray $ do
   let v = vertexCount graph
@@ -76,6 +79,15 @@ shortestPathWeights' weights = runSTUArray $ do
           writeArray arr (i, j) ikj
 
   return arr
+
+-- TODO: Rewrite graph-generators in terms of polysemy's RandomFu
+barabasiAlbert :: Member (Lift IO) r => Int -> Int -> Sem r GraphWeights
+barabasiAlbert n m = do
+  graphInfo <- sendM $ barabasiAlbertGraph' n m
+  return $ shortestPathWeights $ symmetricClosure $ graphInfoToAdjacency graphInfo
+
+graphInfoToAdjacency :: (GC.Graph g, GC.Vertex g ~ Int) => GG.GraphInfo -> g
+graphInfoToAdjacency (GG.GraphInfo { GG.edges = e }) = GC.edges e
 
 -- | Generates a number of random 2D points with coordinates from 0.0 to 1.0
 randomPoints :: Member Random r => Int -> Sem r (Array Int (Double, Double))

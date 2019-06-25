@@ -40,6 +40,7 @@ library
                      , time
                      , template-haskell
                      , deepseq
+                     , graph-generators
   default-extensions:  DataKinds
                      , FlexibleContexts
                      , GADTs
