@@ -3,7 +3,6 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeApplications      #-}
 
 module Main where
 
@@ -12,16 +11,10 @@ import           Arvy.Utils
 import           Arvy.Weights
 import           Control.DeepSeq
 import           Control.Exception
-import           Control.Monad
-import           Control.Monad.ST
-import           Data.Array.IO
-import           Data.Array.ST
 import           Data.Array.Unboxed
 import qualified Data.Tree          as T
 import           Polysemy
-import           Polysemy.Output
 import           Polysemy.Random
-import           Polysemy.Trace
 import           System.Random      (mkStdGen)
 import           Test.Hspec
 

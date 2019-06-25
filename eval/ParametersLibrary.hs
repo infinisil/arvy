@@ -15,7 +15,7 @@ pWorstRequests = RequestsParameter
   } where
   get :: Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
   get _ weights tree = return $ worstRequest weights tree
-  
+
 
 pRandomRequests :: Member Random r => RequestsParameter r
 pRandomRequests = RequestsParameter
@@ -30,7 +30,7 @@ pInteractiveRequests = RequestsParameter
   { requestsName = "interactive"
   , requestsGet = \_ _ -> interactiveRequests
   }
-  
+
 pRingWeights :: WeightsParameter r
 pRingWeights = WeightsParameter "ring" (return . ringWeights)
 
@@ -41,11 +41,11 @@ pRing :: InitialTreeParameter r
 pRing = InitialTreeParameter "ring" (\n _ -> return (ringTree n))
 
 pSemiCircles :: InitialTreeParameter r
-pSemiCircles = InitialTreeParameter "semi circles" (\n w -> return (semiCircles n))
+pSemiCircles = InitialTreeParameter "semi circles" (\n _ -> return (semiCircles n))
 
 pBarabasiWeights :: Member (Lift IO) r => Int -> WeightsParameter r
 pBarabasiWeights m = WeightsParameter
   { weightsName = "barabasi albert"
-  , weightsGet = \n -> barabasiAlbert n m
+  , weightsGet = (`barabasiAlbert` m)
   }
-      
+

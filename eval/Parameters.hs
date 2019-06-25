@@ -10,14 +10,11 @@ import Arvy.Weights
 import Control.DeepSeq
 import Arvy.Algorithm
 import Data.Array hiding ((!))
-import Data.Array.Unboxed ((!))
 import Data.Array.IO
 import Arvy.Requests
 import Polysemy.Output
-import Data.Monoid
 import Polysemy.Trace
 import Data.Time (getCurrentTime)
-import Algebra.Graph.AdjacencyIntMap hiding (tree)
 import System.Random (mkStdGen)
 import Evaluation
 
