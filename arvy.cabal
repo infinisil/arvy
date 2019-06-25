@@ -20,11 +20,7 @@ library
                        Arvy.Weights
                        Arvy.Tree
                        Arvy.Algorithm
-                       Arvy.Algorithm.Arrow
-                       Arvy.Algorithm.Ivy
-                       Arvy.Algorithm.ConstantRing
-                       Arvy.Algorithm.Shortest
-                       Arvy.Algorithm.Half
+                       Arvy.Algorithm.Collection
                        Arvy.Requests
                        Arvy.Utils
   ghc-options:         -Wall -O3 -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin

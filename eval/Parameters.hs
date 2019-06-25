@@ -80,7 +80,7 @@ runParams seed params@Parameters
   trace $ "Running arvy.."
   runEval eval
     $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
-    $ runArvyLocal @IO @IOArray weights mutableTree algorithm
+    $ runArvyLocal @IO @IOArray nodeCount weights mutableTree algorithm
 
 timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
 timestampTraces = interpret \case
@@ -88,17 +88,17 @@ timestampTraces = interpret \case
     time <- sendM getCurrentTime
     trace $ "[" ++ show time ++ "] " ++ v
 
-measureRatio :: Member Trace r => GraphWeights -> GraphWeights -> Sem (Output ArvyEvent ': r) a -> Sem (Output ArvyEvent ': Output Double ': r) (Int, a)
-measureRatio weights shortestPaths = fmap (\((_, n), a) -> (n, a)) . runState (0.0 :: Double, 0) . reinterpret3 \case
-  Output event -> do
-    output event
-    case event of
-      RequestMade _ -> do
-        modify @(Double, Int) $ \(_, n) -> (0.0, n)
-      RequestTravel a b _ -> do
-        modify @(Double, Int) $ \(d, n) -> (d + weights ! (a, b), n)
-      RequestGranted (GottenFrom i src) -> do
-        (pathLength, _) <- get @(Double, Int)
-        modify @(Double, Int) $ \(d, n) -> (d, n + 1)
-        output $ pathLength / shortestPaths ! (i, src)
-      _ -> return ()
+--measureRatio :: Member Trace r => GraphWeights -> GraphWeights -> Sem (Output ArvyEvent ': r) a -> Sem (Output ArvyEvent ': Output Double ': r) (Int, a)
+--measureRatio weights shortestPaths = fmap (\((_, n), a) -> (n, a)) . runState (0.0 :: Double, 0) . reinterpret3 \case
+--  Output event -> do
+--    output event
+--    case event of
+--      RequestMade _ -> do
+--        modify @(Double, Int) $ \(_, n) -> (0.0, n)
+--      RequestTravel a b _ -> do
+--        modify @(Double, Int) $ \(d, n) -> (d + weights ! (a, b), n)
+--      RequestGranted (GottenFrom i src) -> do
+--        (pathLength, _) <- get @(Double, Int)
+--        modify @(Double, Int) $ \(d, n) -> (d, n + 1)
+--        output $ pathLength / shortestPaths ! (i, src)
+--      _ -> return ()

@@ -62,12 +62,9 @@ requests f = Eval
   { initialState = (0, mempty) :: (Int, a)
   , tracing = \event -> case event of
       RequestMade requestFrom -> put $ (requestFrom, mempty)
-      RequestGranted grant -> do
-        let requestRoot = case grant of
-              AlreadyHere root -> root
-              GottenFrom _ root -> root
+      RequestGranted _ root _ -> do
         (requestFrom, as) <- get
-        output $ Request requestFrom requestRoot as
+        output $ Request requestFrom root as
       RequestTravel x y _ -> modify $ second (f x y <>)
       _ -> return ()
   , final = return ()

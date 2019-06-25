@@ -2,11 +2,7 @@
 
 module Main where
 
-import           Arvy.Algorithm.Arrow
-import           Arvy.Algorithm.ConstantRing
-import           Arvy.Algorithm.Shortest
-import           Arvy.Algorithm.Half
-import           Arvy.Algorithm.Ivy
+import           Arvy.Algorithm.Collection
 
 import           Parameters
 import           ParametersLibrary
@@ -14,19 +10,16 @@ import           Polysemy
 import           Polysemy.Random
 import           Polysemy.Output
 import           Polysemy.Trace
-import Control.Category
-import Control.Monad
-import Data.Monoid
+import           Control.Category
+import           Control.Monad
 import qualified Debug.Trace as D
-import Control.Applicative
-import Arvy.Algorithm
-import Evaluation
-import System.IO
+import           Evaluation
+import           System.IO
 
 params :: Members '[Random, Lift IO] r => [Parameters r]
 params =
   [ Parameters
-    { nodeCount = 400
+    { nodeCount = 100
     , weights = pBarabasiWeights 1
     , initialTree = pMst
     , requestCount = 10000
