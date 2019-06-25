@@ -9,6 +9,7 @@ import           Data.Array.Unboxed
 import qualified Data.Heap          as H
 import qualified Data.Map           as M
 import           Data.Maybe
+import Data.Array.ST
 import qualified Data.Tree          as T
 import Polysemy
 import Control.Exception
@@ -21,23 +22,6 @@ type Tree = Array Int (Maybe Int)
 
 ringTree :: Int -> Array Int (Maybe Int)
 ringTree count = listArray (0, count - 1) (Nothing : fmap Just [0..])
-
-avgTreeStretch' :: Int -> GraphWeights -> Tree -> Double
-avgTreeStretch' n weights tree = sum stretches / (fromIntegral n * (fromIntegral n - 1) / 2)
-  where
-
-    stretches = [ stretch u v | u <- [0 .. n - 1], v <- [u + 1 .. n - 1] ]
-
-    stretch :: Int -> Int -> Double
-    stretch u v = treeDistances ! (u, v) / weights ! (u, v)
-
-    w = accumArray (flip const) infinity ((0, 0), (n - 1, n - 1))
-      (concat [ [ ((x, y), weight)
-                , ((y, x), weight) ]
-      | (x, Just y) <- assocs tree
-      , let weight = weights ! (x, y)
-      ])
-    treeDistances = shortestPathWeights' w
 
 avgTreeStretch :: Int -> GraphWeights -> Tree -> Double
 avgTreeStretch n weights tree = runST go where
@@ -95,7 +79,6 @@ treeStructure tree = T.unfoldTree predecessors root where
                       , M.insertWith (++) successor [i] rest')
     where (root', rest') = invert rest
 
-type Edge = (Int, Int)
 type MSTEntry = H.Entry Double Edge
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. /O(n^2)/.

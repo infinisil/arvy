@@ -31,10 +31,6 @@ data InitialTreeParameter r = InitialTreeParameter
   , initialTreeGet  :: Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
   }
 
-instance Show (InitialTreeParameter '[Random]) where
-  show (InitialTreeParameter { .. }) = "Initial tree: " ++ initialTreeName ++ ", on an 8-ring: "
-    ++ show (snd . run . runRandom (mkStdGen 0) $ initialTreeGet 8 (shortestPathWeights (symmetricClosure (circuit [0..7]))) )
-
 data RequestsParameter r = RequestsParameter
   { requestsName :: String
   , requestsGet  :: Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int

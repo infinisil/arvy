@@ -91,12 +91,8 @@ treeStretch n weights tree = Eval
         output $ avgTreeStretch n weights t
       _ -> return ()
   , final = do
-      start <- sendM getCurrentTime
       t <- sendM $ freeze tree
-      stretch <- sendM $ evaluate $  avgTreeStretch' n weights t
-      end <- sendM getCurrentTime
-      sendM $ print $ end `diffUTCTime` start
-      output stretch
+      output $ avgTreeStretch n weights t
   }
 
 everyNth :: Int -> Eval i i

@@ -6,6 +6,8 @@ import Data.Array.IArray
 import Polysemy
 import Polysemy.State
 import Data.Bifunctor
+import Algebra.Graph.Class
+import Data.Graph.Generators
 
 -- | Like 'fix' but over a functor structure. See https://github.com/quchen/articles/blob/master/loeb-moeb.md
 loeb :: Functor f => f (f a -> a) -> f a
@@ -49,3 +51,7 @@ mapStateSecond
   => Sem (State b ': r) x
   -> Sem r x
 mapStateSecond = mapState snd (flip $ second . const)
+
+-- | Convert a 'GraphInfo' from graph-generators to a 'Graph' from algebraic-graphs
+infoToGraph :: (Graph g, Vertex g ~ Int) => GraphInfo -> g
+infoToGraph (GraphInfo { Data.Graph.Generators.edges = e }) = Algebra.Graph.Class.edges e

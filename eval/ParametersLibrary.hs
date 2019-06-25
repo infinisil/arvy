@@ -8,13 +8,6 @@ import Polysemy
 import Polysemy.Random
 import Data.Array
 
-
-pRandomWeights :: Member Random r => WeightsParameter r
-pRandomWeights = WeightsParameter
-  { weightsName = "random"
-  , weightsGet = randomWeights
-  }
-
 pWorstRequests :: RequestsParameter r
 pWorstRequests = RequestsParameter
   { requestsName = "worst"
@@ -49,14 +42,6 @@ pRing = InitialTreeParameter "ring" (\n _ -> return (ringTree n))
 
 pSemiCircles :: InitialTreeParameter r
 pSemiCircles = InitialTreeParameter "semi circles" (\n w -> return (semiCircles n))
-
-pRandom2DWeights :: Member Random r => WeightsParameter r
-pRandom2DWeights = WeightsParameter
-  { weightsName = "random 2D"
-  , weightsGet = \n -> do
-      points <- randomPoints n
-      return $ euclidianWeights points
-  }
 
 pBarabasiWeights :: Member (Lift IO) r => Int -> WeightsParameter r
 pBarabasiWeights m = WeightsParameter
