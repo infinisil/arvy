@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+
 module Main where
 
 import           Arvy.Algorithm.Arrow
@@ -18,23 +20,37 @@ import qualified Debug.Trace as D
 import Control.Applicative
 import Arvy.Algorithm
 import Evaluation
+import System.IO
 
 testParams :: Members '[Random, Lift IO] r => Parameters r
 testParams = Parameters
   { nodeCount = 100
   , weights = pRandom2DWeights
   , initialTree = pRing
-  , requestCount = 10000
+  , requestCount = 100000
   , requests = pRandomRequests
-  , algorithm = ivy
+  , algorithm = half
   }
 
 main :: IO ()
 main = runM
   $ runTraceIO
-  $ runOutputAsTrace
+  $ runOutputToFile "eval-output"
+  $ mapOutput show
   $ runParams 0 testParams
-  $ \n w -> everyNth 100 >>> treeStretch n w
+  $ \n w -> everyNth 10 >>> treeStretch n w
+
+mapOutput :: Member (Output y) r => (x -> y) -> Sem (Output x ': r) a -> Sem r a
+mapOutput f = interpret \case Output x -> output $ f x
+
+runOutputToFile :: Member (Lift IO) r => FilePath -> Sem (Output String ': r) a -> Sem r a
+runOutputToFile file sem = do
+  handle <- sendM $ openFile file WriteMode
+  res <- interpret
+    \case Output str -> sendM $ hPutStrLn handle str
+    sem
+  sendM $ hClose handle
+  return res
 
 trace' :: Show b => Eval a b -> Eval a b
 trace' = fmap $ \v -> D.trace (show v) v

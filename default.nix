@@ -52,7 +52,10 @@ let
   pkg = hpkgs.arvy;
 
   env = pkg.env.overrideAttrs (old: {
-    nativeBuildInputs = old.nativeBuildInputs or [] ++ [ pkgs.haskellPackages.cabal-install ];
+    nativeBuildInputs = old.nativeBuildInputs or [] ++ [
+      pkgs.haskellPackages.cabal-install
+      pkgs.gnuplot
+    ];
   });
 
 in pkg // { inherit env; }
