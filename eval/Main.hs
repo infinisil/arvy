@@ -20,7 +20,7 @@ params :: Members '[Random, Lift IO] r => [Parameters r]
 params =
   [ Parameters
     { nodeCount = 500
-    , weights = pBarabasiWeights 1
+    , weights = pErdosRenyi
     , initialTree = pMst
     , requestCount = 10000
     , requests = pRandomRequests

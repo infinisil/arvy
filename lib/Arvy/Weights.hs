@@ -99,16 +99,15 @@ barabasiAlbert n m = do
 erdosRenyi
   :: Member (Lift IO) r
   => NodeCount -- ^ The number of total nodes
+  -> Double -- ^ The probability of an edge being connected
   -> Sem r GraphWeights
-erdosRenyi n = do
-  -- According to Erdos and Renyi, a graph is very likely to be connected with p > (1 + e) ln n / n
-  let p = log (fromIntegral n) / fromIntegral n
+erdosRenyi n p = do
   graphInfo <- sendM $ erdosRenyiGraph' n p
-  let graph = vertices [0 .. n - 1] `overlay` (symmetricClosure $ infoToGraph graphInfo)
-  sendM $ print graph
+  -- Overlaying with every single vertex to make sure all of them are present
+  let graph = symmetricClosure $ infoToGraph graphInfo
   if isConnected (toGraph graph)
     then return $ shortestPathWeights n graph
-    else erdosRenyi n
+    else erdosRenyi n p
 
 -- | Ring weights
 ringWeights :: NodeCount -> GraphWeights

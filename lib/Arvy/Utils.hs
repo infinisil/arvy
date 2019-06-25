@@ -7,7 +7,7 @@ import Polysemy
 import Polysemy.State
 import Data.Bifunctor
 import Algebra.Graph.Class
-import Data.Graph.Generators
+import Data.Graph.Generators hiding (edges)
 
 import qualified Algebra.Graph as G
 import qualified Data.Set as Set
@@ -62,7 +62,7 @@ mapStateSecond = mapState snd (flip $ second . const)
 
 -- | Convert a 'GraphInfo' from graph-generators to a 'Graph' from algebraic-graphs
 infoToGraph :: (Graph g, Vertex g ~ Int) => GraphInfo -> g
-infoToGraph (GraphInfo { Data.Graph.Generators.edges = e }) = Algebra.Graph.Class.edges e
+infoToGraph (GraphInfo n e) = vertices [0 .. n - 1] `overlay` edges e
 
 
 -- isConnected implementation taken from https://github.com/snowleopard/alga/pull/216
