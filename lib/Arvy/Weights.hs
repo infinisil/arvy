@@ -36,6 +36,7 @@ runLocalWeights :: GraphWeights -> Node -> Sem (LocalWeights ': r) a -> Sem r a
 runLocalWeights weights src = interpret $ \case
   WeightTo dst -> return $ weights ! (src, dst)
 
+{-# INLINE floydWarshall #-}
 -- TODO: Split a lot of these things out of this Arvy module into the arvy-eval component
 -- | Does the main operation in the floyd-warshall algorithm. Computes the shortest path between all nodes by iteratively modifying given weights. Complexity /O(n^3)/
 floydWarshall :: MArray arr Weight m => NodeCount -> GraphWeightsArr arr -> m ()
