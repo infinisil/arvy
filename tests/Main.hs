@@ -91,9 +91,6 @@ main = hspec $ do
     it "is greater or equal to 1 for 100 random samples" $
       runM (fmap snd $ runRandom (mkStdGen 0) $ replicateM 100 randomStretch) `shouldSatisfyReturn` all (>= 1)
 
-
-  testWithFrozen
-
 randomStretch :: Member Random r => Sem r Double
 randomStretch = do
   n <- randomR (1, 100)
@@ -107,52 +104,4 @@ shouldSatisfyReturn action expected = action >>= (`shouldSatisfy` expected)
 
 shouldBeAbout :: (HasCallStack, Show a, Ord a, Fractional a) => a -> a -> Expectation
 shouldBeAbout v e = v `shouldSatisfy` (< 0.000001) . abs . subtract e
-
-testWithFrozen :: Spec
-testWithFrozen = describe "Arvy.Utils.withFrozen" $ do
-  it "doesn't evaluate results lazily" $
-    testWhnfIO `shouldReturn` 0
-
-  it "fully evaluates results to normal form" $
-    testNfIO `shouldReturn` [0]
-
-  it "works with strict ST" $
-    runST testST `shouldBe` [0]
-
-  it "works with output effects" $
-    runM (runTraceIO $ runFoldMapOutput @Int (:[]) testOutput) `shouldReturn` ([0], ())
-
-  where
-
-    testWhnfIO :: IO Int
-    testWhnfIO = runM $ do
-      arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
-      res <- withFrozen @IO @Array arr $ \a ->
-        return $ a ! 0
-      sendM @IO $ writeArray arr 0 1
-      return res
-
-
-    testNfIO :: IO [Int]
-    testNfIO = runM $ do
-      arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
-      res <- withFrozen @IO @Array arr $ \a ->
-        return [a ! 0]
-      sendM @IO $ writeArray arr 0 1
-      return res
-
-    testST :: forall s . ST s [Int]
-    testST = runM $ do
-      arr <- sendM (newArray (0, 0) 0 :: ST s (STArray s Int Int))
-      res <- withFrozen @(ST s) @Array arr $ \a ->
-        return [a ! 0]
-      sendM @(ST s) $ writeArray arr 0 1
-      return res
-
-    testOutput :: Members '[Output Int, Lift IO] r => Sem r ()
-    testOutput = do
-      arr <- sendM (newArray (0, 0) 0 :: IO (IOArray Int Int))
-      withFrozen @IO @Array arr $ \a ->
-        output (a ! 0)
-      sendM @IO $ writeArray arr 0 1
 

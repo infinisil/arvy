@@ -43,7 +43,7 @@ worstRequest weights tree = fst $ maximumBy (comparing snd) (assocs (lengthsToRo
 lengthsToRoot :: (Num n, IArray arr n) => arr (Int, Int) n -> Array Int (Maybe Int) -> Array Int n
 lengthsToRoot weights tree = loeb fs
   where
-    fs = amap' (\i v -> \others -> maybe 0 (\o -> others ! o + weights ! (i, o)) v)
+    fs = aimap (\i v -> \others -> maybe 0 (\o -> others ! o + weights ! (i, o)) v)
                 tree
 
 -- TODO: Use haskeline, add haskeline effect to polysemy
