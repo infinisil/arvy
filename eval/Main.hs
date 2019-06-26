@@ -4,12 +4,14 @@ module Main where
 
 import           Arvy.Algorithm.Collection
 
+import Prelude hiding ((.))
 import           Parameters
 import           ParametersLibrary
 import           Polysemy
 import           Polysemy.Random
 import           Polysemy.Output
 import           Polysemy.Trace
+import           Polysemy.State
 import           Control.Category
 import           Control.Monad
 import qualified Debug.Trace as D
@@ -19,7 +21,7 @@ import           System.IO
 params :: Members '[Random, Lift IO] r => [Parameters r]
 params =
   [ Parameters
-    { nodeCount = 500
+    { nodeCount = 200
     , weights = pErdosRenyi
     , initialTree = pMst
     , requestCount = 10000
@@ -31,9 +33,19 @@ params =
 main :: IO ()
 main = forM_ params $ \par -> runM
   $ runTraceIO
-  $ runOutputAsTrace
+  $ runOutputToFile "values"
+  $ mapOutput (\(v, a) -> show v ++ " " ++ show a)
+  $ movingAverage 10
   $ runParams 0 par
-  $ \n w t -> everyNth 100 >>> treeStretch n w t
+  $ \n w t -> everyNth 1 >>> treeStretch n w t
+
+movingAverage :: Member (Output (Double, Double)) r => Int -> Sem (Output Double ': r) a -> Sem r a
+movingAverage c = fmap snd . runState @[Double] [] . reinterpret \case
+  Output o -> do
+    all <- gets (take c . (o:))
+    let avg = sum all / fromIntegral (length all)
+    put all
+    output (o, avg)
 
 mapOutput :: Member (Output y) r => (x -> y) -> Sem (Output x ': r) a -> Sem r a
 mapOutput f = interpret \case Output x -> output $ f x
