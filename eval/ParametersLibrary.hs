@@ -45,13 +45,13 @@ pSemiCircles = InitialTreeParameter "semi circles" (\n _ -> return (semiCircles 
 
 pBarabasiWeights :: Member (Lift IO) r => Int -> WeightsParameter r
 pBarabasiWeights m = WeightsParameter
-  { weightsName = "barabasi albert"
+  { weightsName = "Barabasi Albert"
   , weightsGet = (`barabasiAlbert` m)
   }
   
 pErdosRenyi :: Member (Lift IO) r => WeightsParameter r
 pErdosRenyi = WeightsParameter
-  { weightsName = "barabasi albert"
+  { weightsName = "Erdos Renyi"
   , weightsGet = \n -> do
       -- According to Erdos and Renyi, a graph is very likely to be connected with p > (1 + e) ln n / n
       let p = log (fromIntegral n) / fromIntegral n

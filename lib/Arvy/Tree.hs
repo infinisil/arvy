@@ -2,16 +2,16 @@
 
 module Arvy.Tree where
 
-import           Arvy.Utils
 import           Arvy.Weights
 import           Data.Array.Unboxed
 import qualified Data.Heap          as H
+import           Data.IntMap        (IntMap)
+import qualified Data.IntMap        as IntMap
+import           Data.IntSet        (IntSet)
+import qualified Data.IntSet        as IntSet
 import qualified Data.Map           as M
 import           Data.Maybe
-import           Data.Array.ST
 import qualified Data.Tree          as T
-import           Control.Monad.ST
-import           Control.Monad
 
 -- TODO: Could be a lot faster with an UArray Node Node where a node pointing to itself represents a root node
 -- | A rooted spanning tree, an array of nodes where each node either points to a successor signified with 'Just' or is the root node, signified with 'Nothing'
@@ -21,35 +21,29 @@ type RootedTree = Array Node (Maybe Node)
 ringTree :: NodeCount -> RootedTree
 ringTree n = listArray (0, n - 1) (Nothing : fmap Just [0..])
 
--- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v.
+-- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretch :: NodeCount -> GraphWeights -> RootedTree -> Double
-avgTreeStretch n weights tree = runST go where
-  go :: forall s . ST s Double
-  go = do
-    -- Create a new weight array that doesn't know any paths between any nodes
-    treePaths :: GraphWeightsArr (STUArray s) <- newArray ((0, 0), (n - 1, n - 1)) infinity
+avgTreeStretch n weights tree = sum [ summedTreeStretch root | root <- [0 .. n - 1] ] / fromIntegral (n * (n - 1)) where
 
-    -- Insert all tree edges into the weights
-    forM_ [0 .. n - 1] $ \src ->
-      case tree ! src of
-        Nothing -> return ()
-        Just dst -> do
-          let weight = weights ! (src, dst)
-          writeArray treePaths (src, dst) weight
-          writeArray treePaths (dst, src) weight
+  -- | Converts the rooted tree into an adjacency map graph, represented as a @'IntMap' 'IntSet'@, which is a faster version of @Map Int (Set Int)@, meaning a map from every node to a set of nodes it's adjacent to. This function sets up bidirectional edges. Complexity /O(n)/
+  graph :: IntMap IntSet
+  graph = IntMap.unionsWith IntSet.union
+    $ map bidirEdge
+    $ assocs tree
+    where
+      bidirEdge :: (Node, Maybe Node) -> IntMap IntSet
+      bidirEdge (_, Nothing) = IntMap.empty
+      bidirEdge (a, Just b) = IntMap.singleton a (IntSet.singleton b) `IntMap.union` IntMap.singleton b (IntSet.singleton a)
 
-    -- Run floyd-warshall on it to find shortest paths between all nodes
-    floydWarshall n treePaths
-
-    -- Sum up the ratio of the path length in the tree over the path length in the complete graph for all nodes u, v with u < v
-    summed <- sum <$> forM
-      [ (u, v) | u <- [0 .. n - 1], v <- [u + 1 .. n - 1] ]
-      \nodePair -> do
-        treePath <- readArray treePaths nodePair
-        return $ treePath / weights ! nodePair
-
-    -- Divide by the number of nodes we summed up, which is `n * (n-1) / 2` when you do the math
-    return $ summed / fromIntegral (n * (n - 1) `div` 2)
+  -- | Sums up all tree stretches from the given 'Node' to all others. Complexity /O(n)/
+  summedTreeStretch :: Node -> Double
+  summedTreeStretch root = go root (IntMap.findWithDefault undefined root graph) 0 where
+    go :: Node -> IntSet -> Double -> Double
+    go parent children baseWeight = summed where
+      summed = IntSet.foldl' onChildren (if root == parent then baseWeight else baseWeight / weights ! (root, parent)) children
+      onChildren acc child = acc + go child superchildren (baseWeight + weight) where
+        weight = weights ! (parent, child)
+        superchildren = IntSet.delete parent $ IntMap.findWithDefault undefined child graph
 
 -- | Converts a rooted spanning tree in the form of a pointer array to a 'T.Tree' value, useful for processing or display with 'T.drawTree'.
 -- Throws an error when there's multiple or no roots. Does *not* throw an error when some nodes don't transitively point to the root, instead those nodes are just not included in the final tree structure.
