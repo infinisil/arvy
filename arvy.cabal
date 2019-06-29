@@ -23,6 +23,7 @@ library
                        Arvy.Algorithm.Collection
                        Arvy.Requests
                        Arvy.Utils
+                       Arvy.Utils.UnionFind
   ghc-options:         -Wall -O3 -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
   build-depends:       base ^>=4.12.0.0
                      , polysemy
