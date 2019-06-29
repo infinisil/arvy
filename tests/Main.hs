@@ -13,13 +13,7 @@ import           Control.DeepSeq
 import           Control.Exception
 import           Data.Array.Unboxed
 import qualified Data.Tree          as T
-import           Polysemy
-import           Polysemy.Random
-import           System.Random      (mkStdGen)
 import           Test.Hspec
-
-withSeed :: Int -> Sem '[Random] a -> a
-withSeed seed = snd . run . runRandom (mkStdGen seed)
 
 main :: IO ()
 main = hspec $ do

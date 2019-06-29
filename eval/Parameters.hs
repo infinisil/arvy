@@ -5,11 +5,13 @@
 module Parameters where
 
 import Polysemy
-import Polysemy.Random
+import Polysemy.RandomFu
 import Arvy.Weights
 import Control.DeepSeq
 import Arvy.Algorithm
 import Data.Array hiding ((!))
+import qualified Data.Vector as V
+import GHC.Word
 import Data.Array.IO
 import Arvy.Requests
 import Polysemy.Output
@@ -17,6 +19,8 @@ import Polysemy.Trace
 import Data.Time (getCurrentTime)
 import System.Random (mkStdGen)
 import Evaluation
+import System.Random.MWC
+import Data.Random.Source.MWC
 
 data WeightsParameter r = WeightsParameter
   { weightsName :: String
@@ -51,7 +55,7 @@ instance Show (Parameters r) where
     "\tRequests: " ++ requestsName requests ++ "\n" ++
     "\tAlgorithm: " ++ "TODO\n"
 
-runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Int -> Parameters (Random ': r) -> (Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent res) -> Sem r ()
+runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Word32 -> Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent res) -> Sem r ()
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }
@@ -59,25 +63,27 @@ runParams seed params@Parameters
   , requestCount
   , requests = RequestsParameter { requestsGet }
   , algorithm = algorithm
-  } evaluation = fmap snd . runRandom (mkStdGen seed) $ do
-  trace $ "Random seed: " ++ show seed
-  trace $ show params
+  } evaluation = do
+  gen <- sendM $ initialize (V.singleton seed)
+  runRandomSource' gen $ do
+    trace $ "Random seed: " ++ show seed
+    trace $ show params
 
-  -- TODO: Cache (and paralellize) these computations to make this faster
+    -- TODO: Cache (and paralellize) these computations to make this faster
 
-  trace $ "Generating weights.."
-  !weights <- weightsGet nodeCount
-  
-  trace $ "Generating initial tree.."
-  !tree <- initialTreeGet nodeCount weights
-  mutableTree <- sendM (thaw tree :: IO (IOArray Int (Maybe Int)))
+    trace $ "Generating weights.."
+    !weights <- weightsGet nodeCount
 
-  let eval = evaluation nodeCount weights mutableTree
+    trace $ "Generating initial tree.."
+    !tree <- initialTreeGet nodeCount weights
+    mutableTree <- sendM (thaw tree :: IO (IOArray Int (Maybe Int)))
 
-  trace $ "Running arvy.."
-  runEval eval
-    $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
-    $ runArvyLocal @IO @IOArray nodeCount weights mutableTree algorithm
+    let eval = evaluation nodeCount weights mutableTree
+
+    trace $ "Running arvy.."
+    runEval eval
+      $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
+      $ runArvyLocal @IO @IOArray nodeCount weights mutableTree algorithm
 
 timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
 timestampTraces = interpret \case

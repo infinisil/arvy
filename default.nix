@@ -29,9 +29,9 @@ let
 
       arvy = super.callCabal2nix "arvy" src {};
 
-      polysemy = (super.callCabal2nixWithOptions "polysemy" polysemySrc "--no-hpack" {
-        th-abstraction = self.th-abstraction_0_3_1_0;
-      }).overrideAttrs (old: {
+      th-abstraction = super.th-abstraction_0_3_1_0;
+
+      polysemy = (super.callCabal2nixWithOptions "polysemy" polysemySrc "--no-hpack" {}).overrideAttrs (old: {
         configureFlags = [ "-f -error-messages" ];
       });
 
@@ -42,9 +42,15 @@ let
       polysemy-zoo = super.callCabal2nixWithOptions "polysemy-zoo" (pkgs.fetchFromGitHub {
         owner = "isovector";
         repo = "polysemy-zoo";
-        rev = "488c961945b9bbd64806199e5fe991f57f7e83ac";
-        sha256 = "0q7n5h0sn8bm931pmlml6d6z7r7kyi238b6rhvkm81fq28zxhaya";
+        rev = "152401ba522b3182f35121100dc56ea25fea1bc3";
+        sha256 = "01jifzd182212hdb075196y76sqk69rczhxwdi21j2p7ycwq7fxp";
       }) "--no-hpack" {};
+
+      polysemy-RandomFu = hlib.doJailbreak (super.callHackageDirect {
+        pkg = "polysemy-RandomFu";
+        ver = "0.2.0.0";
+        sha256 = "0yax8mzcw0gvy54fxzh433rw6dzc19j4wv3gdn83fm8jlrx8jqjn";
+      } {});
 
     });
   });

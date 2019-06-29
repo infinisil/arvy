@@ -7,7 +7,7 @@ import           Arvy.Algorithm.Collection
 import           Parameters
 import           ParametersLibrary
 import           Polysemy
-import           Polysemy.Random
+import           Polysemy.RandomFu
 import           Polysemy.Output
 import           Polysemy.Trace
 import           Control.Category
@@ -15,8 +15,9 @@ import           Control.Monad
 import qualified Debug.Trace as D
 import           Evaluation
 import           System.IO
+import System.Random.MWC
 
-params :: Members '[Random, Lift IO] r => [Parameters r]
+params :: Members '[RandomFu, Lift IO] r => [Parameters r]
 params =
   [ Parameters
     { nodeCount = 500

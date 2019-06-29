@@ -37,6 +37,11 @@ library
                      , template-haskell
                      , deepseq
                      , graph-generators
+                     , polysemy-RandomFu
+                     , multiset
+                     , random-fu
+                     , random-source
+                     , primitive
   default-extensions:  DataKinds
                      , FlexibleContexts
                      , GADTs
@@ -91,6 +96,10 @@ executable arvy-eval
                      , time
                      , random
                      , deepseq
+                     , polysemy-RandomFu
+                     , mwc-random
+                     , random-source
+                     , vector
   default-language:    Haskell2010
   default-extensions:  DataKinds
                      , FlexibleContexts

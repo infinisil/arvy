@@ -9,10 +9,11 @@ import           Data.Foldable     (maximumBy)
 import           Data.Ord          (comparing)
 import           Polysemy
 import           Polysemy.Input
-import           Polysemy.Random
+import           Polysemy.RandomFu
 import           Polysemy.State
 import qualified Data.Tree as T
 import Arvy.Tree
+import Data.Random.Distribution.Uniform
 
 runRequests
   :: forall m r arr a
@@ -32,8 +33,8 @@ runRequests tree getRequest requestCount =
         immutableTree <- sendM $ freeze tree
         Just <$> raise (getRequest immutableTree)
 
-randomRequest :: Member Random r => Int -> Sem r Int
-randomRequest n = randomR (0, n - 1)
+randomRequest :: Member RandomFu r => Int -> Sem r Int
+randomRequest n = sampleRVar (integralUniform 0 (n - 1))
 
 -- | Computes the worst possible node to make a request by choosing the node that has the longest path to the root
 worstRequest :: GraphWeights -> Array Int (Maybe Int) -> Int
