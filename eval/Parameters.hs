@@ -8,21 +8,19 @@ module Parameters where
 
 import Polysemy
 import Polysemy.RandomFu
-import Arvy.Weights
+import Arvy.Local
 import Control.DeepSeq
 import Arvy.Algorithm
 import Data.Array hiding ((!))
 import qualified Data.Vector as V
 import GHC.Word
 import Data.Array.IO
-import Arvy.Requests
 import Polysemy.Output
 import Polysemy.Trace
 import Data.Time (getCurrentTime)
-import System.Random (mkStdGen)
 import Evaluation
 import System.Random.MWC
-import Data.Random.Source.MWC
+import Utils
 
 data WeightsParameter r = WeightsParameter
   { weightsName :: String

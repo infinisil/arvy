@@ -1,12 +1,12 @@
 module ParametersLibrary where
 
-import           Arvy.Requests
-import           Arvy.Weights
-import Arvy.Tree
-import           Parameters
+import Arvy.Local
+import Parameters
 import Polysemy
 import Polysemy.RandomFu
 import Data.Array
+import Parameters.Tree
+import Parameters.Requests
 
 pWorstRequests :: RequestsParameter r
 pWorstRequests = RequestsParameter

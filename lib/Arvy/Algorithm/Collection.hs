@@ -3,7 +3,6 @@ module Arvy.Algorithm.Collection
   ) where
 
 import Arvy.Algorithm
-import Arvy.Weights
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
@@ -57,7 +56,7 @@ data RingNodeState
 
 -- TODO: Redesign parameters such that Arvy algorithms can specify an initial tree
 -- | An Arvy algorithm that runs in constant competitive ratio on ring graphs. It works by splitting the ring into two semi-circles, connected by a bridge. The semi-circles are always kept intact, but whenever the bridge is traversed, the root node is selected as the new bridge end, while the previous bridge end becomes the new bridge start.
-constantRing :: Node -> Arvy r
+constantRing :: Int -> Arvy r
 constantRing firstBridge = arvy @RingMessage @RingNodeState ArvyInst
   { arvyNodeInit = \i -> return $
     if indexValue i == firstBridge

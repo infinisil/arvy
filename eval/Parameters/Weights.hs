@@ -2,7 +2,8 @@
 
 module Parameters.Weights where
 
-import Arvy.Weights
+import Arvy.Local
+import Arvy.Algorithm
 import Parameters
 
 import Polysemy
@@ -19,7 +20,6 @@ import Data.Random.Distribution.Uniform
 import Data.Array.MArray
 import Data.Array.Base
 import Data.Array.ST
-import Utils.Connected
 import Utils
 
 {-# INLINE floydWarshall #-}

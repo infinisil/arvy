@@ -12,19 +12,13 @@ module Evaluation where
 
 import Prelude hiding ((.), id)
 import Polysemy
-import Control.Exception
 import Control.Category
-import Data.Time
 import Data.Bifunctor
 import Polysemy.Output
 import GHC.Generics
-import Arvy.Weights
 import Data.Monoid
-import Data.Array.MArray
-import Data.Array.IO
-import Arvy.Utils
 import Arvy.Algorithm
-import Arvy.Tree
+import Arvy.Local
 import Control.DeepSeq
 import Utils
 
@@ -81,22 +75,6 @@ data Request a = Request
 requestHops :: Eval ArvyEvent (Request (Sum Int))
 requestHops = requests (\_ _ -> Sum 1)
 
-treeStretch :: Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent Double
-treeStretch n weights tree = Eval
-  { initialState = ()
-  , tracing = \event -> case event of
-      RequestMade _ -> do
-        t <- sendM $ freeze tree
-        start <- sendM getCurrentTime
-        stretch <- sendM $ evaluate $ avgTreeStretch n weights t
-        end <- sendM getCurrentTime
-        sendM $ print $ end `diffUTCTime` start
-        output stretch
-      _ -> return ()
-  , final = do
-      t <- sendM $ freeze tree
-      output $ avgTreeStretch n weights t
-  }
 
 everyNth :: Int -> Eval i i
 everyNth n = Eval

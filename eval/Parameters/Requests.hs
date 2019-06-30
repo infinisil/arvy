@@ -1,37 +1,15 @@
-{-# LANGUAGE BlockArguments      #-}
-module Arvy.Requests where
+module Parameters.Requests where
 
-import           Arvy.Utils
-import           Arvy.Weights
-import           Data.Array.IArray
-import           Data.Array.MArray
-import           Data.Foldable     (maximumBy)
-import           Data.Ord          (comparing)
-import           Polysemy
-import           Polysemy.Input
-import           Polysemy.RandomFu
-import           Polysemy.State
 import qualified Data.Tree as T
-import Arvy.Tree
+import Polysemy
+import Data.Array.IArray
+import Polysemy.RandomFu
+import Arvy.Local
+import Utils
+import Data.Ord
+import Data.List
 import Data.Random.Distribution.Uniform
 
-runRequests
-  :: forall m r arr a
-  . ( Member (Lift m) r
-    , MArray arr (Maybe Int) m )
-  => arr Int (Maybe Int)
-  -> (Array Int (Maybe Int) -> Sem r Int)
-  -> Int
-  -> Sem (Input (Maybe Int) ': r) a
-  -> Sem r a
-runRequests tree getRequest requestCount =
-  fmap snd . runState requestCount . reinterpret \case
-    Input -> get >>= \case
-      0 -> return Nothing
-      k -> do
-        put (k - 1)
-        immutableTree <- sendM $ freeze tree
-        Just <$> raise (getRequest immutableTree)
 
 randomRequest :: Member RandomFu r => Int -> Sem r Int
 randomRequest n = sampleRVar (integralUniform 0 (n - 1))

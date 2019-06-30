@@ -17,6 +17,7 @@ import qualified Debug.Trace as D
 import           Evaluation
 import           System.IO
 import qualified Parameters.Weights as Weights
+import           Evaluation.Tree
 
 params :: Members '[RandomFu, Lift IO] r => [Parameters r]
 params =
