@@ -13,29 +13,32 @@ import           Control.DeepSeq
 import           Control.Exception
 import           Data.Array.Unboxed
 import qualified Data.Tree          as T
+import           Parameters
+import qualified Parameters.Weights as Weights
 import           Test.Hspec
+import           Utils
 
 main :: IO ()
 main = hspec $ do
   describe "Arvy.Weights.shortestPathWeights" $ do
     it "calculates the transitive shortest paths" $
-      shortestPathWeights 3 (0 * 1 + 1 * 2) ! (0, 2) `shouldBe` 2
+      Weights.shortestPathWeights 3 (0 * 1 + 1 * 2) ! (0, 2) `shouldBe` 2
 
     it "returns infinity for paths that don't exist" $
-      shortestPathWeights 2 (0 + 1) ! (0, 1) `shouldBe` infinity
+      Weights.shortestPathWeights 2 (0 + 1) ! (0, 1) `shouldBe` infinity
 
     it "finds the shorter path of multiple" $
-      shortestPathWeights 5 (0 * 1 + 1 * 2 + 2 * 3 + 0 * 4 + 4 * 3) ! (0, 3)
+      Weights.shortestPathWeights 5 (0 * 1 + 1 * 2 + 2 * 3 + 0 * 4 + 4 * 3) ! (0, 3)
         `shouldBe` 2
 
     it "throws an error for vertices holes" $
-      evaluate (shortestPathWeights 2 (0 * 2)) `shouldThrow` anyErrorCall
+      evaluate (Weights.shortestPathWeights 2 (0 * 2)) `shouldThrow` anyErrorCall
 
     it "assigns 0 to paths from nodes to themselves" $
-      shortestPathWeights 1 0 ! (0, 0) `shouldBe` 0
+      Weights.shortestPathWeights 1 0 ! (0, 0) `shouldBe` 0
 
     it "correctly assigns weights to a 4-node ring" $
-      ringWeights 4 `shouldBe` listArray ((0, 0), (3, 3))
+      Weights.ring 4 `shouldBe` listArray ((0, 0), (3, 3))
         [ 0, 1, 2, 1
         , 1, 0, 1, 2
         , 2, 1, 0, 1
@@ -70,10 +73,10 @@ main = hspec $ do
 
   describe "Arvy.Tree.avgTreeStretch" $ do
     it "works on a 3-node ring tree and graph" $
-      avgTreeStretch 3 (ringWeights 3) (ringTree 3) `shouldBeAbout` (1 + 1 / 3)
+      avgTreeStretch 3 (Weights.ring 3) (ringTree 3) `shouldBeAbout` (1 + 1 / 3)
 
     it "works on a 5-node ring tree and graph" $
-      avgTreeStretch 5 (ringWeights 5) (ringTree 5) `shouldBeAbout` 1.4
+      avgTreeStretch 5 (Weights.ring 5) (ringTree 5) `shouldBeAbout` 1.4
 
 shouldSatisfyReturn :: (HasCallStack, Show a, Eq a) => IO a -> (a -> Bool) -> Expectation
 shouldSatisfyReturn action expected = action >>= (`shouldSatisfy` expected)

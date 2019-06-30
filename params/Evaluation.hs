@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -25,6 +26,7 @@ import Arvy.Utils
 import Arvy.Algorithm
 import Arvy.Tree
 import Control.DeepSeq
+import Utils
 
 
 -- | An evaluation that takes an input i and computes some outputs o
@@ -85,7 +87,11 @@ treeStretch n weights tree = Eval
   , tracing = \event -> case event of
       RequestMade _ -> do
         t <- sendM $ freeze tree
-        output $ avgTreeStretch n weights t
+        start <- sendM getCurrentTime
+        stretch <- sendM $ evaluate $ avgTreeStretch n weights t
+        end <- sendM getCurrentTime
+        sendM $ print $ end `diffUTCTime` start
+        output stretch
       _ -> return ()
   , final = do
       t <- sendM $ freeze tree

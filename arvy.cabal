@@ -23,7 +23,7 @@ library
                        Arvy.Algorithm.Collection
                        Arvy.Requests
                        Arvy.Utils
-  ghc-options:         -Wall -O3 -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
+  ghc-options:         -Wall -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
   build-depends:       base ^>=4.12.0.0
                      , polysemy
                      , polysemy-plugin
@@ -62,31 +62,50 @@ library
   default-language:    Haskell2010
 
 
-test-suite arvy-tests
-  type:                exitcode-stdio-1.0
-  main-is:             Main.hs
-  hs-source-dirs:      tests
-  ghc-options:         -Wall
+library arvy-parameters
+  exposed-modules:     Parameters
+                     , Parameters.Weights
+                     , Evaluation
+                     , Utils
+                     , ParametersLibrary
+
+  ghc-options:         -Wall -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
   build-depends:       base ^>=4.12.0.0
                      , arvy
-                     , hspec
-                     , array
                      , polysemy
-                     , polysemy-zoo
+                     , polysemy-plugin
+                     , polysemy-RandomFu
+                     , random-fu
+                     , mwc-random
+                     , random-source
                      , random
-                     , containers
                      , deepseq
+                     , array
+                     , time
+                     , vector
+                     , algebraic-graphs
+                     , containers
+                     , multiset
+  hs-source-dirs:      params
   default-language:    Haskell2010
-
+  default-extensions:  TypeApplications
+                     , LambdaCase
+                     , BlockArguments
+                     , TypeOperators
+                     , DataKinds
+                     , FlexibleContexts
+                     , GADTs
+                     , RecordWildCards
+                     , RankNTypes
+                     , NamedFieldPuns
+                     , ScopedTypeVariables
   
 executable arvy-eval
   hs-source-dirs:      eval
-  other-modules:       Parameters
-                     , ParametersLibrary
-                     , Evaluation
   main-is:             Main.hs
   ghc-options:         -Wall -fplugin=Polysemy.Plugin
   build-depends:       base ^>=4.12.0.0
+                     , arvy-parameters
                      , arvy
                      , array
                      , polysemy
@@ -100,6 +119,9 @@ executable arvy-eval
                      , mwc-random
                      , random-source
                      , vector
+                     , containers
+                     , multiset
+                     , random-fu
   default-language:    Haskell2010
   default-extensions:  DataKinds
                      , FlexibleContexts
@@ -117,3 +139,20 @@ executable arvy-eval
                      , RecordWildCards
                      , NamedFieldPuns
                      , TupleSections
+
+test-suite arvy-tests
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  hs-source-dirs:      tests
+  ghc-options:         -Wall
+  build-depends:       base ^>=4.12.0.0
+                     , arvy
+                     , arvy-parameters
+                     , hspec
+                     , array
+                     , polysemy
+                     , polysemy-zoo
+                     , random
+                     , containers
+                     , deepseq
+  default-language:    Haskell2010

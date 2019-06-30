@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE OverloadedLists #-}
 
 module Main where
 
@@ -15,13 +16,13 @@ import           Control.Monad
 import qualified Debug.Trace as D
 import           Evaluation
 import           System.IO
-import System.Random.MWC
+import qualified Parameters.Weights as Weights
 
 params :: Members '[RandomFu, Lift IO] r => [Parameters r]
 params =
   [ Parameters
     { nodeCount = 500
-    , weights = pErdosRenyi
+    , weights = Weights.barabasiAlbert 1
     , initialTree = pMst
     , requestCount = 10000
     , requests = pRandomRequests
