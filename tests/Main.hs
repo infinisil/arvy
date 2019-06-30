@@ -6,15 +6,14 @@
 
 module Main where
 
-import           Arvy.Tree
-import           Arvy.Utils
-import           Arvy.Weights
 import           Control.DeepSeq
 import           Control.Exception
 import           Data.Array.Unboxed
 import qualified Data.Tree          as T
-import           Parameters
+import           Evaluation.Tree
+import qualified Parameters.Tree    as Tree
 import qualified Parameters.Weights as Weights
+import           Polysemy
 import           Test.Hspec
 import           Utils
 
@@ -38,7 +37,7 @@ main = hspec $ do
       Weights.shortestPathWeights 1 0 ! (0, 0) `shouldBe` 0
 
     it "correctly assigns weights to a 4-node ring" $
-      Weights.ring 4 `shouldBe` listArray ((0, 0), (3, 3))
+      run (Weights.weightsGet Weights.ring 4) `shouldBe` listArray ((0, 0), (3, 3))
         [ 0, 1, 2, 1
         , 1, 0, 1, 2
         , 2, 1, 0, 1
@@ -73,10 +72,10 @@ main = hspec $ do
 
   describe "Arvy.Tree.avgTreeStretch" $ do
     it "works on a 3-node ring tree and graph" $
-      avgTreeStretch 3 (Weights.ring 3) (ringTree 3) `shouldBeAbout` (1 + 1 / 3)
+      avgTreeStretch 3 (run $ Weights.weightsGet Weights.ring 3) (run $ Tree.initialTreeGet Tree.ring 3 undefined) `shouldBeAbout` (1 + 1 / 3)
 
     it "works on a 5-node ring tree and graph" $
-      avgTreeStretch 5 (Weights.ring 5) (ringTree 5) `shouldBeAbout` 1.4
+      avgTreeStretch 5 (run $ Weights.weightsGet Weights.ring 5) (run $ Tree.initialTreeGet Tree.ring 5 undefined) `shouldBeAbout` 1.4
 
 shouldSatisfyReturn :: (HasCallStack, Show a, Eq a) => IO a -> (a -> Bool) -> Expectation
 shouldSatisfyReturn action expected = action >>= (`shouldSatisfy` expected)

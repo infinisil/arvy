@@ -1,10 +1,15 @@
 {-# LANGUAGE BlockArguments #-}
 
-module Parameters.Weights where
+module Parameters.Weights
+  ( WeightsParameter(..)
+  , ring
+  , barabasiAlbert
+  , floydWarshall
+  , shortestPathWeights
+  ) where
 
 import Arvy.Local
-import Arvy.Algorithm
-import Parameters
+import Utils
 
 import Polysemy
 import Polysemy.RandomFu
@@ -18,24 +23,14 @@ import Data.IntMultiSet (IntMultiSet)
 import qualified Data.IntMultiSet as IntMultiSet
 import Data.Random.Distribution.Uniform
 import Data.Array.MArray
-import Data.Array.Base
 import Data.Array.ST
-import Utils
 
-{-# INLINE floydWarshall #-}
--- TODO: Split a lot of these things out of this Arvy module into the arvy-eval component
--- | Does the main operation in the floyd-warshall algorithm. Computes the shortest path between all nodes by iteratively modifying given weights. Complexity /O(n^3)/
-floydWarshall :: MArray arr Weight m => NodeCount -> GraphWeightsArr arr -> m ()
-floydWarshall n weights =
-  forM_ [0..n - 1] $ \k ->
-    forM_ [0..n - 1] $ \i ->
-      forM_ [0..n - 1] $ \j -> do
-        ij <- unsafeRead weights (i * n + j)
-        ik <- unsafeRead weights (i * n + k)
-        kj <- unsafeRead weights (k * n + j)
-        let ikj = ik + kj
-        when (ij > ikj) $
-          unsafeWrite weights (i * n + j) ikj
+
+data WeightsParameter r = WeightsParameter
+  { weightsName :: String
+  , weightsGet  :: Int -> Sem r GraphWeights
+  }
+
 
 -- TODO: Does this really not use any additional storage?
 -- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is /O(m + n^3)/ with n being the number of vertices and m being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.

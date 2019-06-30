@@ -11,6 +11,10 @@ import qualified Data.Map as M
 import Arvy.Local
 import qualified Data.Tree as T
 import Data.Maybe
+import Arvy.Algorithm
+import Data.Array.MArray
+import Data.Array.Base
+import Control.Monad
 
 -- | Convenience value for infinity for floating point types
 infinity :: (Floating a, Read a) => a
@@ -92,3 +96,18 @@ treeStructure tree = T.unfoldTree predecessors root where
     Just successor -> (root'
                       , M.insertWith (++) successor [i] rest')
     where (root', rest') = invert rest
+
+{-# INLINE floydWarshall #-}
+-- TODO: Split a lot of these things out of this Arvy module into the arvy-eval component
+-- | Does the main operation in the floyd-warshall algorithm. Computes the shortest path between all nodes by iteratively modifying given weights. Complexity /O(n^3)/
+floydWarshall :: MArray arr Weight m => NodeCount -> GraphWeightsArr arr -> m ()
+floydWarshall n weights =
+  forM_ [0..n - 1] $ \k ->
+    forM_ [0..n - 1] $ \i ->
+      forM_ [0..n - 1] $ \j -> do
+        ij <- unsafeRead weights (i * n + j)
+        ik <- unsafeRead weights (i * n + k)
+        kj <- unsafeRead weights (k * n + j)
+        let ikj = ik + kj
+        when (ij > ikj) $
+          unsafeWrite weights (i * n + j) ikj

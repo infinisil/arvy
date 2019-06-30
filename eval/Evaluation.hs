@@ -53,8 +53,8 @@ average = Eval
   , final = get >>= \(v, c) -> output (v / fromIntegral c)
   }
 
-requests :: forall a . (NFData a, Monoid a) => (Int -> Int -> a) -> Eval ArvyEvent (Request a)
-requests f = Eval
+collectRequests :: forall a . (NFData a, Monoid a) => (Int -> Int -> a) -> Eval ArvyEvent (Request a)
+collectRequests f = Eval
   { initialState = (0, mempty) :: (Int, a)
   , tracing = \event -> case event of
       RequestMade requestFrom -> put $ (requestFrom, mempty)
@@ -73,7 +73,7 @@ data Request a = Request
   } deriving (Functor, Show, Generic, NFData)
 
 requestHops :: Eval ArvyEvent (Request (Sum Int))
-requestHops = requests (\_ _ -> Sum 1)
+requestHops = collectRequests (\_ _ -> Sum 1)
 
 
 everyNth :: Int -> Eval i i

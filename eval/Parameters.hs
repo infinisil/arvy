@@ -6,36 +6,25 @@
 
 module Parameters where
 
+import Arvy.Algorithm
+import Arvy.Local
+import Parameters.Tree
+import Parameters.Requests
+import Parameters.Weights
+import Evaluation
+
 import Polysemy
 import Polysemy.RandomFu
-import Arvy.Local
 import Control.DeepSeq
-import Arvy.Algorithm
-import Data.Array hiding ((!))
 import qualified Data.Vector as V
 import GHC.Word
 import Data.Array.IO
 import Polysemy.Output
 import Polysemy.Trace
 import Data.Time (getCurrentTime)
-import Evaluation
 import System.Random.MWC
 import Utils
 
-data WeightsParameter r = WeightsParameter
-  { weightsName :: String
-  , weightsGet  :: Int -> Sem r GraphWeights
-  }
-
-data InitialTreeParameter r = InitialTreeParameter
-  { initialTreeName :: String
-  , initialTreeGet  :: Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
-  }
-
-data RequestsParameter r = RequestsParameter
-  { requestsName :: String
-  , requestsGet  :: Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
-  }
 
 data Parameters r = Parameters
   { nodeCount    :: Int

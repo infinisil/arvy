@@ -8,7 +8,7 @@ import qualified Algebra.Graph.NonEmpty as N
 import Control.Applicative ((<|>))
 import Data.Function (on)
 
--- isConnected implementation taken from https://github.com/snowleopard/alga/pull/216
+-- Implementation taken from https://github.com/snowleopard/alga/pull/216
 
 sharesVertex :: (T.ToGraph t, Ord (T.ToVertex t)) => t -> t -> Bool
 sharesVertex = not ... (Set.disjoint `on` T.vertexSet) where

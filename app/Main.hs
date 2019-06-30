@@ -6,7 +6,6 @@ module Main where
 import           Arvy.Algorithm.Collection
 
 import           Parameters
-import           ParametersLibrary
 import           Polysemy
 import           Polysemy.RandomFu
 import           Polysemy.Output
@@ -17,16 +16,18 @@ import qualified Debug.Trace as D
 import           Evaluation
 import           System.IO
 import qualified Parameters.Weights as Weights
+import qualified Parameters.Tree as Tree
+import qualified Parameters.Requests as Requests
 import           Evaluation.Tree
 
 params :: Members '[RandomFu, Lift IO] r => [Parameters r]
 params =
   [ Parameters
     { nodeCount = 500
-    , weights = Weights.barabasiAlbert 1
-    , initialTree = pMst
     , requestCount = 10000
-    , requests = pRandomRequests
+    , weights = Weights.barabasiAlbert 1
+    , initialTree = Tree.mst
+    , requests = Requests.random
     , algorithm = ivy
     }
   ]

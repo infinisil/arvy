@@ -3,32 +3,48 @@ module Parameters.Tree where
 import           Arvy.Local
 import           Data.Array.Unboxed
 import qualified Data.Heap          as H
+import           Polysemy
 
--- | Constructs a tree in the form of a ring. Node 0 is the root and node k points to k-1
-ringTree :: NodeCount -> RootedTree
-ringTree n = listArray (0, n - 1) (Nothing : fmap Just [0..])
+data InitialTreeParameter r = InitialTreeParameter
+  { initialTreeName :: String
+  , initialTreeGet  :: Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
+  }
+
+ring :: InitialTreeParameter r
+ring = InitialTreeParameter
+  { initialTreeName = "ring"
+  , initialTreeGet = \n _ ->
+      return (listArray (0, n - 1) (Nothing : fmap Just [0..]))
+  }
 
 
+
+-- | Constructs a ring-like tree where the root is in the middle
+semiCircles :: InitialTreeParameter r
+semiCircles = InitialTreeParameter
+  { initialTreeName = "semi circles"
+  , initialTreeGet = \n _ -> return (tree n)
+  }
+  where
+    tree :: NodeCount -> RootedTree
+    tree n = array (0, n - 1)
+        ( [ (i, Just (i + 1)) | i <- [0 .. h - 1] ]
+        ++ [ (h, Nothing) ]
+        ++ [ (i, Just (i - 1)) | i <- [h + 1 .. n - 1] ] )
+      where
+        h = n `div` 2
 
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
-mst :: NodeCount -> GraphWeights -> RootedTree
-mst n weights = array (0, n - 1)
-  ((0, Nothing) : fmap edgeToElem edges)
+mst :: InitialTreeParameter r
+mst = InitialTreeParameter
+  { initialTreeName = "mst"
+  , initialTreeGet = \n weights ->
+      return $ array (0, n - 1) ((0, Nothing) : fmap edgeToElem (mstEdges n weights))
+  }
   where
-    edges = mstEdges n weights
-
     edgeToElem :: Edge -> (Node, Maybe Node)
     edgeToElem (x, y) = (y, Just x)
-
--- | Constructs a ring-like tree where the root is in the middle
-semiCircles :: NodeCount -> RootedTree
-semiCircles n = array (0, n - 1)
-     ( [ (i, Just (i + 1)) | i <- [0 .. h - 1] ]
-    ++ [ (h, Nothing) ]
-    ++ [ (i, Just (i - 1)) | i <- [h + 1 .. n - 1] ] )
-  where
-    h = n `div` 2
 
 type MSTEntry = H.Entry Double Edge
 
