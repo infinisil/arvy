@@ -7,6 +7,10 @@ module Arvy.Algorithm
 
 import Polysemy
 import Polysemy.State
+import Data.NonNull
+import Data.Sequences
+import Data.MonoTraversable
+import Data.Sequence (Seq)
 
 -- TODO: Some algorithms might not need LocalWeights and in some scenarios you might not have LocalWeights at all -> remove it from Arvy type and allow each algorithm to require node-specific effects themselves. Needs effect row parametrized by node index type.
 -- TODO: Allow algorithms to query successor
@@ -56,9 +60,11 @@ class (NodeIndex ia, NodeIndex ib) => Forwardable ia ib where
   forward :: ia -> ib
 
 instance NodeIndex Int where
+  {-# INLINE indexValue #-}
   indexValue = id
   
 instance Forwardable Int Int where
+  {-# INLINE forward #-}
   forward = id
 
   
@@ -72,16 +78,18 @@ data LocalWeights i (m :: * -> *) a where
 
 makeSem ''LocalWeights
 
+newtype SimpleMsg i = SimpleMsg (NonNull (Seq i)) deriving Show
+
 -- TODO: Use mono-traversable for safety and speedup
 -- | A function for constructing an Arvy algorithm with just a function that selects the node to connect to out of a list of available ones.
-simpleArvy :: (forall ir . NodeIndex ir => [ir] -> Sem r ir) -> Arvy r
-simpleArvy selector = arvy @[] @() ArvyInst
+simpleArvy :: (forall ir seq . (NodeIndex ir, IsSequence seq, Element seq ~ ir) => NonNull seq -> Sem r ir) -> Arvy r
+simpleArvy selector = arvy @SimpleMsg @() ArvyInst
   { arvyNodeInit = \_ -> return ()
-  , arvyInitiate = \i -> return [i]
-  , arvyTransmit = \i msg -> do
+  , arvyInitiate = \i -> return $ SimpleMsg $ singleton i
+  , arvyTransmit = \i (SimpleMsg msg) -> do
       s <- raise . raise $ selector msg
-      return (s, i : fmap forward msg)
-  , arvyReceive = \_ msg ->
+      return (s, SimpleMsg $ i `cons` mapNonNull forward msg)
+  , arvyReceive = \_ (SimpleMsg msg) ->
       raise . raise $ selector msg
   }
 

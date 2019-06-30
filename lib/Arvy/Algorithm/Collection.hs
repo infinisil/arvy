@@ -3,6 +3,8 @@ module Arvy.Algorithm.Collection
   ) where
 
 import Arvy.Algorithm
+import Data.Sequences
+import Data.NonNull
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
@@ -33,8 +35,9 @@ ivy = arvy @IvyMessage @() ArvyInst
 
 -- | An Arvy algorithm that always chooses the node in the middle of the traveled through path as the new successor.
 half :: Arvy r
-half = simpleArvy (return . middle) where
-  middle xs = xs !! (length xs `div` 2)
+half = simpleArvy middle where
+  middle xs = return $ xs' `unsafeIndex` (lengthIndex xs' `div` 2) where
+    xs' = toNullable xs
 
 data RingMessage i
   = BeforeCrossing
