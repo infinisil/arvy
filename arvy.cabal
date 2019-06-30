@@ -14,8 +14,7 @@ library
   hs-source-dirs:      lib
   default-language:    Haskell2010
   ghc-options:         -Wall -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
-  exposed-modules:     Arvy
-                       Arvy.Algorithm
+  exposed-modules:     Arvy.Algorithm
                        Arvy.Algorithm.Collection
                        Arvy.Local
   build-depends:       base ^>=4.12.0.0

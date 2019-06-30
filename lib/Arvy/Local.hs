@@ -47,7 +47,7 @@ runRequests tree getRequest requestCount =
         Just <$> raise (getRequest immutableTree)
         
 -- | Run local weights with weights in a matrix and a current node
-runLocalWeights :: GraphWeights -> Node -> Sem (LocalWeights ': r) a -> Sem r a
+runLocalWeights :: GraphWeights -> Node -> Sem (LocalWeights Node ': r) a -> Sem r a
 runLocalWeights weights src = interpret $ \case
   WeightTo dst -> return $ weights ! (src, dst)
 
@@ -156,5 +156,5 @@ runArvyLocal n weights tree (Arvy inst) = runArvyLocal' inst where
           output $ Just $ StateChange i (show s)
 
       -- | Runs a node with its local effects
-      runNode :: Node -> Sem (LocalWeights ': State s ': r) a -> Sem r' a
+      runNode :: Node -> Sem (LocalWeights Node ': State s ': r) a -> Sem r' a
       runNode i action = runNodeState i (runLocalWeights weights i action)

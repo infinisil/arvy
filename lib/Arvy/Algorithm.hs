@@ -8,6 +8,8 @@ module Arvy.Algorithm
 import Polysemy
 import Polysemy.State
 
+-- TODO: Some algorithms might not need LocalWeights and in some scenarios you might not have LocalWeights at all -> remove it from Arvy type and allow each algorithm to require node-specific effects themselves. Needs effect row parametrized by node index type.
+-- TODO: Allow algorithms to query successor
 {- |
 An Arvy algorithm instance.
 - @msg@ stands for the message type it sends between nodes, this can be arbitrarily chosen by the algorithm. It is parametrized by @i@ such that the algorithm can send node indices over messages.
@@ -24,14 +26,14 @@ All methods have access to the node's index they run in and the weights to all n
 The types @i@ and @ir@ are used to ensure the algorithms correctness, in that they are chosen such that you can only select a new successor from already traveled through nodes.
 -}
 data ArvyInst msg s r = (forall i . Show i => Show (msg i), Show s) => ArvyInst
-  { arvyNodeInit :: forall i . NodeIndex i => i -> Sem (LocalWeights ': r) s
+  { arvyNodeInit :: forall i . NodeIndex i => i -> Sem (LocalWeights i ': r) s
   -- ^ How to compute the initial state in nodes
-  , arvyInitiate :: forall i . NodeIndex i => i -> Sem (LocalWeights ': State s ': r) (msg i)
+  , arvyInitiate :: forall i . NodeIndex i => i -> Sem (LocalWeights i ': State s ': r) (msg i)
   -- ^ Initial request message contents
-  , arvyTransmit :: forall ir i . Forwardable ir i => i -> msg ir -> Sem (LocalWeights ': State s ': r) (ir, msg i)
+  , arvyTransmit :: forall ir i . Forwardable ir i => i -> msg ir -> Sem (LocalWeights i ': State s ': r) (ir, msg i)
   -- ^ What to do when a message passes through this node, what new successor to choose and what message to forward
   -- @ir@ stands for the node index type you received and need to select, which can be forwarded (with 'forward') to @i@ which is the node index type of the current node and the message to send
-  , arvyReceive :: forall ir i . Forwardable ir i => i -> msg ir -> Sem (LocalWeights ': State s ': r) ir
+  , arvyReceive :: forall ir i . Forwardable ir i => i -> msg ir -> Sem (LocalWeights i ': State s ': r) ir
   -- ^ What to do when a message arrives at the node holding the token, what new successor to choose.
   -- @ir@ stands for the node index type you received and need to select, which can be forwarded (with 'forward') to @i@ which is the node index type of the current node and the message to send
   }
@@ -65,21 +67,21 @@ type Weight = Double
 
 -- TODO: Use abstract i type
 -- | An effect for providing access to weights from a current node to others
-data LocalWeights (m :: * -> *) a where
-  WeightTo :: Int -> LocalWeights m Weight
+data LocalWeights i (m :: * -> *) a where
+  WeightTo :: i -> LocalWeights i m Weight
 
 makeSem ''LocalWeights
 
 -- TODO: Use mono-traversable for safety and speedup
 -- | A function for constructing an Arvy algorithm with just a function that selects the node to connect to out of a list of available ones.
-simpleArvy :: (forall i . NodeIndex i => [i] -> Sem (LocalWeights ': State () ': r) i) -> Arvy r
+simpleArvy :: (forall ir . NodeIndex ir => [ir] -> Sem r ir) -> Arvy r
 simpleArvy selector = arvy @[] @() ArvyInst
   { arvyNodeInit = \_ -> return ()
   , arvyInitiate = \i -> return [i]
   , arvyTransmit = \i msg -> do
-      s <- selector msg
+      s <- raise . raise $ selector msg
       return (s, i : fmap forward msg)
   , arvyReceive = \_ msg ->
-      selector msg
+      raise . raise $ selector msg
   }
 

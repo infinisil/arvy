@@ -3,14 +3,12 @@ module Evaluation.Tree where
 import           Arvy.Local
 import           Evaluation
 
-import           Control.Exception
 import           Data.Array.IO
 import           Data.Array.Unboxed
 import           Data.IntMap        (IntMap)
 import qualified Data.IntMap        as IntMap
 import           Data.IntSet        (IntSet)
 import qualified Data.IntSet        as IntSet
-import           Data.Time
 import           Polysemy
 import           Polysemy.Output
 
@@ -22,11 +20,7 @@ treeStretch n weights tree = Eval
   , tracing = \event -> case event of
       RequestMade _ -> do
         t <- sendM $ freeze tree
-        start <- sendM getCurrentTime
-        stretch <- sendM $ evaluate $ avgTreeStretch n weights t
-        end <- sendM getCurrentTime
-        sendM $ print $ end `diffUTCTime` start
-        output stretch
+        output $ avgTreeStretch n weights t
       _ -> return ()
   , final = do
       t <- sendM $ freeze tree
