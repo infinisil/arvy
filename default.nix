@@ -11,6 +11,7 @@ let
   src = lib.sourceByRegex ./. [
     "lib.*"
     "eval.*"
+    "app.*"
     "tests.*"
     "LICENSE"
     "Setup.hs"
@@ -27,7 +28,14 @@ let
   hpkgs = pkgs.haskell.packages.ghc865.override (old: {
     overrides = lib.composeExtensions (old.overrides or (self: super: {})) (self: super: {
 
-      arvy = super.callCabal2nix "arvy" src {};
+      arvy = (hlib.overrideCabal (super.callCabal2nix "arvy" src {}) {
+        doHaddock = true;
+      }).overrideAttrs (old: {
+        # Cabal currently can't generate docs for internal libraries depending on the non-internal library,
+        # so we only generate docs for the non-internal library until that is fixed
+        # See https://github.com/haskell/cabal/pull/5253#issuecomment-507069589
+        haddockPhase = builtins.replaceStrings ["haddock --html"] ["haddock lib:arvy --html"] old.haddockPhase;
+      });
 
       th-abstraction = super.th-abstraction_0_3_1_0;
 
@@ -64,4 +72,4 @@ let
     ];
   });
 
-in pkg // { inherit env; }
+in pkg // { inherit env pkgs hpkgs; }

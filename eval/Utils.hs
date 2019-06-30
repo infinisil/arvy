@@ -60,7 +60,7 @@ mapStateSecond
 mapStateSecond = mapState snd (flip $ second . const)
 
 
-  -- | Run a 'Random' effect using a given 'R.RandomSource'
+-- | Run a 'Random' effect using a given 'R.RandomSource'
 runRandomSource'
   :: forall s r a m
    . (Member (Lift m) r, R.RandomSource m s)

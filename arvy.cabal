@@ -10,17 +10,13 @@ maintainer:          contact@infinisil.com
 category:            Network
 extra-source-files:  CHANGELOG.md
 
-library
-  hs-source-dirs:      lib
+common defaults
   default-language:    Haskell2010
   ghc-options:         -Wall -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
-  exposed-modules:     Arvy.Algorithm
-                       Arvy.Algorithm.Collection
-                       Arvy.Local
-  build-depends:       base ^>=4.12.0.0
+  build-depends:       base ^>= 4.12.0.0
                      , polysemy
                      , polysemy-plugin
-                     , array
+                     , polysemy-plugin
   default-extensions:  DataKinds
                      , FlexibleContexts
                      , GADTs
@@ -37,10 +33,17 @@ library
                      , BlockArguments
                      , MultiParamTypeClasses
 
+library
+  import:              defaults
+  hs-source-dirs:      lib
+  exposed-modules:     Arvy.Algorithm
+                       Arvy.Algorithm.Collection
+                       Arvy.Local
+  build-depends:       array
+
 library arvy-eval
+  import:              defaults
   hs-source-dirs:      eval
-  default-language:    Haskell2010
-  ghc-options:         -Wall -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
   exposed-modules:     Parameters
                      , Parameters.Weights
                      , Parameters.Tree
@@ -49,10 +52,7 @@ library arvy-eval
                      , Evaluation.Tree
                      , Utils
                      , Utils.Connected
-  build-depends:       base ^>=4.12.0.0
-                     , arvy
-                     , polysemy
-                     , polysemy-plugin
+  build-depends:       arvy
                      , polysemy-RandomFu
                      , random-fu
                      , mwc-random
@@ -65,29 +65,16 @@ library arvy-eval
                      , containers
                      , multiset
                      , heaps
-  default-extensions:  TypeApplications
-                     , LambdaCase
-                     , BlockArguments
-                     , TypeOperators
-                     , DataKinds
-                     , FlexibleContexts
-                     , GADTs
-                     , RecordWildCards
-                     , RankNTypes
-                     , NamedFieldPuns
-                     , ScopedTypeVariables
   
 executable arvy
+  import:              defaults
   hs-source-dirs:      app
   main-is:             Main.hs
-  ghc-options:         -Wall -flate-specialise -fspecialise-aggressively -fplugin=Polysemy.Plugin
   build-depends:       base ^>=4.12.0.0
                      , arvy
                      , arvy-eval
                      , array
-                     , polysemy
                      , polysemy-zoo
-                     , polysemy-plugin
                      , algebraic-graphs
                      , time
                      , random
@@ -99,31 +86,13 @@ executable arvy
                      , containers
                      , multiset
                      , random-fu
-  default-language:    Haskell2010
-  default-extensions:  DataKinds
-                     , FlexibleContexts
-                     , GADTs
-                     , LambdaCase
-                     , PolyKinds
-                     , RankNTypes
-                     , ScopedTypeVariables
-                     , TypeApplications
-                     , TypeOperators
-                     , TypeFamilies
-                     , LambdaCase
-                     , QuantifiedConstraints
-                     , AllowAmbiguousTypes
-                     , RecordWildCards
-                     , NamedFieldPuns
-                     , TupleSections
 
 test-suite arvy-tests
+  import:              defaults
   type:                exitcode-stdio-1.0
   main-is:             Main.hs
   hs-source-dirs:      tests
-  ghc-options:         -Wall
-  build-depends:       base ^>=4.12.0.0
-                     , arvy
+  build-depends:       arvy
                      , arvy-eval
                      , hspec
                      , array
@@ -132,4 +101,3 @@ test-suite arvy-tests
                      , random
                      , containers
                      , deepseq
-  default-language:    Haskell2010
