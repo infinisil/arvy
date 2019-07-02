@@ -149,12 +149,12 @@ instance Category Eval where
           \case Output o -> do
                   mapStateSecond (t2 o)
           $ mapStateFirst (t1 event)
-    , final = interpret
+    , final = do
+        interpret
           \case Output o ->
-                  mapStateSecond $ do
-                    t2 o
-                    f2
+                  mapStateSecond $ t2 o
           $ mapStateFirst f1
+        mapStateSecond f2
     }
   
 {-
