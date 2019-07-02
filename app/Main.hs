@@ -20,12 +20,12 @@ import qualified Parameters.Tree as Tree
 import qualified Parameters.Requests as Requests
 import           Evaluation.Tree
 
-params :: Members '[RandomFu, Lift IO] r => [Parameters r]
+params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
 params =
   [ Parameters
-    { nodeCount = 500
-    , requestCount = 10000
-    , weights = Weights.barabasiAlbert 1
+    { nodeCount = 1000
+    , requestCount = 100000
+    , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
     , initialTree = Tree.mst
     , requests = Requests.random
     , algorithm = ivy

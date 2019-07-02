@@ -1,9 +1,12 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Parameters.Weights
   ( WeightsParameter(..)
   , ring
   , barabasiAlbert
+  , ErdosProb(..)
+  , erdosRenyi
   , floydWarshall
   , shortestPathWeights
   ) where
@@ -13,8 +16,10 @@ import Utils
 
 import Polysemy
 import Polysemy.RandomFu
+import Polysemy.Trace
 import qualified Algebra.Graph.Class as G
 import qualified Algebra.Graph.AdjacencyIntMap as GA
+import Data.Array.IArray (elems)
 import Control.Monad
 import Data.List (foldl')
 import Data.IntSet (IntSet)
@@ -67,31 +72,41 @@ ring = WeightsParameter
       return $ shortestPathWeights n $ GA.symmetricClosure $ GA.circuit [0..n-1]
   }
 
+data ErdosProb
+  = ErdosProbNum Double
+  -- ^ Probability for an edge being connected
+  | ErdosProbTargetExpected (Int -> Int)
+  -- ^ A function from node count to expected number of edges
+  | ErdosProbEpsilon Double
+  -- ^ An epsilon value for the formula (1 + e) * ln n / n
+
+erdosProb :: ErdosProb -> Int -> Double
+erdosProb (ErdosProbNum p) _ = p
+erdosProb (ErdosProbTargetExpected f) n = fromIntegral (f n) / fromIntegral (n * (n - 1) `div` 2)
+erdosProb (ErdosProbEpsilon e) n = (1 + e) * log (fromIntegral n) / (fromIntegral n)
+
+erdosRenyi :: Members '[RandomFu, Trace] r => ErdosProb -> WeightsParameter r
+erdosRenyi prob = WeightsParameter
+  { weightsName = "Erdos Renyi random graph"
+  , weightsGet = \n -> do
+      graph <- generate (erdosProb prob n) n
+      return $ shortestPathWeights n graph
+  } where
   
---erdosRenyi :: Member (Lift IO) r => WeightsParameter r
---erdosRenyi = WeightsParameter
---  { weightsName = "Erdos Renyi"
---  , weightsGet = \n -> do
---      -- According to Erdos and Renyi, a graph is very likely to be connected with p > (1 + e) ln n / n
---      let p = log (fromIntegral n) / fromIntegral n
---      erdosRenyi n p
---  }
---
---
----- TODO: Rewrite graph-generators in terms of polysemy's RandomFu
----- | Erdős-Rényi graph generator from graph-generators
---erdosRenyi
---  :: Member (Lift IO) r
---  => NodeCount -- ^ The number of total nodes
---  -> Double -- ^ The probability of an edge being connected
---  -> Sem r GraphWeights
---erdosRenyi n p = do
---  graphInfo <- sendM $ erdosRenyiGraph' n p
---  -- Overlaying with every single vertex to make sure all of them are present
---  let graph = symmetricClosure $ infoToGraph graphInfo
---  if isConnected (toGraph graph)
---    then return $ shortestPathWeights n graph
---    else erdosRenyi n p
+  
+  generate :: Members '[RandomFu, Trace] r => Double -> Int -> Sem r GA.AdjacencyIntMap
+  generate p n = do
+    edges <- forM [ (u, v) | u <- [0 .. n - 1], v <- [u + 1 .. n - 1]] $ \edge -> do
+      value <- sampleRVar doubleStdUniform
+      return [ edge | value < p ]
+    let graph = GA.symmetricClosure (GA.edges (concat edges))
+    let !weights = shortestPathWeights n graph
+    if all (not . isInfinite) (elems weights)
+      then return graph
+      else do
+        trace $ "Erdos Renyi graph wasn't connected with edge probability p=" ++ show p ++ " and node count n=" ++ show n ++ " retrying.."
+        generate p n
+    
 
 barabasiAlbert :: Member RandomFu r => Int -> WeightsParameter r
 barabasiAlbert m = WeightsParameter
