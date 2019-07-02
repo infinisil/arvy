@@ -117,7 +117,7 @@ barabasiAlbert m = WeightsParameter
   }
 
 -- Adapted for algebraic-graphs and polysemy from graph-generators package
-
+-- TODO: Is this correct? The code is very hard to follow
 barabasiAlbertGen :: forall r g . (Member RandomFu r, G.Graph g, G.Vertex g ~ Node) => NodeCount -> Int -> Sem r g
 barabasiAlbertGen n m = do
   -- Implementation concept: Iterate over nodes [m..n] in a state monad,

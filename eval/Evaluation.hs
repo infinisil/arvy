@@ -17,10 +17,12 @@ import Data.Bifunctor
 import Polysemy.Output
 import GHC.Generics
 import Data.Monoid
+import Data.Array.IArray
 import Arvy.Algorithm
 import Arvy.Local
 import Utils
 
+-- TODO: Clean up, probably using pipes or conduit
 
 -- | An evaluation that takes an input i and computes some outputs o
 data Eval i o = forall s . Eval
@@ -55,7 +57,7 @@ average = Eval
   , final = get >>= \(v, c) -> output (v / fromIntegral c)
   }
 
-collectRequests :: forall a . Monoid a => (Int -> Int -> a) -> Eval ArvyEvent (Request a)
+collectRequests :: forall a . Monoid a => (Node -> Node -> a) -> Eval ArvyEvent (Request a)
 collectRequests f = Eval
   { initialState = (0, mempty) :: (Int, a)
   , tracing = \event -> case event of
@@ -67,6 +69,19 @@ collectRequests f = Eval
       _ -> return ()
   , final = return ()
   }
+
+evalFilter :: (b -> Bool) -> Eval b b
+evalFilter f = Eval
+  { initialState = ()
+  , tracing = \event -> if f event
+    then output event
+    else return ()
+  , final = return ()
+  }
+
+ratio :: GraphWeights -> Eval ArvyEvent Double
+ratio weights = (\Request { path = Sum path, requestFrom = a, requestRoot = b } -> path / weights ! (a, b))
+  <$> (collectRequests (\a b -> Sum (weights ! (a, b))) >>> evalFilter (\Request { .. } -> requestFrom /= requestRoot))
 
 data Request a = Request
   { requestFrom :: Int
