@@ -13,6 +13,7 @@ import           Polysemy.Trace
 import Data.Monoid
 import Arvy.Local
 import Data.Array.IO
+import Data.Array.IArray
 import           Control.Category
 import           Control.Monad
 import qualified Debug.Trace as D
@@ -22,12 +23,13 @@ import qualified Parameters.Weights as Weights
 import qualified Parameters.Tree as Tree
 import qualified Parameters.Requests as Requests
 import           Evaluation.Tree
+import Prelude hiding ((.), id)
 
 params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
 params =
   [ Parameters
     { nodeCount = 1000
-    , requestCount = 100000
+    , requestCount = 10000
     , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
     , initialTree = Tree.mst
     , requests = Requests.random
@@ -42,13 +44,25 @@ main = forM_ params $ \par -> runM
   $ runParams 0 par
   $ evaluation
   where
-    evaluation :: NodeCount -> GraphWeights -> IOUArray Node Node -> Eval ArvyEvent ((Int, Request (Sum Int)), Double)
-    evaluation n w t = requestHops -- Get requests while counting their hops
-      >>> enumerate -- Enumerate all requests
-      >>> everyNth 100 -- Only process every 100th one
-      >>> treeStretch n w t -- And calculate the tree stretch too
-    resultShower :: ((Int, Request (Sum Int)), Double) -> String
-    resultShower ((n, Request { path = Sum hops }), stretch) = "[" ++ show n ++ "] Hop count: " ++ show hops ++ ", tree stretch: " ++ show stretch
+    evaluation n w t =
+      collectRequests (\a b -> (Sum (1 :: Double), Sum (w ! (a, b)))) -- Get requests while counting their hops
+      >>>
+      ( ( enumerate
+        >>> everyNth 100
+        >>> treeStretch n w t )
+      `combine` ( ( mapping (\Request { path = (_, Sum path) } -> path)
+                  >>> average )
+                `combine`
+                  ( mapping (\Request { path = (Sum hops, _) } -> hops)
+                  >>> average
+                  )
+                )
+      )
+ 
+    resultShower :: Either ((Int, Request (Sum Double, Sum Double)), Double) (Either Double Double) -> String
+    resultShower (Left ((n, Request { path = (Sum hops, Sum path) }), stretch)) = "[" ++ show n ++ "] Hop count: " ++ show hops ++ ", path length: " ++ show path ++ ", tree stretch: " ++ show stretch
+    resultShower (Right (Left distanceAverage)) = "Average request path length: " ++ show distanceAverage
+    resultShower (Right (Right hopAverage)) = "Average hop path length: " ++ show hopAverage
 
 
 

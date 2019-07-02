@@ -15,7 +15,6 @@ import Evaluation
 
 import Polysemy
 import Polysemy.RandomFu
-import Control.DeepSeq
 import qualified Data.Vector as V
 import GHC.Word
 import Data.Array.IO
@@ -44,7 +43,7 @@ instance Show (Parameters r) where
     "\tRequests: " ++ requestsName requests ++ "\n" ++
     "\tAlgorithm: " ++ "TODO\n"
 
-runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Word32 -> Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
+runParams :: (Members '[Lift IO, Trace, Output res] r) => Word32 -> Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }

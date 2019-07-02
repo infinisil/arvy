@@ -19,12 +19,11 @@ import GHC.Generics
 import Data.Monoid
 import Arvy.Algorithm
 import Arvy.Local
-import Control.DeepSeq
 import Utils
 
 
 -- | An evaluation that takes an input i and computes some outputs o
-data Eval i o = forall s . (NFData s) => Eval
+data Eval i o = forall s . Eval
   { initialState :: s
   , tracing :: forall r . Members '[State s, Output o, Lift IO] r => i -> Sem r ()
   , final :: forall r . Members '[State s, Output o, Lift IO] r => Sem r ()
@@ -38,7 +37,7 @@ runEval Eval { .. } = fmap snd . runState initialState . reinterpret \case
       Just i -> tracing i
       Nothing -> final
 
-aggregate :: forall m . (NFData m, Monoid m) => Eval m m
+aggregate :: forall m . Monoid m => Eval m m
 aggregate = Eval
   { initialState = mempty :: m
   , tracing = \v -> do
@@ -46,14 +45,17 @@ aggregate = Eval
   , final = get >>= output
   }
 
-average :: forall m . (NFData m, Fractional m) => Eval m m
+mapping :: (a -> b) -> Eval a b
+mapping f = fmap f id
+
+average :: forall m . Fractional m => Eval m m
 average = Eval
   { initialState = (0, 0) :: (m, Int)
   , tracing = \v -> modify (bimap (+v) (+1))
   , final = get >>= \(v, c) -> output (v / fromIntegral c)
   }
 
-collectRequests :: forall a . (NFData a, Monoid a) => (Int -> Int -> a) -> Eval ArvyEvent (Request a)
+collectRequests :: forall a . Monoid a => (Int -> Int -> a) -> Eval ArvyEvent (Request a)
 collectRequests f = Eval
   { initialState = (0, mempty) :: (Int, a)
   , tracing = \event -> case event of
@@ -70,7 +72,7 @@ data Request a = Request
   { requestFrom :: Int
   , requestRoot :: Int
   , path :: a
-  } deriving (Functor, Show, Generic, NFData)
+  } deriving (Functor, Show, Generic)
 
 requestHops :: Eval ArvyEvent (Request (Sum Int))
 requestHops = collectRequests (\_ _ -> Sum 1)
