@@ -75,6 +75,15 @@ data Request a = Request
 requestHops :: Eval ArvyEvent (Request (Sum Int))
 requestHops = collectRequests (\_ _ -> Sum 1)
 
+enumerate :: Eval a (Int, a)
+enumerate = Eval
+  { initialState = 0 :: Int
+  , tracing = \event -> do
+      counter <- get
+      output (counter, event)
+      put (counter + 1)
+  , final = return ()
+  }
 
 everyNth :: Int -> Eval i i
 everyNth n = Eval

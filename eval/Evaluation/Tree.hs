@@ -14,17 +14,13 @@ import           Polysemy.Output
 
 
 
-treeStretch :: Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent Double
+treeStretch :: Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval a (a, Double)
 treeStretch n weights tree = Eval
   { initialState = ()
-  , tracing = \event -> case event of
-      RequestMade _ -> do
-        t <- sendM $ freeze tree
-        output $ avgTreeStretch n weights t
-      _ -> return ()
-  , final = do
+  , tracing = \event -> do
       t <- sendM $ freeze tree
-      output $ avgTreeStretch n weights t
+      output (event, avgTreeStretch n weights t)
+  , final = return ()
   }
 
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/

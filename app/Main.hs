@@ -10,6 +10,9 @@ import           Polysemy
 import           Polysemy.RandomFu
 import           Polysemy.Output
 import           Polysemy.Trace
+import Data.Monoid
+import Arvy.Local
+import Data.Array.IO
 import           Control.Category
 import           Control.Monad
 import qualified Debug.Trace as D
@@ -35,9 +38,22 @@ params =
 main :: IO ()
 main = forM_ params $ \par -> runM
   $ runTraceIO
-  $ runOutputAsTrace
+  $ traceOutput resultShower
   $ runParams 0 par
-  $ \n w t -> everyNth 100 >>> treeStretch n w t
+  $ evaluation
+  where
+    evaluation :: NodeCount -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent ((Int, Request (Sum Int)), Double)
+    evaluation n w t = requestHops -- Get requests while counting their hops
+      >>> enumerate -- Enumerate all requests
+      >>> everyNth 100 -- Only process every 100th one
+      >>> treeStretch n w t -- And calculate the tree stretch too
+    resultShower :: ((Int, Request (Sum Int)), Double) -> String
+    resultShower ((n, Request { path = Sum hops }), stretch) = "[" ++ show n ++ "] Hop count: " ++ show hops ++ ", tree stretch: " ++ show stretch
+
+
+
+traceOutput :: Member Trace r => (x -> String) -> Sem (Output x ': r) a -> Sem r a
+traceOutput f = interpret \case Output x -> trace $ f x
 
 mapOutput :: Member (Output y) r => (x -> y) -> Sem (Output x ': r) a -> Sem r a
 mapOutput f = interpret \case Output x -> output $ f x
