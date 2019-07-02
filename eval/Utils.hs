@@ -28,7 +28,7 @@ loeb x = go where go = fmap ($ go) x
 {-# INLINABLE aimap #-}
 -- | Returns a new array derived from the original array by applying a
 -- function to each of the elements and their indices. Extension of 'Data.Array.Base.amap' with indices.
-aimap :: (IArray a e, IArray a e', Ix i) => (i -> e' -> e) -> a i e' -> a i e
+aimap :: (IArray a' e, IArray a e', Ix i) => (i -> e' -> e) -> a i e' -> a' i e
 aimap f arr = array (bounds arr) $ (\(i, e) -> (i, f i e)) <$> assocs arr
 
 -- TODO: Use lenses
@@ -86,15 +86,16 @@ treeStructure tree = T.unfoldTree predecessors root where
 
   -- TODO: Use more efficient representation for predecessors, e.g. IntSet
   -- | Inverts an (node index, successor pointer) list to a (root, predecessor mapping) value
-  invert :: [(Node, Maybe Node)] -> (Maybe Node, M.Map Node [Node])
+  invert :: [(Node, Node)] -> (Maybe Node, M.Map Node [Node])
   invert []                   = (Nothing, M.empty)
-  invert ((i, pointer):rest) = case pointer of
-    Nothing        -> (case root' of
-                         Nothing -> Just i
-                         Just i' -> error $ "Tree has multiple roots at both node " ++ show i ++ " and " ++ show i'
-                      , rest')
-    Just successor -> (root'
-                      , M.insertWith (++) successor [i] rest')
+  invert ((i, pointer):rest) = if i == pointer
+    then ( case root' of
+             
+             Nothing -> Just i
+             Just i' -> error $ "Tree has multiple roots at both node " ++ show i ++ " and " ++ show i'
+         , rest' )
+    else ( root'
+         , M.insertWith (++) pointer [i] rest' )
     where (root', rest') = invert rest
 
 {-# INLINE floydWarshall #-}

@@ -2,7 +2,7 @@ module Parameters.Requests where
 
 import qualified Data.Tree as T
 import Polysemy
-import Data.Array.IArray
+import Data.Array.Unboxed
 import Polysemy.RandomFu
 import Arvy.Local
 import Utils
@@ -12,7 +12,7 @@ import Data.Random.Distribution.Uniform
 
 data RequestsParameter r = RequestsParameter
   { requestsName :: String
-  , requestsGet  :: Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
+  , requestsGet  :: Int -> GraphWeights -> RootedTree -> Sem r Int
   }
 
 worst :: RequestsParameter r
@@ -22,10 +22,11 @@ worst = RequestsParameter
 
   } where
   -- | Computes the distance from all nodes to the root in /O(n)/
-  lengthsToRoot :: (Num n, IArray arr n) => arr (Int, Int) n -> Array Int (Maybe Int) -> Array Int n
+  lengthsToRoot :: GraphWeights -> RootedTree -> Array Int Double
   lengthsToRoot weights tree = loeb fs
     where
-      fs = aimap (\i v -> \others -> maybe 0 (\o -> others ! o + weights ! (i, o)) v)
+      fs :: Array Int (Array Int Double -> Double)
+      fs = aimap (\i v -> \others -> (\o -> others ! o + weights ! (i, o)) v)
                   tree
 
 random :: Member RandomFu r => RequestsParameter r
@@ -33,7 +34,7 @@ random = RequestsParameter
   { requestsName = "random"
   , requestsGet = get
   } where
-  get :: Member RandomFu r => Int -> GraphWeights -> Array Int (Maybe Int) -> Sem r Int
+  get :: Member RandomFu r => Int -> GraphWeights -> RootedTree -> Sem r Int
   get n _ _ = sampleRVar (integralUniform 0 (n - 1))
 
 interactive :: Member (Lift IO) r => RequestsParameter r

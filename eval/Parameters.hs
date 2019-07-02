@@ -44,7 +44,7 @@ instance Show (Parameters r) where
     "\tRequests: " ++ requestsName requests ++ "\n" ++
     "\tAlgorithm: " ++ "TODO\n"
 
-runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Word32 -> Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent res) -> Sem r ()
+runParams :: (NFData res, Members '[Lift IO, Trace, Output res] r) => Word32 -> Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }
@@ -65,7 +65,7 @@ runParams seed params@Parameters
 
     trace $ "Generating initial tree.."
     !tree <- initialTreeGet nodeCount weights
-    mutableTree <- sendM (thaw tree :: IO (IOArray Int (Maybe Int)))
+    mutableTree <- sendM (thaw tree :: IO (IOUArray Int Int))
 
     let eval = evaluation nodeCount weights mutableTree
 

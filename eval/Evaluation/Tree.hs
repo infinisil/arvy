@@ -14,7 +14,7 @@ import           Polysemy.Output
 
 
 
-treeStretch :: Int -> GraphWeights -> IOArray Int (Maybe Int) -> Eval a (a, Double)
+treeStretch :: Int -> GraphWeights -> IOUArray Node Node -> Eval a (a, Double)
 treeStretch n weights tree = Eval
   { initialState = ()
   , tracing = \event -> do
@@ -33,9 +33,10 @@ avgTreeStretch n weights tree = sum [ summedTreeStretch root | root <- [0 .. n -
     $ map bidirEdge
     $ assocs tree
     where
-      bidirEdge :: (Node, Maybe Node) -> IntMap IntSet
-      bidirEdge (_, Nothing) = IntMap.empty
-      bidirEdge (a, Just b) = IntMap.singleton a (IntSet.singleton b) `IntMap.union` IntMap.singleton b (IntSet.singleton a)
+      bidirEdge :: (Node, Node) -> IntMap IntSet
+      bidirEdge (a, b)
+        | a == b = IntMap.empty
+        | otherwise = IntMap.singleton a (IntSet.singleton b) `IntMap.union` IntMap.singleton b (IntSet.singleton a)
 
   adjacent :: Node -> IntSet
   adjacent node = IntMap.findWithDefault (error "No such node, inconsistent rooted tree") node graph

@@ -24,16 +24,15 @@ type GraphWeightsArr arr = arr Edge Weight
 type GraphWeights = GraphWeightsArr UArray
 
 
--- TODO: Could be a lot faster with an UArray Node Node where a node pointing to itself represents a root node
 -- | A rooted spanning tree, an array of nodes where each node either points to a successor signified with 'Just' or is the root node, signified with 'Nothing'
-type RootedTree = Array Node (Maybe Node)
+type RootedTree = UArray Node Node
 
 runRequests
   :: forall m r arr a
   . ( Member (Lift m) r
-    , MArray arr (Maybe Int) m )
-  => arr Int (Maybe Int)
-  -> (Array Int (Maybe Int) -> Sem r Int)
+    , MArray arr Node m )
+  => arr Node Node
+  -> (RootedTree -> Sem r Int)
   -> Int
   -> Sem (Input (Maybe Int) ': r) a
   -> Sem r a
@@ -55,7 +54,7 @@ runLocalWeights weights src = interpret $ \case
 -- | The type of events that happen during an arvy execution
 data ArvyEvent
   = RequestTravel Node Node String -- ^ A request message traveled from a node to another. The 'String' contains the 'show' of the message
-  | SuccessorChange Node (Maybe Node) -- ^ The successor for some node changed to some new one
+  | SuccessorChange Node Node -- ^ The successor for some node changed to some new one
   | StateChange Node String -- ^ The state at a node changed to a new value. The 'String' contains the 'show' of the new state
   | RequestMade Node -- ^ A node made a request for the token
   | RequestGranted Node Node GrantType -- ^ A request for a node has been granted by some node
@@ -87,10 +86,10 @@ runArvyLocal
     , r' ~ (Input (Maybe Node) ': Output (Maybe ArvyEvent) ': r)
       -- Quantified constraint because we need a mutable array to store the state of the nodes of /any/ possible algorithm, and every algorithm can choose its own state type
     , forall s . MArray sarr s m
-    , MArray tarr (Maybe Node) m )
+    , MArray tarr Node m )
   => NodeCount
   -> GraphWeights -- ^ The graph weights, used for giving nodes access to their local weights
-  -> tarr Node (Maybe Node) -- ^ The (initial) spanning tree, which this function modifies as requests are coming in. This is to allow request generators access to it from the outside.
+  -> tarr Node Node -- ^ The (initial) spanning tree, which this function modifies as requests are coming in. This is to allow request generators access to it from the outside.
   -> Arvy r -- ^ The Arvy algorithm to run
   -> Sem r' ()
 runArvyLocal n weights tree (Arvy inst) = runArvyLocal' inst where
@@ -111,12 +110,12 @@ runArvyLocal n weights tree (Arvy inst) = runArvyLocal' inst where
       Nothing -> output Nothing
       Just i -> do
         output $ Just $ RequestMade i
-        getSuccessor i >>= \case
+        getSuccessor i >>= \successor -> if i == successor
           -- If the node that made the request has no successor, immediately grant
-          Nothing -> output $ Just $ RequestGranted i i Local
-          Just successor -> do
+          then output $ Just $ RequestGranted i i Local
+          else do
             msg <- runNode i (arvyInitiate i)
-            setSuccessor i Nothing
+            setSuccessor i i
             output $ Just $ RequestTravel i successor (show msg)
             root <- send msg successor
             output $ Just $ RequestGranted i root Received
@@ -126,23 +125,23 @@ runArvyLocal n weights tree (Arvy inst) = runArvyLocal' inst where
 
       -- | Send a message to some node and repeatedly applies the arvy algorithm until eventually the root node is found, which gets returned
       send :: msg Node -> Node -> Sem r' Int
-      send msg i = getSuccessor i >>= \case
-        Just successor -> do
+      send msg i = getSuccessor i >>= \successor -> if i == successor
+        then do
+          newSucc <- runNode i (arvyReceive i msg)
+          setSuccessor i newSucc
+          return i
+        else do
           (newSucc, newMsg) <- runNode i (arvyTransmit i msg)
-          setSuccessor i (Just newSucc)
+          setSuccessor i newSucc
           output $ Just $ RequestTravel i successor (show newMsg)
           send newMsg successor
-        Nothing -> do
-          newSucc <- runNode i (arvyReceive i msg)
-          setSuccessor i (Just newSucc)
-          return i
 
       -- | Convenience function for getting the successor to a node by reading from the tree array
-      getSuccessor :: Node -> Sem r' (Maybe Node)
+      getSuccessor :: Node -> Sem r' Node
       getSuccessor i = sendM $ readArray tree i
 
       -- | Convenience function for setting the successor to a node by writing to the tree array
-      setSuccessor :: Node -> Maybe Node -> Sem r' ()
+      setSuccessor :: Node -> Node -> Sem r' ()
       setSuccessor i newSucc = do
         sendM $ writeArray tree i newSucc
         output $ Just $ SuccessorChange i newSucc

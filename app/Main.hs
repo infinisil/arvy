@@ -42,7 +42,7 @@ main = forM_ params $ \par -> runM
   $ runParams 0 par
   $ evaluation
   where
-    evaluation :: NodeCount -> GraphWeights -> IOArray Int (Maybe Int) -> Eval ArvyEvent ((Int, Request (Sum Int)), Double)
+    evaluation :: NodeCount -> GraphWeights -> IOUArray Node Node -> Eval ArvyEvent ((Int, Request (Sum Int)), Double)
     evaluation n w t = requestHops -- Get requests while counting their hops
       >>> enumerate -- Enumerate all requests
       >>> everyNth 100 -- Only process every 100th one

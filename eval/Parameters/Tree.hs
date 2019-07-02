@@ -7,14 +7,14 @@ import           Polysemy
 
 data InitialTreeParameter r = InitialTreeParameter
   { initialTreeName :: String
-  , initialTreeGet  :: Int -> GraphWeights -> Sem r (Array Int (Maybe Int))
+  , initialTreeGet  :: Int -> GraphWeights -> Sem r RootedTree
   }
 
 ring :: InitialTreeParameter r
 ring = InitialTreeParameter
   { initialTreeName = "ring"
   , initialTreeGet = \n _ ->
-      return (listArray (0, n - 1) (Nothing : fmap Just [0..]))
+      return (listArray (0, n - 1) (0 : [0..]))
   }
 
 
@@ -28,9 +28,9 @@ semiCircles = InitialTreeParameter
   where
     tree :: NodeCount -> RootedTree
     tree n = array (0, n - 1)
-        ( [ (i, Just (i + 1)) | i <- [0 .. h - 1] ]
-        ++ [ (h, Nothing) ]
-        ++ [ (i, Just (i - 1)) | i <- [h + 1 .. n - 1] ] )
+        ( [ (i, (i + 1)) | i <- [0 .. h - 1] ]
+        ++ [ (h, h) ]
+        ++ [ (i, (i - 1)) | i <- [h + 1 .. n - 1] ] )
       where
         h = n `div` 2
 
@@ -40,11 +40,11 @@ mst :: InitialTreeParameter r
 mst = InitialTreeParameter
   { initialTreeName = "mst"
   , initialTreeGet = \n weights ->
-      return $ array (0, n - 1) ((0, Nothing) : fmap edgeToElem (mstEdges n weights))
+      return $ array (0, n - 1) ((0, 0) : fmap edgeToElem (mstEdges n weights))
   }
   where
-    edgeToElem :: Edge -> (Node, Maybe Node)
-    edgeToElem (x, y) = (y, Just x)
+    edgeToElem :: Edge -> (Node, Node)
+    edgeToElem (x, y) = (y, x)
 
 type MSTEntry = H.Entry Double Edge
 
