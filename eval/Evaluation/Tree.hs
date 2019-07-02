@@ -41,12 +41,15 @@ avgTreeStretch n weights tree = sum [ summedTreeStretch root | root <- [0 .. n -
       bidirEdge (_, Nothing) = IntMap.empty
       bidirEdge (a, Just b) = IntMap.singleton a (IntSet.singleton b) `IntMap.union` IntMap.singleton b (IntSet.singleton a)
 
+  adjacent :: Node -> IntSet
+  adjacent node = IntMap.findWithDefault (error "No such node, inconsistent rooted tree") node graph
+
   -- | Sums up all tree stretches from the given 'Node' to all others. Complexity /O(n)/
   summedTreeStretch :: Node -> Double
-  summedTreeStretch root = go root (IntMap.findWithDefault undefined root graph) 0 where
+  summedTreeStretch root = go root (adjacent root) 0 where
     go :: Node -> IntSet -> Double -> Double
     go parent children baseWeight = summed where
       summed = IntSet.foldl' onChildren (if root == parent then baseWeight else baseWeight / weights ! (root, parent)) children
       onChildren acc child = acc + go child superchildren (baseWeight + weight) where
         weight = weights ! (parent, child)
-        superchildren = IntSet.delete parent $ IntMap.findWithDefault undefined child graph
+        superchildren = IntSet.delete parent $ adjacent child
