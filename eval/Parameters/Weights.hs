@@ -4,6 +4,7 @@
 module Parameters.Weights
   ( WeightsParameter(..)
   , ring
+  , unitEuclidian
   , barabasiAlbert
   , ErdosProb(..)
   , erdosRenyi
@@ -29,6 +30,8 @@ import qualified Data.IntMultiSet as IntMultiSet
 import Data.Random.Distribution.Uniform
 import Data.Array.MArray
 import Data.Array.ST
+import Data.Array.Unboxed
+import qualified Data.Array as A
 
 
 data WeightsParameter r = WeightsParameter
@@ -71,6 +74,26 @@ ring = WeightsParameter
   , weightsGet = \n ->
       return $ shortestPathWeights n $ GA.symmetricClosure $ GA.circuit [0..n-1]
   }
+
+unitEuclidian :: Member RandomFu r => Int -> WeightsParameter r
+unitEuclidian dim = WeightsParameter
+  { weightsName = "Euclidian distances for uniformly random points in a " ++ show dim ++ "-dimensional hypercube"
+  , weightsGet = \n -> do
+      points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
+      return $ array ((0, 0), (n - 1, n - 1))
+        [ ((u, v), distance (points ! u) (points ! v))
+        | u <- [0 .. n - 1]
+        , v <- [0 .. n - 1]
+        ]
+  } where
+  randomPoint :: Member RandomFu r => Sem r (UArray Int Double)
+  randomPoint = listArray (0, dim - 1) <$> replicateM dim (sampleRVar doubleStdUniform)
+  
+  distance :: UArray Int Double -> UArray Int Double -> Double
+  distance x y = sqrt $ sum
+    [ (x ! d - y ! d) ** 2
+    | d <- [0 .. dim - 1] ]
+
 
 data ErdosProb
   = ErdosProbNum Double
