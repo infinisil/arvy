@@ -57,6 +57,27 @@ average = Eval
   , final = get >>= \(v, c) -> output (v / fromIntegral c)
   }
 
+-- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+meanStddev :: forall m . Floating m => Eval m (m, m)
+meanStddev = Eval
+  { initialState = Nothing :: Maybe (Int, m, m)
+  , tracing = \v -> get >>= \case
+      Nothing -> put $ Just (1, v, 0)
+      Just (count, mean, m2) -> do
+        let newCount = count + 1
+            delta = v - mean
+            newMean = mean + delta / fromIntegral newCount
+            delta2 = v - newMean
+            newM2 = m2 + delta * delta2
+        put $ Just (newCount, newMean, newM2)
+  , final = get >>= \case
+      Nothing -> return ()
+      Just (1, _, _) -> return ()
+      Just (count, mean, m2) -> do
+        let stddev = sqrt $ m2 / fromIntegral count
+        output (mean, stddev)
+  }
+
 collectRequests :: forall a . Monoid a => (Node -> Node -> a) -> Eval ArvyEvent (Request a)
 collectRequests f = Eval
   { initialState = (0, mempty) :: (Int, a)
