@@ -1,4 +1,12 @@
-module Parameters.Requests where
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+module Parameters.Requests
+  ( RequestsParameter(..)
+  , worst
+  , random
+  , pareto
+  , interactive
+  ) where
 
 import qualified Data.Tree as T
 import Polysemy
@@ -9,6 +17,7 @@ import Utils
 import Data.Ord
 import Data.List
 import Data.Random.Distribution.Uniform
+import Data.Random
 
 data RequestsParameter r = RequestsParameter
   { requestsName :: String
@@ -36,6 +45,30 @@ random = RequestsParameter
   } where
   get :: Member RandomFu r => Int -> GraphWeights -> RootedTree -> Sem r Int
   get n _ _ = sampleRVar (integralUniform 0 (n - 1))
+
+
+lorenz :: Distribution Lorenz a => a -> RVar a
+lorenz a = rvar (Lorenz a)
+
+
+newtype Lorenz a = Lorenz a
+
+-- https://en.wikipedia.org/wiki/Pareto_distribution#Lorenz_curve_and_Gini_coefficient
+instance (Floating a, Distribution StdUniform a) => Distribution Lorenz a where
+  rvarT (Lorenz a) = do
+    u <- stdUniformT
+    return $ 1 - (1 - u) ** (1 - recip a)
+
+-- TODO: Use random mapping of nodes instead of always choosing the lower 20% the most
+pareto :: Member RandomFu r => RequestsParameter r
+pareto = RequestsParameter
+  { requestsName = "80-20 Pareto distribution (alpha = log 5 / log 4)"
+  , requestsGet = \n _ _ -> do
+      v <- sampleRVar (lorenz a)
+      return $ floor (v * fromIntegral n)
+  } where
+  a :: Double
+  a = logBase 4 5
 
 interactive :: Member (Lift IO) r => RequestsParameter r
 interactive = RequestsParameter
