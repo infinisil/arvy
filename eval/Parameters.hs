@@ -26,7 +26,8 @@ import Utils
 
 
 data Parameters r = Parameters
-  { nodeCount    :: Int
+  { randomSeed   :: Word32
+  , nodeCount    :: Int
   , requestCount :: Int
   , weights      :: WeightsParameter r
   , algorithm    :: AlgorithmParameter r
@@ -35,6 +36,7 @@ data Parameters r = Parameters
 
 instance Show (Parameters r) where
   show (Parameters { .. }) = "Parameters:\n" ++
+    "\tRandom seed: " ++ show randomSeed ++ "\n" ++
     "\tNode count: " ++ show nodeCount ++ "\n" ++
     "\tRequest count: " ++ show requestCount ++ "\n" ++
     "\tWeights: " ++ weightsName weights ++ "\n" ++
@@ -42,9 +44,10 @@ instance Show (Parameters r) where
     "\tInitial tree: " ++ initialTreeName (algorithmInitialTree algorithm) ++ "\n" ++
     "\tRequests: " ++ requestsName requests ++ "\n"
 
-runParams :: (Members '[Lift IO, Trace, Output res] r) => Word32 -> Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
-runParams seed params@Parameters
-  { nodeCount
+runParams :: (Members '[Lift IO, Trace, Output res] r) => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
+runParams params@Parameters
+  { randomSeed = seed
+  , nodeCount
   , weights = WeightsParameter { weightsGet }
   , requestCount
   , requests = RequestsParameter { requestsGet }

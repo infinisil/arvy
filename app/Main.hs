@@ -3,34 +3,33 @@
 
 module Main where
 
-import           Arvy.Algorithm.Collection
-
 import           Parameters
-import           Polysemy
-import           Polysemy.RandomFu
-import           Polysemy.Output
-import           Polysemy.Trace
-import Data.Monoid
-import Arvy.Local
-import Data.Array.IO
-import Data.Array.IArray
-import           Control.Category
-import           Control.Monad
-import qualified Debug.Trace as D
-import           Evaluation
-import           System.IO
 import qualified Parameters.Weights as Weights
 import qualified Parameters.Tree as Tree
 import qualified Parameters.Requests as Requests
 import qualified Parameters.Algorithm as Alg
+
+import           Evaluation
 import           Evaluation.Tree
-import Prelude hiding ((.), id)
+
+import           Polysemy
+import           Polysemy.RandomFu
+import           Polysemy.Output
+import           Polysemy.Trace
+import           Data.Monoid
+import           Data.Array.IArray
+import           Control.Category
+import           Control.Monad
+import qualified Debug.Trace as D
+import           System.IO
+import           Prelude hiding ((.), id)
 
 params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
 params =
   [ Parameters
-    { nodeCount = 1000
-    , requestCount = 100000
+    { randomSeed = 0
+    , nodeCount = 1000
+    , requestCount = 10000
     , weights = Weights.unitEuclidian 3
     , requests = Requests.pareto
     , algorithm = Alg.ivy Tree.mst
@@ -41,9 +40,10 @@ main :: IO ()
 main = forM_ params $ \par -> runM
   $ runTraceIO
   $ traceOutput resultShower
-  $ runParams 0 par
+  $ runParams par
   $ evaluation
   where
+
     evaluation n w t =
       collectRequests (\a b -> (Sum (1 :: Double), Sum (w ! (a, b)))) -- Get requests while counting their hops
       >>>
