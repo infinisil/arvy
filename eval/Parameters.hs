@@ -68,9 +68,11 @@ runParams seed params@Parameters
 
     let eval = evaluation nodeCount weights mutableTree
 
+    reqs <- requestsGet nodeCount weights
+
     trace $ "Running arvy.."
     runEval eval
-      $ runRequests @IO mutableTree (raise . requestsGet nodeCount weights) requestCount
+      $ runRequests @IO mutableTree (raise . reqs) requestCount
       $ runArvyLocal @IO @IOArray nodeCount weights mutableTree algorithm
 
 timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
