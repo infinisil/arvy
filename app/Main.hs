@@ -22,6 +22,7 @@ import           System.IO
 import qualified Parameters.Weights as Weights
 import qualified Parameters.Tree as Tree
 import qualified Parameters.Requests as Requests
+import qualified Parameters.Algorithm as Alg
 import           Evaluation.Tree
 import Prelude hiding ((.), id)
 
@@ -29,11 +30,10 @@ params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
 params =
   [ Parameters
     { nodeCount = 1000
-    , requestCount = 10000
-    , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
-    , initialTree = Tree.mst
-    , requests = Requests.random
-    , algorithm = ivy
+    , requestCount = 100000
+    , weights = Weights.unitEuclidian 3
+    , requests = Requests.pareto
+    , algorithm = Alg.ivy Tree.mst
     }
   ]
 

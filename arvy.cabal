@@ -50,6 +50,7 @@ library arvy-eval
                      , Parameters.Weights
                      , Parameters.Tree
                      , Parameters.Requests
+                     , Parameters.Algorithm
                      , Evaluation
                      , Evaluation.Tree
                      , Utils

@@ -6,11 +6,11 @@
 
 module Parameters where
 
-import Arvy.Algorithm
 import Arvy.Local
 import Parameters.Tree
 import Parameters.Requests
 import Parameters.Weights
+import Parameters.Algorithm
 import Evaluation
 
 import Polysemy
@@ -27,35 +27,35 @@ import Utils
 
 data Parameters r = Parameters
   { nodeCount    :: Int
-  , weights      :: WeightsParameter r
-  , initialTree  :: InitialTreeParameter r
   , requestCount :: Int
+  , weights      :: WeightsParameter r
+  , algorithm    :: AlgorithmParameter r
   , requests     :: RequestsParameter r
-  , algorithm    :: Arvy r
   }
 
 instance Show (Parameters r) where
   show (Parameters { .. }) = "Parameters:\n" ++
     "\tNode count: " ++ show nodeCount ++ "\n" ++
-    "\tWeights: " ++ weightsName weights ++ "\n" ++
-    "\tInitial tree: " ++ initialTreeName initialTree ++ "\n" ++
     "\tRequest count: " ++ show requestCount ++ "\n" ++
-    "\tRequests: " ++ requestsName requests ++ "\n" ++
-    "\tAlgorithm: " ++ "TODO\n"
+    "\tWeights: " ++ weightsName weights ++ "\n" ++
+    "\tAlgorithm: " ++ algorithmName algorithm ++ "\n" ++
+    "\tInitial tree: " ++ initialTreeName (algorithmInitialTree algorithm) ++ "\n" ++
+    "\tRequests: " ++ requestsName requests ++ "\n"
 
 runParams :: (Members '[Lift IO, Trace, Output res] r) => Word32 -> Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
 runParams seed params@Parameters
   { nodeCount
   , weights = WeightsParameter { weightsGet }
-  , initialTree = InitialTreeParameter { initialTreeGet }
   , requestCount
   , requests = RequestsParameter { requestsGet }
-  , algorithm = algorithm
+  , algorithm = AlgorithmParameter { algorithmGet, algorithmInitialTree = InitialTreeParameter { initialTreeGet } }
   } evaluation = do
   gen <- sendM $ initialize (V.singleton seed)
   runRandomSource' gen $ do
     trace $ "Random seed: " ++ show seed
     trace $ show params
+
+    let algorithm = algorithmGet nodeCount
 
     -- TODO: Cache (and paralellize) these computations to make this faster
 
