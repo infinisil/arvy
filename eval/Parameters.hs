@@ -61,13 +61,13 @@ runParams params@Parameters
   where
   go :: forall s . InitialTreeParameter s (RandomFu ': r) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) ()
   go InitialTreeParameter { initialTreeGet } algorithm = do
-    trace $ "Random seed: " ++ show seed
     trace $ show params
-
+    
     -- TODO: Cache (and paralellize) these computations to make this faster
 
     trace $ "Generating weights.."
     !weights <- weightsGet nodeCount
+    
 
     trace $ "Generating initial tree.."
     !(tree, states) <- initialTreeGet nodeCount weights
@@ -75,7 +75,6 @@ runParams params@Parameters
     mutableStates <- sendM (thaw states :: IO (IOArray Int s))
 
     let eval = evaluation nodeCount weights mutableTree
-
     reqs <- requestsGet nodeCount weights
 
     trace $ "Running arvy.."
@@ -88,18 +87,3 @@ timestampTraces = interpret \case
   Trace v -> do
     time <- sendM getCurrentTime
     trace $ "[" ++ show time ++ "] " ++ v
-
---measureRatio :: Member Trace r => GraphWeights -> GraphWeights -> Sem (Output ArvyEvent ': r) a -> Sem (Output ArvyEvent ': Output Double ': r) (Int, a)
---measureRatio weights shortestPaths = fmap (\((_, n), a) -> (n, a)) . runState (0.0 :: Double, 0) . reinterpret3 \case
---  Output event -> do
---    output event
---    case event of
---      RequestMade _ -> do
---        modify @(Double, Int) $ \(_, n) -> (0.0, n)
---      RequestTravel a b _ -> do
---        modify @(Double, Int) $ \(d, n) -> (d + weights ! (a, b), n)
---      RequestGranted (GottenFrom i src) -> do
---        (pathLength, _) <- get @(Double, Int)
---        modify @(Double, Int) $ \(d, n) -> (d, n + 1)
---        output $ pathLength / shortestPaths ! (i, src)
---      _ -> return ()
