@@ -59,7 +59,6 @@ instance (Floating a, Distribution StdUniform a) => Distribution Lorenz a where
     u <- stdUniformT
     return $ 1 - (1 - u) ** (1 - recip a)
 
--- TODO: Use random mapping of nodes instead of always choosing the lower 20% the most
 pareto :: forall r . Member RandomFu r => RequestsParameter r
 pareto = RequestsParameter
   { requestsName = "80-20 Pareto distribution (alpha = log 5 / log 4)"

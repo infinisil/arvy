@@ -80,33 +80,25 @@ Run an Arvy algorithm locally, taking requests as input and outputting the event
 - @r'@ is the effect stack of the result, which in addition to having all the effects of @r@ also takes requests as 'Input' and 'Output's 'ArvyEvent's
 -}
 runArvyLocal
-  :: forall m sarr tarr r r'
+  :: forall m s sarr tarr r r'
   . ( Members '[ Lift m, Trace ] r
       -- r represents the input effects, the one the Arvy algorithm needs. r' represents the output effects, which are the ones the algorithm needs plus it taking inputs and sending outputs. Lift and Trace are not included in these additional effects because the algorithm might need those itself.
     , r' ~ (Input (Maybe Node) ': Output (Maybe ArvyEvent) ': r)
       -- Quantified constraint because we need a mutable array to store the state of the nodes of /any/ possible algorithm, and every algorithm can choose its own state type
-    , forall s . MArray sarr s m
+    , MArray sarr s m
     , MArray tarr Node m )
-  => NodeCount
-  -> GraphWeights -- ^ The graph weights, used for giving nodes access to their local weights
+  => GraphWeights -- ^ The graph weights, used for giving nodes access to their local weights
   -> tarr Node Node -- ^ The (initial) spanning tree, which this function modifies as requests are coming in. This is to allow request generators access to it from the outside.
-  -> Arvy r -- ^ The Arvy algorithm to run
+  -> sarr Node s
+  -> Arvy s r -- ^ The Arvy algorithm to run
   -> Sem r' ()
-runArvyLocal n weights tree (Arvy inst) = runArvyLocal' inst where
-  runArvyLocal' :: forall msg s . ArvyInst msg s r -> Sem r' ()
-  runArvyLocal' ArvyInst { .. } = do
-    states <- traverse initiateState [0 .. n - 1]
-    stateArray <- sendM $ newListArray (0, n - 1) states
-    go stateArray
-    
-    where
-
-    initiateState :: Node -> Sem r' s
-    initiateState i = raise . raise $ runLocalWeights weights i (arvyNodeInit i)
+runArvyLocal weights tree stateArray (Arvy inst) = runArvyLocal' inst where
+  runArvyLocal' :: forall msg . ArvyInst msg s r -> Sem r' ()
+  runArvyLocal' ArvyInst { .. } = go where
 
     -- | The main loop which repeatedly takes a request as input and processes it on the current state
-    go :: sarr Node s -> Sem r' ()
-    go state = input >>= \case
+    go :: Sem r' ()
+    go = input >>= \case
       Nothing -> output Nothing
       Just i -> do
         output $ Just $ RequestMade i
@@ -119,7 +111,7 @@ runArvyLocal n weights tree (Arvy inst) = runArvyLocal' inst where
             output $ Just $ RequestTravel i successor (show msg)
             root <- send msg successor
             output $ Just $ RequestGranted i root Received
-        go state
+        go
         
       where
 
@@ -149,9 +141,9 @@ runArvyLocal n weights tree (Arvy inst) = runArvyLocal' inst where
       -- | Interprets the state in a node as array operations to the state array at that nodes index
       runNodeState :: Node -> Sem (State s ': r) a -> Sem r' a
       runNodeState i = raise . reinterpret \case
-        Get -> sendM $ readArray state i
+        Get -> sendM $ readArray stateArray i
         Put s -> do
-          sendM $ writeArray state i s
+          sendM $ writeArray stateArray i s
           output $ Just $ StateChange i (show s)
 
       -- | Runs a node with its local effects

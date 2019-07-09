@@ -4,36 +4,36 @@ import           Arvy.Algorithm
 import qualified Arvy.Algorithm.Collection as Arvy
 import qualified Parameters.Tree           as Tree
 
-data AlgorithmParameter r = AlgorithmParameter
+data AlgorithmParameter r = forall s . AlgorithmParameter
   { algorithmName        :: String
-  , algorithmInitialTree :: Tree.InitialTreeParameter r
-  , algorithmGet         :: Int -> Arvy r
+  , algorithmInitialTree :: Tree.InitialTreeParameter s r
+  , algorithmGet         :: Arvy s r
   }
 
 arrow :: AlgorithmParameter r
 arrow = AlgorithmParameter
   { algorithmName = "Arrow"
   , algorithmInitialTree = Tree.mst
-  , algorithmGet = \_ -> Arvy.arrow
+  , algorithmGet = Arvy.arrow
   }
 
-ivy :: Tree.InitialTreeParameter r -> AlgorithmParameter r
+ivy :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 ivy tree = AlgorithmParameter
   { algorithmName = "Ivy"
   , algorithmInitialTree = tree
-  , algorithmGet = \_ -> Arvy.ivy
+  , algorithmGet = Arvy.ivy
   }
 
 constantRing :: AlgorithmParameter r
 constantRing = AlgorithmParameter
   { algorithmName = "Constant Ring"
   , algorithmInitialTree = Tree.semiCircles
-  , algorithmGet = \n -> Arvy.constantRing (n `div` 2)
+  , algorithmGet = Arvy.constantRing
   }
 
-half :: Tree.InitialTreeParameter r -> AlgorithmParameter r
+half :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 half tree = AlgorithmParameter
   { algorithmName = "half node"
   , algorithmInitialTree = tree
-  , algorithmGet = \_ -> Arvy.half
+  , algorithmGet = Arvy.half
   }

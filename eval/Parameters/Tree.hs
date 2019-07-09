@@ -1,29 +1,33 @@
 module Parameters.Tree where
 
+import           Arvy.Algorithm.Collection
 import           Arvy.Local
 import           Data.Array.Unboxed
-import qualified Data.Heap          as H
+import qualified Data.Heap                 as H
 import           Polysemy
 
-data InitialTreeParameter r = InitialTreeParameter
+data InitialTreeParameter s r = InitialTreeParameter
   { initialTreeName :: String
-  , initialTreeGet  :: Int -> GraphWeights -> Sem r RootedTree
+  , initialTreeGet  :: Int -> GraphWeights -> Sem r (RootedTree, Array Node s)
   }
 
-ring :: InitialTreeParameter r
+ring :: InitialTreeParameter () r
 ring = InitialTreeParameter
   { initialTreeName = "ring"
   , initialTreeGet = \n _ ->
-      return (listArray (0, n - 1) (0 : [0..]))
+      return ( listArray (0, n - 1) (0 : [0..])
+             , listArray (0, n - 1) (replicate n ()))
   }
+
 
 
 
 -- | Constructs a ring-like tree where the root is in the middle
-semiCircles :: InitialTreeParameter r
+semiCircles :: InitialTreeParameter RingNodeState r
 semiCircles = InitialTreeParameter
   { initialTreeName = "semi circles"
-  , initialTreeGet = \n _ -> return (tree n)
+  , initialTreeGet = \n _ -> return ( tree n
+                                    , listArray (0, n - 1) (replicate n SemiNode) // [ (n `div` 2, BridgeNode) ] )
   }
   where
     tree :: NodeCount -> RootedTree
@@ -36,11 +40,12 @@ semiCircles = InitialTreeParameter
 
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
-mst :: InitialTreeParameter r
+mst :: InitialTreeParameter () r
 mst = InitialTreeParameter
   { initialTreeName = "mst"
   , initialTreeGet = \n weights ->
-      return $ array (0, n - 1) ((0, 0) : fmap edgeToElem (mstEdges n weights))
+      return ( array (0, n - 1) ((0, 0) : fmap edgeToElem (mstEdges n weights))
+             , listArray (0, n - 1) (replicate n ()) )
   }
   where
     edgeToElem :: Edge -> (Node, Node)

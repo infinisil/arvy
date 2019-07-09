@@ -7,6 +7,7 @@
 module Parameters where
 
 import Arvy.Local
+import Arvy.Algorithm
 import Parameters.Tree
 import Parameters.Requests
 import Parameters.Weights
@@ -35,30 +36,33 @@ data Parameters r = Parameters
   }
 
 instance Show (Parameters r) where
-  show (Parameters { .. }) = "Parameters:\n" ++
+  show (Parameters { algorithm = AlgorithmParameter { algorithmName, algorithmInitialTree }, .. }) = "Parameters:\n" ++
     "\tRandom seed: " ++ show randomSeed ++ "\n" ++
     "\tNode count: " ++ show nodeCount ++ "\n" ++
     "\tRequest count: " ++ show requestCount ++ "\n" ++
     "\tWeights: " ++ weightsName weights ++ "\n" ++
-    "\tAlgorithm: " ++ algorithmName algorithm ++ "\n" ++
-    "\tInitial tree: " ++ initialTreeName (algorithmInitialTree algorithm) ++ "\n" ++
+    "\tAlgorithm: " ++ algorithmName ++ "\n" ++
+    "\tInitial tree: " ++ initialTreeName algorithmInitialTree ++ "\n" ++
     "\tRequests: " ++ requestsName requests ++ "\n"
 
-runParams :: (Members '[Lift IO, Trace, Output res] r) => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
+runParams :: forall res r . (Members '[Lift IO, Trace, Output res] r) => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> IOUArray Int Int -> Eval ArvyEvent res) -> Sem r ()
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
   , weights = WeightsParameter { weightsGet }
   , requestCount
   , requests = RequestsParameter { requestsGet }
-  , algorithm = AlgorithmParameter { algorithmGet, algorithmInitialTree = InitialTreeParameter { initialTreeGet } }
+  , algorithm = AlgorithmParameter { algorithmGet, algorithmInitialTree }
   } evaluation = do
   gen <- sendM $ initialize (V.singleton seed)
-  runRandomSource' gen $ do
+  runRandomSource' gen
+    $ go algorithmInitialTree algorithmGet
+
+  where
+  go :: forall s . InitialTreeParameter s (RandomFu ': r) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) ()
+  go InitialTreeParameter { initialTreeGet } algorithm = do
     trace $ "Random seed: " ++ show seed
     trace $ show params
-
-    let algorithm = algorithmGet nodeCount
 
     -- TODO: Cache (and paralellize) these computations to make this faster
 
@@ -66,8 +70,9 @@ runParams params@Parameters
     !weights <- weightsGet nodeCount
 
     trace $ "Generating initial tree.."
-    !tree <- initialTreeGet nodeCount weights
+    !(tree, states) <- initialTreeGet nodeCount weights
     mutableTree <- sendM (thaw tree :: IO (IOUArray Int Int))
+    mutableStates <- sendM (thaw states :: IO (IOArray Int s))
 
     let eval = evaluation nodeCount weights mutableTree
 
@@ -76,7 +81,7 @@ runParams params@Parameters
     trace $ "Running arvy.."
     runEval eval
       $ runRequests @IO mutableTree (raise . reqs) requestCount
-      $ runArvyLocal @IO @IOArray nodeCount weights mutableTree algorithm
+      $ runArvyLocal @IO @s @IOArray weights mutableTree mutableStates algorithm
 
 timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
 timestampTraces = interpret \case

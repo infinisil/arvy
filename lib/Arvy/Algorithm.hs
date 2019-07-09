@@ -30,9 +30,7 @@ All methods have access to the node's index they run in and the weights to all n
 The types @i@ and @ir@ are used to ensure the algorithms correctness, in that they are chosen such that you can only select a new successor from already traveled through nodes.
 -}
 data ArvyInst msg s r = (forall i . Show i => Show (msg i), Show s) => ArvyInst
-  { arvyNodeInit :: forall i . NodeIndex i => i -> Sem (LocalWeights i ': r) s
-  -- ^ How to compute the initial state in nodes
-  , arvyInitiate :: forall i . NodeIndex i => i -> Sem (LocalWeights i ': State s ': r) (msg i)
+  { arvyInitiate :: forall i . NodeIndex i => i -> Sem (LocalWeights i ': State s ': r) (msg i)
   -- ^ Initial request message contents
   , arvyTransmit :: forall ir i . Forwardable ir i => i -> msg ir -> Sem (LocalWeights i ': State s ': r) (ir, msg i)
   -- ^ What to do when a message passes through this node, what new successor to choose and what message to forward
@@ -43,10 +41,10 @@ data ArvyInst msg s r = (forall i . Show i => Show (msg i), Show s) => ArvyInst
   }
 
 -- | An existential wrapper for an Arvy algorithm. This allows us to have the same type for algorithms that use different @msg@ and @s@ types, and enforcing our Arvy runners implementation to be agnostic to these types. With this we can even loop through a list of @['Arvy']@ values, for e.g. testing each of them.
-data Arvy r = forall msg s . Arvy (ArvyInst msg s r)
+data Arvy s r = forall msg . Arvy (ArvyInst msg s r)
 
 -- | Convenience function for flipping the type argument order of 'Arvy' from @r@, @msg@, @s@ to @msg@, @s@, @r@
-arvy :: ArvyInst msg s r -> Arvy r
+arvy :: ArvyInst msg s r -> Arvy s r
 arvy = Arvy
 
 -- | A class for abstract node indices that can be converted to an 'Int'.
@@ -82,14 +80,13 @@ newtype SimpleMsg i = SimpleMsg (NonNull (Seq i)) deriving Show
 
 -- TODO: Use mono-traversable for safety and speedup
 -- | A function for constructing an Arvy algorithm with just a function that selects the node to connect to out of a list of available ones.
-simpleArvy :: (forall ir seq . (NodeIndex ir, IsSequence seq, Element seq ~ ir) => NonNull seq -> Sem r ir) -> Arvy r
-simpleArvy selector = arvy @SimpleMsg @() ArvyInst
-  { arvyNodeInit = \_ -> return ()
-  , arvyInitiate = \i -> return $ SimpleMsg $ singleton i
+simpleArvy :: forall s r . Show s => (forall ir seq . (NodeIndex ir, IsSequence seq, Element seq ~ ir) => NonNull seq -> Sem (State s ': r) ir) -> Arvy s r
+simpleArvy selector = arvy @SimpleMsg @s ArvyInst
+  { arvyInitiate = \i -> return $ SimpleMsg $ singleton i
   , arvyTransmit = \i (SimpleMsg msg) -> do
-      s <- raise . raise $ selector msg
+      s <- raise $ selector msg
       return (s, SimpleMsg $ i `cons` mapNonNull forward msg)
   , arvyReceive = \_ (SimpleMsg msg) ->
-      raise . raise $ selector msg
+      raise $ selector msg
   }
 
