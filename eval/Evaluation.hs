@@ -15,40 +15,92 @@ import Polysemy
 import Control.Category
 import Data.Bifunctor
 import Polysemy.Output
+import Polysemy.Input
+import Polysemy.Trace
 import GHC.Generics
 import Data.Monoid
 import Data.Array.IArray
 import Arvy.Algorithm
 import Arvy.Local
 import Utils
+import System.IO
 
--- TODO: Clean up, probably using pipes or conduit
+{- |
+How about just making every evaluation take ArvyEvent inputs and outputting some custom type, or resulting in some final value. Have a verbosity flag for controlling whether they output something?
 
--- | An evaluation that takes an input i and computes some outputs o
-data Eval i o = forall s . Eval
-  { initialState :: s
-  , tracing :: forall r . Members '[State s, Output o, Lift IO] r => i -> Sem r ()
-  , final :: forall r . Members '[State s, Output o, Lift IO] r => Sem r ()
-  }
+-}
 
-{-# INLINE runEval #-}
-runEval :: forall r i o x . (Members '[Lift IO, Output o] r) => Eval i o -> Sem (Output (Maybe i) ': r) x -> Sem r x
-runEval Eval { .. } = fmap snd . runState initialState . reinterpret \case
-  Output mi -> do
-    case mi of
-      Just i -> tracing i
-      Nothing -> final
+data Eval r = forall s . Eval s (forall a . Sem (Output (Maybe ArvyEvent) ': r) a -> Sem (State s ': r) a)
 
-aggregate :: forall m . Monoid m => Eval m m
-aggregate = Eval
-  { initialState = mempty :: m
-  , tracing = \v -> do
-      modify (<>v)
-  , final = get >>= output
-  }
+runEval :: Eval r -> Sem (Output (Maybe ArvyEvent) ': r) a -> Sem r a
+runEval (Eval s f) = fmap snd . runState s . f
 
-mapping :: (a -> b) -> Eval a b
-mapping f = fmap f id
+instance Semigroup (Eval r) where
+  Eval s1 f1 <> Eval s2 f2 = Eval (s1, s2) $ \sem -> do
+    mapStateFirst (f1 sem)
+    mapStateSecond (f2 sem)
+
+instance Monoid (Eval r) where
+  mempty = Eval () $ reinterpret \case
+    Output _ -> return ()
+
+debug :: Member Trace r => Eval r
+debug = statelessEval $ interpret \case
+  Output (Just event) -> trace $ show event
+  Output Nothing -> return ()
+
+statelessEval :: (forall a . Sem (Output (Maybe ArvyEvent) ': r) a -> Sem r a) -> Eval r
+statelessEval f = Eval () (raise . f)
+
+
+data Request a = Request
+  { requestFrom :: Int
+  , requestRoot :: Int
+  , path :: a
+  } deriving (Functor, Show, Generic)
+  
+collectRequests :: forall a r x . Monoid a => (Node -> Node -> a) -> Sem (Output (Maybe ArvyEvent) ': r) x -> Sem (Output (Maybe (Request a)) ': r) x
+collectRequests f = fmap snd . runState (0 :: Int, mempty :: a) . reinterpret2 \case
+  Output Nothing -> output Nothing
+  Output (Just (RequestMade requestFrom)) -> put (requestFrom, mempty)
+  Output (Just (RequestGranted _ root _)) -> do
+    (requestFrom, as) <- get
+    output $ Just $ Request requestFrom root as
+  Output (Just (RequestTravel x y _)) -> modify $ second (f x y <>)
+  Output _ -> return ()
+
+outputting :: Member (Output (Maybe ArvyEvent)) r => Sem r ()
+outputting = do
+  output $ Just $ RequestMade 0
+  output $ Just $ RequestTravel 0 1 ""
+  output $ Just $ RequestTravel 1 2 ""
+  output $ Just $ RequestGranted 0 2 Local
+  output Nothing
+
+testit :: IO ()
+testit = runM $ runEval (hopCount (\v -> sendM $ print v)) outputting
+  
+hopCount :: (Maybe Int -> Sem r ()) -> Eval r
+hopCount f = Eval () $ reinterpret (\case
+  Output (Just (Request { path = Sum v })) -> raise (f (Just v))
+  Output Nothing -> raise (f Nothing))
+  . collectRequests (\_ _ -> Sum (1 :: Int))
+
+averaging :: forall x n r . (Fractional n, Show n, Monoid x, Member Trace r) => (Node -> Node -> x) -> (Request x -> n) -> Eval r
+averaging p f = Eval (0 :: n, 0 :: Int) $ reinterpret
+  \case
+    Output (Just req) -> modify (bimap (+ f req) (+1))
+    Output Nothing -> do
+      (values, count) <- get
+      trace $ show $ values / fromIntegral count
+  . collectRequests p
+
+
+eventToValue :: (ArvyEvent -> x) -> Sem (Output (Maybe ArvyEvent) ': r) a -> Sem (Output (Maybe x) ': r) a
+eventToValue f = reinterpret \case
+  Output Nothing -> output Nothing
+  Output (Just event) -> output $ Just (f event)
+{-
 
 average :: forall m . Fractional m => Eval m m
 average = Eval
@@ -78,18 +130,6 @@ meanStddev = Eval
         output (mean, stddev)
   }
 
-collectRequests :: forall a . Monoid a => (Node -> Node -> a) -> Eval ArvyEvent (Request a)
-collectRequests f = Eval
-  { initialState = (0, mempty) :: (Int, a)
-  , tracing = \event -> case event of
-      RequestMade requestFrom -> put $ (requestFrom, mempty)
-      RequestGranted _ root _ -> do
-        (requestFrom, as) <- get
-        output $ Request requestFrom root as
-      RequestTravel x y _ -> modify $ second (f x y <>)
-      _ -> return ()
-  , final = return ()
-  }
 
 evalFilter :: (b -> Bool) -> Eval b b
 evalFilter f = Eval
@@ -104,11 +144,6 @@ ratio :: GraphWeights -> Eval ArvyEvent Double
 ratio weights = (\Request { path = Sum path, requestFrom = a, requestRoot = b } -> path / weights ! (a, b))
   <$> (collectRequests (\a b -> Sum (weights ! (a, b))) >>> evalFilter (\Request { .. } -> requestFrom /= requestRoot))
 
-data Request a = Request
-  { requestFrom :: Int
-  , requestRoot :: Int
-  , path :: a
-  } deriving (Functor, Show, Generic)
 
 requestHops :: Eval ArvyEvent (Request (Sum Int))
 requestHops = collectRequests (\_ _ -> Sum 1)
@@ -212,4 +247,5 @@ measureRatio weights shortestPaths = fmap (\((_, n), a) -> (n, a)) . runState (0
         output $ pathLength / shortestPaths ! (i, src)
       _ -> return ()
 
+-}
 -}

@@ -34,12 +34,11 @@ aimap f arr = array (bounds arr) $ (\(i, e) -> (i, f i e)) <$> assocs arr
 -- TODO: Use lenses
 -- | Transforms a stateful computation over @a@ to a computation over @s@ that holds a value of @a@.
 mapState
-  :: Member (State s) r
-  => (s -> a) -- ^ How to get an @a@ from @s@
-  -> (s -> a -> s) -- ^ How to set the @a@ part in an @s@, 
+  :: (s -> a) -- ^ How to get an @a@ from @s@
+  -> (s -> a -> s) -- ^ How to set the @a@ part in an @s@,
   -> Sem (State a ': r) x
-  -> Sem r x
-mapState getter setter = interpret \case
+  -> Sem (State s ': r) x
+mapState getter setter = reinterpret \case
   Get -> gets getter
   Put v -> do
     old <- get
@@ -47,16 +46,14 @@ mapState getter setter = interpret \case
 
 -- | Transforms a stateful computation over @a@ to a computation over @(a, b)
 mapStateFirst
-  :: Member (State (a, b)) r
-  => Sem (State a ': r) x
-  -> Sem r x
+  :: Sem (State a ': r) x
+  -> Sem (State (a, b) ': r) x
 mapStateFirst = mapState fst (flip $ first . const)
 
 -- | Transforms a stateful computation over @b@ to a computation over @(a, b)
 mapStateSecond
-  :: Member (State (a, b)) r
-  => Sem (State b ': r) x
-  -> Sem r x
+  :: Sem (State b ': r) x
+  -> Sem (State (a, b) ': r) x
 mapStateSecond = mapState snd (flip $ second . const)
 
 
@@ -90,7 +87,7 @@ treeStructure tree = T.unfoldTree predecessors root where
   invert []                   = (Nothing, M.empty)
   invert ((i, pointer):rest) = if i == pointer
     then ( case root' of
-             
+
              Nothing -> Just i
              Just i' -> error $ "Tree has multiple roots at both node " ++ show i ++ " and " ++ show i'
          , rest' )
