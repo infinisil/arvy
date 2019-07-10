@@ -27,7 +27,7 @@ semiCircles :: InitialTreeParameter RingNodeState r
 semiCircles = InitialTreeParameter
   { initialTreeName = "semi circles"
   , initialTreeGet = \n _ -> return ( tree n
-                                    , listArray (0, n - 1) (replicate n SemiNode) // [ (n `div` 2, BridgeNode) ] )
+                                    , listArray (0, n - 1) (replicate n SemiNode) // [ (n `div` 2 - 1, BridgeNode) ] )
   }
   where
     tree :: NodeCount -> RootedTree
