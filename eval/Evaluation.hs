@@ -16,20 +16,150 @@ import Control.Category
 import Data.Bifunctor
 import Polysemy.Output
 import Polysemy.Input
+import Data.Functor
 import Polysemy.Trace
+import Polysemy.Reader
 import GHC.Generics
 import Data.Monoid
 import Data.Array.IArray
+import Data.Array.IO
+import Data.Array.MArray
 import Arvy.Algorithm
 import Arvy.Local
 import Utils
 import System.IO
 
+-- | Readonly data available to evaluations
+data Env arr = Env
+  { weights :: GraphWeights -- ^ The graph weights, will never change
+  , tree :: arr Node Node -- ^ The spanning tree, will change over time
+  }
+
+-- | A an evaluation function that takes some events i (or Nothing if no more events are coming) and outputs events o
+data Tracer i o = forall s . Tracer
+  { tracerInitialState :: s -- ^ The initial tracer state
+  , tracerFun :: forall arr m r . (MArray arr Node m, Members '[Reader (Env arr), Lift m, State s, Output o] r) => Maybe i -> Sem r ()
+  -- ^ What to do when an event occurs
+  }
+
+-- | 'Tracer' is a Category because the output of one tracer can be piped into another one
+instance Category Tracer where
+  id = Tracer () $ \case
+    Nothing -> return ()
+    Just event -> output event
+
+  Tracer s t . Tracer s' t' = Tracer (s, s') $ \event -> do
+    interpret
+      \case Output o -> mapStateFirst (t (Just o))
+      (mapStateSecond (t' event))
+    mapStateFirst (t Nothing)
+
+instance Functor (Tracer i) where
+  fmap f (Tracer s t) = Tracer s \event -> interpret
+    \case Output o -> output (f o)
+    (t event)
+
+-- | An 'Eval' is like a 'Tracer', but specific to 'ArvyEvent' inputs and the outputs get processed in some effect row @r@.
+data Eval r = forall s . Eval
+  { st :: s
+  , evalFun :: Maybe ArvyEvent -> Sem (State s ': r) ()
+  }
+
+runEval :: Eval r -> Sem (Output (Maybe ArvyEvent) ': r) () -> Sem r ()
+runEval (Eval s f) = fmap snd . runState s . reinterpret \case
+  Output event -> f event
+
+instance Semigroup (Eval r) where
+  Eval s f <> Eval s' f' = Eval (s, s') $ \event -> do
+    mapStateFirst' $ f event
+    mapStateSecond' $ f' event
+
+instance Monoid (Eval r) where
+  mempty = Eval () $ \_ -> return ()
+
+-- | Function for coercing a 'Tracer' for 'ArvyEvent's into an 'Eval' with a function that acts upon the 'Tracer's outputs.
+runAs :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => Tracer ArvyEvent o -> (o -> Sem r ()) -> Eval r
+runAs (Tracer s t) f = Eval s $ \event -> do
+  interpret
+    \case Output o -> raise $ f o
+    (t event)
+  return ()
+
+summing :: forall n . Num n => Tracer n n
+summing = Tracer (0 :: n) $ \case
+  Nothing -> return ()
+  Just value -> do
+    total <- gets (+value)
+    put total
+    output total
+
+test :: Tracer ArvyEvent Int
+test = Tracer () $ \case
+  Nothing -> output 1
+  Just event -> output 2
+
+testcomb :: Tracer ArvyEvent Int
+testcomb = summing . test
+
+testrunners :: (MArray arr Node m, Members '[Trace, Reader (Env arr), Lift m] r) => Eval r
+testrunners = mconcat
+  [ (summing . test) `runAs` (\v -> trace (show v))
+  , hopCount `runAs` (\hops -> trace $ "Hops: " ++ show hops)
+  ]
+
+hopCount :: Tracer ArvyEvent Int
+hopCount = requests (\_ _ -> Sum 1) <&> getSum . path
+
+
+outputting :: Member (Output (Maybe ArvyEvent)) r => Sem r ()
+outputting = do
+  output $ Just $ RequestMade 0
+  output $ Just $ RequestTravel 0 1 ""
+  output $ Just $ RequestTravel 1 2 ""
+  output $ Just $ RequestGranted 0 2 Arvy.Local.Local
+  output Nothing
+
+testit :: IO ()
+testit = do
+  let weights = listArray ((0, 0), (0, 0)) []
+  tree <- newArray (0, 0) 0 :: IO (IOArray Node Node)
+  runM $ runTraceIO $ runReader (Env weights tree) (runEval testrunners outputting)
+
+data Request a = Request
+  { requestFrom :: Int
+  , requestRoot :: Int
+  , path :: a
+  } deriving (Functor, Show, Generic)
+
+requests :: forall a . Monoid a => (Node -> Node -> a) -> Tracer ArvyEvent (Request a)
+requests f = Tracer (0 :: Int, mempty :: a) \case
+  Just (RequestMade requestFrom) -> put (requestFrom, mempty)
+  Just (RequestGranted _ root _) -> do
+    (requestFrom, as) <- get
+    output $ Request requestFrom root as
+  Just (RequestTravel x y _) -> modify $ second (f x y <>)
+  _ -> return ()
+
+averaging :: forall n . Fractional n => Tracer n n
+averaging = Tracer (0 :: n, 0 :: Int) \case
+  Nothing -> do
+    (values, count) <- get
+    output $ values / fromIntegral count
+  Just value -> modify $ bimap (+value) (+1)
+
+
+{- |
+To evaluate:
+- Tree diameter
+-
+
+-}
+
 {- |
 How about just making every evaluation take ArvyEvent inputs and outputting some custom type, or resulting in some final value. Have a verbosity flag for controlling whether they output something?
 
 -}
-
+{-
 data Eval r = forall s . Eval s (forall a . Sem (Output (Maybe ArvyEvent) ': r) a -> Sem (State s ': r) a)
 
 runEval :: Eval r -> Sem (Output (Maybe ArvyEvent) ': r) a -> Sem r a
@@ -53,47 +183,17 @@ statelessEval :: (forall a . Sem (Output (Maybe ArvyEvent) ': r) a -> Sem r a) -
 statelessEval f = Eval () (raise . f)
 
 
-data Request a = Request
-  { requestFrom :: Int
-  , requestRoot :: Int
-  , path :: a
-  } deriving (Functor, Show, Generic)
-  
-collectRequests :: forall a r x . Monoid a => (Node -> Node -> a) -> Sem (Output (Maybe ArvyEvent) ': r) x -> Sem (Output (Maybe (Request a)) ': r) x
-collectRequests f = fmap snd . runState (0 :: Int, mempty :: a) . reinterpret2 \case
-  Output Nothing -> output Nothing
-  Output (Just (RequestMade requestFrom)) -> put (requestFrom, mempty)
-  Output (Just (RequestGranted _ root _)) -> do
-    (requestFrom, as) <- get
-    output $ Just $ Request requestFrom root as
-  Output (Just (RequestTravel x y _)) -> modify $ second (f x y <>)
-  Output _ -> return ()
 
-outputting :: Member (Output (Maybe ArvyEvent)) r => Sem r ()
-outputting = do
-  output $ Just $ RequestMade 0
-  output $ Just $ RequestTravel 0 1 ""
-  output $ Just $ RequestTravel 1 2 ""
-  output $ Just $ RequestGranted 0 2 Local
-  output Nothing
+--
+--testit :: IO ()
+--testit = runM $ runEval (hopCount (\v -> sendM $ print v)) outputting
 
-testit :: IO ()
-testit = runM $ runEval (hopCount (\v -> sendM $ print v)) outputting
-  
 hopCount :: (Maybe Int -> Sem r ()) -> Eval r
 hopCount f = Eval () $ reinterpret (\case
   Output (Just (Request { path = Sum v })) -> raise (f (Just v))
   Output Nothing -> raise (f Nothing))
   . collectRequests (\_ _ -> Sum (1 :: Int))
 
-averaging :: forall x n r . (Fractional n, Show n, Monoid x, Member Trace r) => (Node -> Node -> x) -> (Request x -> n) -> Eval r
-averaging p f = Eval (0 :: n, 0 :: Int) $ reinterpret
-  \case
-    Output (Just req) -> modify (bimap (+ f req) (+1))
-    Output Nothing -> do
-      (values, count) <- get
-      trace $ show $ values / fromIntegral count
-  . collectRequests p
 
 
 eventToValue :: (ArvyEvent -> x) -> Sem (Output (Maybe ArvyEvent) ': r) a -> Sem (Output (Maybe x) ': r) a
@@ -229,7 +329,7 @@ instance Category Eval where
           $ mapStateFirst f1
         mapStateSecond f2
     }
-  
+
 {-
 
 measureRatio :: Member Trace r => GraphWeights -> GraphWeights -> Sem (Output ArvyEvent ': r) a -> Sem (Output ArvyEvent ': Output Double ': r) (Int, a)
@@ -247,5 +347,6 @@ measureRatio weights shortestPaths = fmap (\((_, n), a) -> (n, a)) . runState (0
         output $ pathLength / shortestPaths ! (i, src)
       _ -> return ()
 
+-}
 -}
 -}

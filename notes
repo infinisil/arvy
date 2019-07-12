@@ -1,0 +1,12 @@
+What to evaluate?
+
+- Ratio of request path length over direct graph length (can use event log + graph weights). Average over time. How well does this algorithm do in comparison to the optimum.
+- Hop count for requests (can use event log). Average over time. How many nodes does this algorithm need to travel through. Matters because in a realistic scenario, every hop has some cost to it.
+- Average tree stretch every nth request, moving average[0] (internal algorithm state, needs to be evaluated during execution). How does the tree look during the execution. Gives insight into how the algorithm behaves. Should correspond more or less to the ratio above.
+- Edge usage distribution. How often are edges of weight 1/2/3 used, probability distribution (can use event log + graph weights). Node usage distribution? Exclude start/stop nodes? Gives insight into how the algorithm behaves.
+- Other tree stats?
+
+Ideally want to find link between how good the algorithm is in regards to the ratio and how it behaves
+
+[0]: Should smooth out over a request region where a lot of nodes have been touched. The more nodes, the bigger the window. Or cumulative average? Or exponential average?
+
