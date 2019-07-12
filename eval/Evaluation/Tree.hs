@@ -3,6 +3,7 @@ module Evaluation.Tree where
 import           Arvy.Local
 import           Evaluation
 import           Evaluation.Utils
+import Utils
 import Evaluation.Request
 
 import           Data.Array.IO
@@ -18,17 +19,17 @@ import Prelude hiding ((.))
 import Control.Category
 import Control.Monad
 
-sparseTreeStretch :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent Double
-sparseTreeStretch nodeCount weights n = treeStretch nodeCount weights . everyNth n . requests (const ())
+sparseTreeStretchDiameter :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent (Double, Double)
+sparseTreeStretchDiameter nodeCount weights n = treeStretchDiameter nodeCount weights . everyNth n . requests (const ())
 
-treeStretch :: NodeCount -> GraphWeights -> Tracer a Double
-treeStretch nodeCount weights = Tracer () \case
+treeStretchDiameter :: NodeCount -> GraphWeights -> Tracer a (Double, Double)
+treeStretchDiameter nodeCount weights = Tracer () \case
   Nothing -> return ()
   _ -> do
     Env tree <- ask
     frozen <- sendM $ freeze tree
-    let stretch = avgTreeStretch nodeCount weights frozen
-    output stretch
+    let stretchDiameter = avgTreeStretchDiameter nodeCount weights frozen
+    output stretchDiameter
 
 totalTreeWeight :: NodeCount -> GraphWeights -> Tracer a Double
 totalTreeWeight n weights = Tracer () \case
@@ -40,10 +41,11 @@ totalTreeWeight n weights = Tracer () \case
       return $ weights ! (a, b)
     output s
 
-
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
-avgTreeStretch :: NodeCount -> GraphWeights -> RootedTree -> Double
-avgTreeStretch n weights tree = sum [ summedTreeStretch root | root <- [0 .. n - 1] ] / fromIntegral (n * (n - 1)) where
+avgTreeStretchDiameter :: NodeCount -> GraphWeights -> RootedTree -> (Double, Double)
+avgTreeStretchDiameter n weights tree = (sum summed / fromIntegral (n * (n - 1)), maximum maxed) where
+
+  (summed, maxed) = unzip [ summedTreeStretch root | root <- [0 .. n - 1] ]
 
   -- | Converts the rooted tree into an adjacency map graph, represented as a @'IntMap' 'IntSet'@, which is a faster version of @Map Int (Set Int)@, meaning a map from every node to a set of nodes it's adjacent to. This function sets up bidirectional edges. Complexity /O(n)/
   graph :: IntMap IntSet
@@ -60,11 +62,12 @@ avgTreeStretch n weights tree = sum [ summedTreeStretch root | root <- [0 .. n -
   adjacent node = IntMap.findWithDefault (error $ "No node " ++ show node ++ ", inconsistent rooted tree") node graph
 
   -- | Sums up all tree stretches from the given 'Node' to all others. Complexity /O(n)/
-  summedTreeStretch :: Node -> Double
+  summedTreeStretch :: Node -> (Double, Double)
   summedTreeStretch root = go root (adjacent root) 0 where
-    go :: Node -> IntSet -> Double -> Double
-    go parent children baseWeight = summed where
-      summed = IntSet.foldl' onChildren (if root == parent then baseWeight else baseWeight / weights ! (root, parent)) children
-      onChildren acc child = acc + go child superchildren (baseWeight + weight) where
+    go :: Node -> IntSet -> Double -> (Double, Double)
+    go parent children baseWeight = result where
+      result = IntSet.foldl' onChildren (if root == parent then baseWeight else baseWeight / weights ! (root, parent), baseWeight) children
+      onChildren (acc, maxAcc) child = (acc + summed', max maxAcc maxed') where
+        (summed', maxed') = go child children' (baseWeight + weight)
         weight = weights ! (parent, child)
-        superchildren = IntSet.delete parent $ adjacent child
+        children' = IntSet.delete parent $ adjacent child

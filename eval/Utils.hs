@@ -15,6 +15,10 @@ import Arvy.Algorithm
 import Data.Array.MArray
 import Data.Array.Base
 import Control.Monad
+import qualified Data.IntMap as IntMap
+import Data.IntMap (IntMap)
+import qualified Data.IntSet as IntSet
+import Data.IntSet (IntSet)
 
 -- | Convenience value for infinity for floating point types
 infinity :: (Floating a, Read a) => a
@@ -97,22 +101,17 @@ runRandomSource' source = interpret $ \case
     GetRandomPrim pt -> sendM $ R.runRVar (R.getRandomPrim pt) source
 {-# INLINEABLE runRandomSource' #-}
 
-
--- | Converts a rooted spanning tree in the form of a pointer array to a 'T.Tree' value, useful for processing or display with 'T.drawTree'.
--- Throws an error when there's multiple or no roots. Does *not* throw an error when some nodes don't transitively point to the root, instead those nodes are just not included in the final tree structure.
-treeStructure :: RootedTree -> T.Tree Node
-treeStructure tree = T.unfoldTree predecessors root where
-
-  predecessors :: Node -> (Node, [Node])
-  predecessors node = (node, M.findWithDefault [] node predecessorMap )
+-- | Extracts the root and a map from nodes to their children from a 'RootedTree'
+treeRootPred :: RootedTree -> (Node, IntMap IntSet)
+treeRootPred tree = (root, predecessorMap) where
 
   (mroot, predecessorMap) = invert (assocs tree)
   root = fromMaybe (error "Tree has no root") mroot
 
   -- TODO: Use more efficient representation for predecessors, e.g. IntSet
   -- | Inverts an (node index, successor pointer) list to a (root, predecessor mapping) value
-  invert :: [(Node, Node)] -> (Maybe Node, M.Map Node [Node])
-  invert []                   = (Nothing, M.empty)
+  invert :: [(Node, Node)] -> (Maybe Node, IntMap IntSet)
+  invert []                   = (Nothing, IntMap.empty)
   invert ((i, pointer):rest) = if i == pointer
     then ( case root' of
 
@@ -120,8 +119,19 @@ treeStructure tree = T.unfoldTree predecessors root where
              Just i' -> error $ "Tree has multiple roots at both node " ++ show i ++ " and " ++ show i'
          , rest' )
     else ( root'
-         , M.insertWith (++) pointer [i] rest' )
+         , IntMap.insertWith IntSet.union pointer (IntSet.singleton i) rest' )
     where (root', rest') = invert rest
+
+-- | Converts a rooted spanning tree in the form of a pointer array to a 'T.Tree' value, useful for processing or display with 'T.drawTree'.
+-- Throws an error when there's multiple or no roots. Does *not* throw an error when some nodes don't transitively point to the root, instead those nodes are just not included in the final tree structure.
+treeStructure :: RootedTree -> T.Tree Node
+treeStructure tree = T.unfoldTree predecessors root where
+
+  (root, predecessorMap) = treeRootPred tree
+
+  predecessors :: Node -> (Node, [Node])
+  predecessors node = (node, IntSet.toAscList $ IntMap.findWithDefault IntSet.empty node predecessorMap )
+
 
 {-# INLINE floydWarshall #-}
 -- TODO: Split a lot of these things out of this Arvy module into the arvy-eval component

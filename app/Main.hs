@@ -44,9 +44,9 @@ main = forM_ params $ \par -> runM
   $ runParams par
   $ \n w -> mconcat
   --[ logging `runAs` trace
-  [ sparseTreeStretch n w 1000 `runAs` (\(avg, m) -> trace $ "Average tree stretch: " ++ show avg ++ ", max tree stretch: " ++ show m)
+  [ sparseTreeStretchDiameter n w 1 `runAs` (\(avg, diam) -> trace $ "Average tree stretch: " ++ show avg ++ ", tree diameter: " ++ show diam)
   , (meanStddev . ratio w) `runAs` (\(mean, stddev) -> trace $ "Request ratio mean: " ++ show mean ++ ", stddev: " ++ show stddev)
-  , (meanStddev . hopCount) `runAs` (\(mean, stddev) -> trace $ "Hop count mean: " ++ show mean ++ ", stddev: " ++ show stddev)
+  , (meanStddev . hopCount @Double) `runAs` (\(mean, stddev) -> trace $ "Hop count mean: " ++ show mean ++ ", stddev: " ++ show stddev)
   , (totalTreeWeight n w . everyNth 100 . Evaluation.Request.requests (const ())) `runAs` (\ttw -> trace $ "Total tree weight: " ++ show ttw)
   ]
 
