@@ -36,10 +36,23 @@ aimap f arr = array (bounds arr) $ (\(i, e) -> (i, f i e)) <$> assocs arr
 mapState
   :: Member (State s) r
   => (s -> a) -- ^ How to get an @a@ from @s@
-  -> (s -> a -> s) -- ^ How to set the @a@ part in an @s@, 
+  -> (s -> a -> s) -- ^ How to set the @a@ part in an @s@,
   -> Sem (State a ': r) x
   -> Sem r x
 mapState getter setter = interpret \case
+  Get -> gets getter
+  Put v -> do
+    old <- get
+    put $ setter old v
+
+-- TODO: Use lenses
+-- | Transforms a stateful computation over @a@ to a computation over @s@ that holds a value of @a@.
+mapState'
+  :: (s -> a) -- ^ How to get an @a@ from @s@
+  -> (s -> a -> s) -- ^ How to set the @a@ part in an @s@,
+  -> Sem (State a ': r) x
+  -> Sem (State s ': r) x
+mapState' getter setter = reinterpret \case
   Get -> gets getter
   Put v -> do
     old <- get
@@ -58,6 +71,18 @@ mapStateSecond
   => Sem (State b ': r) x
   -> Sem r x
 mapStateSecond = mapState snd (flip $ second . const)
+
+-- | Transforms a stateful computation over @a@ to a computation over @(a, b)
+mapStateFirst'
+  :: Sem (State a ': r) x
+  -> Sem (State (a, b) ': r) x
+mapStateFirst' = mapState' fst (flip $ first . const)
+
+-- | Transforms a stateful computation over @b@ to a computation over @(a, b)
+mapStateSecond'
+  :: Sem (State b ': r) x
+  -> Sem (State (a, b) ': r) x
+mapStateSecond' = mapState' snd (flip $ second . const)
 
 
 -- | Run a 'Random' effect using a given 'R.RandomSource'
@@ -90,7 +115,7 @@ treeStructure tree = T.unfoldTree predecessors root where
   invert []                   = (Nothing, M.empty)
   invert ((i, pointer):rest) = if i == pointer
     then ( case root' of
-             
+
              Nothing -> Just i
              Just i' -> error $ "Tree has multiple roots at both node " ++ show i ++ " and " ++ show i'
          , rest' )

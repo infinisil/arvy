@@ -53,6 +53,8 @@ library arvy-eval
                      , Parameters.Algorithm
                      , Evaluation
                      , Evaluation.Tree
+                     , Evaluation.Request
+                     , Evaluation.Utils
                      , Utils
                      , Utils.Connected
   build-depends:       arvy
@@ -68,7 +70,7 @@ library arvy-eval
                      , containers
                      , multiset
                      , heaps
-  
+
 executable arvy
   import:              defaults
   hs-source-dirs:      app
