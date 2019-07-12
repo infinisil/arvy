@@ -2,6 +2,8 @@ module Evaluation.Tree where
 
 import           Arvy.Local
 import           Evaluation
+import           Evaluation.Utils
+import Evaluation.Request
 
 import           Data.Array.IO
 import           Data.Array.Unboxed
@@ -11,17 +13,19 @@ import           Data.IntSet        (IntSet)
 import qualified Data.IntSet        as IntSet
 import           Polysemy
 import           Polysemy.Output
+import           Polysemy.Reader
+import Prelude hiding ((.))
+import Control.Category
 
+sparseTreeStretch :: Int -> Tracer ArvyEvent Double
+sparseTreeStretch n = treeStretch . everyNth n . requests (const ())
 
-
-treeStretch :: Int -> GraphWeights -> IOUArray Node Node -> Eval a (a, Double)
-treeStretch n weights tree = Eval
-  { initialState = ()
-  , tracing = \event -> do
-      t <- sendM $ freeze tree
-      output (event, avgTreeStretch n weights t)
-  , final = return ()
-  }
+treeStretch :: Tracer a Double
+treeStretch = Tracer () \_ -> do
+  Env { .. } <- ask
+  frozen <- sendM $ freeze tree
+  let stretch = avgTreeStretch nodeCount weights frozen
+  output stretch
 
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretch :: NodeCount -> GraphWeights -> RootedTree -> Double
