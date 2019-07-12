@@ -47,6 +47,7 @@ avgTreeStretchDiameter n weights tree = (sum summed / fromIntegral (n * (n - 1))
 
   (summed, maxed) = unzip [ summedTreeStretch root | root <- [0 .. n - 1] ]
 
+  -- TODO: Trace adjacency map with successor changes, which should be faster than rebuilding it all the time
   -- | Converts the rooted tree into an adjacency map graph, represented as a @'IntMap' 'IntSet'@, which is a faster version of @Map Int (Set Int)@, meaning a map from every node to a set of nodes it's adjacent to. This function sets up bidirectional edges. Complexity /O(n)/
   graph :: IntMap IntSet
   graph = IntMap.unionsWith IntSet.union
