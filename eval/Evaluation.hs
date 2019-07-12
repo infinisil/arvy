@@ -75,4 +75,14 @@ runAs (Tracer s t) f = Eval s $ \event -> do
   interpret
     \case Output o -> raise $ f o
     (t event)
-  return ()
+
+-- | Function for coercing a 'Tracer' for 'ArvyEvent's into an 'Eval' with a function that acts upon the 'Tracer's outputs.
+runTimingAs :: (MArray arr Node IO, Members '[Reader (Env arr), Lift IO] r) => Tracer ArvyEvent o -> (o -> Sem r ()) -> Eval r
+runTimingAs (Tracer s t) f = Eval s $ \event -> do
+  interpret
+    \case Output o -> do
+            start <- sendM getCurrentTime
+            raise $ f o
+            end <- sendM getCurrentTime
+            sendM $ putStrLn $ "Time needed: " ++ show (end `diffUTCTime` start)
+    (t event)
