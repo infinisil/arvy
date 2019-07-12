@@ -3,7 +3,6 @@ module Evaluation.Tree where
 import           Arvy.Local
 import           Evaluation
 import           Evaluation.Utils
-import Utils
 import Evaluation.Request
 
 import           Data.Array.IO

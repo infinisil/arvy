@@ -19,7 +19,6 @@ import Data.Array.IO
 import Arvy.Algorithm
 import Arvy.Local
 import Utils
-import Control.Exception
 import Data.Time
 
 -- | Readonly data available to evaluations

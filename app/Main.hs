@@ -19,10 +19,8 @@ import           Polysemy.RandomFu
 import           Polysemy.Output
 import           Polysemy.Trace
 import           Data.Monoid
-import           Data.Array.IArray
 import           Control.Category
 import           Control.Monad
-import qualified Debug.Trace as D
 import           System.IO
 import           Prelude hiding ((.), id)
 
