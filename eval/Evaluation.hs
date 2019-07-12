@@ -13,28 +13,15 @@ module Evaluation where
 import Prelude hiding ((.), id)
 import Polysemy
 import Control.Category
-import Data.Bifunctor
 import Polysemy.Output
-import Polysemy.Input
-import Data.Functor
-import Polysemy.Trace
 import Polysemy.Reader
-import GHC.Generics
-import Data.Monoid
-import Data.Array.IArray
 import Data.Array.IO
-import Data.Array.MArray
 import Arvy.Algorithm
 import Arvy.Local
 import Utils
-import System.IO
 
 -- | Readonly data available to evaluations
-data Env arr = Env
-  { nodeCount :: NodeCount -- ^ The number of nodes
-  , weights :: GraphWeights -- ^ The graph weights, will never change
-  , tree :: arr Node Node -- ^ The spanning tree, will change over time
-  }
+data Env (arr :: * -> * -> *) = Env (arr Node Node)
 
 -- | A an evaluation function that takes some events i (or Nothing if no more events are coming) and outputs events o
 data Tracer i o = forall s . Tracer
@@ -49,11 +36,15 @@ instance Category Tracer where
     Nothing -> return ()
     Just event -> output event
 
-  Tracer s t . Tracer s' t' = Tracer (s, s') $ \event -> do
-    interpret
+  Tracer s t . Tracer s' t' = Tracer (s, s') $ \case
+    Nothing -> do
+      interpret
+        \case Output o -> mapStateFirst (t (Just o))
+        (mapStateSecond (t' Nothing))
+      mapStateFirst (t Nothing)
+    event -> interpret
       \case Output o -> mapStateFirst (t (Just o))
       (mapStateSecond (t' event))
-    mapStateFirst (t Nothing)
 
 instance Functor (Tracer i) where
   fmap f (Tracer s t) = Tracer s \event -> interpret
@@ -66,8 +57,8 @@ data Eval r = forall s . Eval
   , evalFun :: Maybe ArvyEvent -> Sem (State s ': r) ()
   }
 
-runEval :: Eval r -> Sem (Output (Maybe ArvyEvent) ': r) () -> Sem r ()
-runEval (Eval s f) = fmap snd . runState s . reinterpret \case
+runEval :: (MArray arr Node m, Members '[Lift m] r) => Eval (Reader (Env arr) ': r) -> Env arr -> Sem (Output (Maybe ArvyEvent) ': r) () -> Sem r ()
+runEval (Eval s f) env = runReader env . fmap snd . runState s . reinterpret2 \case
   Output event -> f event
 
 instance Semigroup (Eval r) where

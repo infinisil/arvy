@@ -16,16 +16,30 @@ import           Polysemy.Output
 import           Polysemy.Reader
 import Prelude hiding ((.))
 import Control.Category
+import Control.Monad
 
-sparseTreeStretch :: Int -> Tracer ArvyEvent Double
-sparseTreeStretch n = treeStretch . everyNth n . requests (const ())
+sparseTreeStretch :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent Double
+sparseTreeStretch nodeCount weights n = treeStretch nodeCount weights . everyNth n . requests (const ())
 
-treeStretch :: Tracer a Double
-treeStretch = Tracer () \_ -> do
-  Env { .. } <- ask
-  frozen <- sendM $ freeze tree
-  let stretch = avgTreeStretch nodeCount weights frozen
-  output stretch
+treeStretch :: NodeCount -> GraphWeights -> Tracer a Double
+treeStretch nodeCount weights = Tracer () \case
+  Nothing -> return ()
+  _ -> do
+    Env tree <- ask
+    frozen <- sendM $ freeze tree
+    let stretch = avgTreeStretch nodeCount weights frozen
+    output stretch
+
+totalTreeWeight :: NodeCount -> GraphWeights -> Tracer a Double
+totalTreeWeight n weights = Tracer () \case
+  Nothing -> return ()
+  _ -> do
+    Env tree <- ask
+    s <- sum <$> forM [0 .. n - 1] \a -> do
+      b <- sendM $ readArray tree a
+      return $ weights ! (a, b)
+    output s
+
 
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretch :: NodeCount -> GraphWeights -> RootedTree -> Double
@@ -43,7 +57,7 @@ avgTreeStretch n weights tree = sum [ summedTreeStretch root | root <- [0 .. n -
         | otherwise = IntMap.singleton a (IntSet.singleton b) `IntMap.union` IntMap.singleton b (IntSet.singleton a)
 
   adjacent :: Node -> IntSet
-  adjacent node = IntMap.findWithDefault (error "No such node, inconsistent rooted tree") node graph
+  adjacent node = IntMap.findWithDefault (error $ "No node " ++ show node ++ ", inconsistent rooted tree") node graph
 
   -- | Sums up all tree stretches from the given 'Node' to all others. Complexity /O(n)/
   summedTreeStretch :: Node -> Double

@@ -11,6 +11,8 @@ import qualified Parameters.Algorithm as Alg
 
 import           Evaluation
 import           Evaluation.Tree
+import Evaluation.Utils
+import Evaluation.Request
 
 import           Polysemy
 import           Polysemy.RandomFu
@@ -39,32 +41,14 @@ params =
 main :: IO ()
 main = forM_ params $ \par -> runM
   $ runTraceIO
-  $ traceOutput resultShower
   $ runParams par
-  $ evaluation
-  where
-
-    evaluation n w t =
-      collectRequests (\a b -> (Sum (1 :: Double), Sum (w ! (a, b)))) -- Get requests while counting their hops
-      >>>
-      ( ( enumerate
-        >>> everyNth 100
-        >>> treeStretch n w t )
-      `combine` ( ( mapping (\Request { path = (_, Sum path) } -> path)
-                  >>> average )
-                `combine`
-                  ( mapping (\Request { path = (Sum hops, _) } -> hops)
-                  >>> average
-                  )
-                )
-      )
- 
-    resultShower :: Either ((Int, Request (Sum Double, Sum Double)), Double) (Either Double Double) -> String
-    resultShower (Left ((n, Request { path = (Sum hops, Sum path) }), stretch)) = "[" ++ show n ++ "] Hop count: " ++ show hops ++ ", path length: " ++ show path ++ ", tree stretch: " ++ show stretch
-    resultShower (Right (Left distanceAverage)) = "Average request path length: " ++ show distanceAverage
-    resultShower (Right (Right hopAverage)) = "Average hop path length: " ++ show hopAverage
-
-
+  $ \n w -> mconcat
+  --[ logging `runAs` trace
+  [ sparseTreeStretch n w 1000 `runAs` (\(avg, m) -> trace $ "Average tree stretch: " ++ show avg ++ ", max tree stretch: " ++ show m)
+  , (meanStddev . ratio w) `runAs` (\(mean, stddev) -> trace $ "Request ratio mean: " ++ show mean ++ ", stddev: " ++ show stddev)
+  , (meanStddev . hopCount) `runAs` (\(mean, stddev) -> trace $ "Hop count mean: " ++ show mean ++ ", stddev: " ++ show stddev)
+  , (totalTreeWeight n w . everyNth 100 . Evaluation.Request.requests (const ())) `runAs` (\ttw -> trace $ "Total tree weight: " ++ show ttw)
+  ]
 
 traceOutput :: Member Trace r => (x -> String) -> Sem (Output x ': r) a -> Sem r a
 traceOutput f = interpret \case Output x -> trace $ f x
@@ -80,6 +64,3 @@ runOutputToFile file sem = do
     sem
   sendM $ hClose handle
   return res
-
-trace' :: Show b => Eval a b -> Eval a b
-trace' = fmap $ \v -> D.trace (show v) v
