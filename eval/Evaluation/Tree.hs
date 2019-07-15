@@ -19,7 +19,7 @@ import Control.Category
 import Control.Monad
 
 sparseTreeStretchDiameter :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent (Double, Double)
-sparseTreeStretchDiameter nodeCount weights n = treeStretchDiameter nodeCount weights . everyNth n . requests (const ())
+sparseTreeStretchDiameter nodeCount weights n = treeStretchDiameter nodeCount weights . decayingFilter n . requests (const ())
 
 treeStretchDiameter :: NodeCount -> GraphWeights -> Tracer a (Double, Double)
 treeStretchDiameter nodeCount weights = Tracer () \case

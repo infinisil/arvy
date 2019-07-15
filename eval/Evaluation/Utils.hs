@@ -61,3 +61,18 @@ everyNth n = Tracer (n - 1) \case
       output event
     k -> do
       put (k - 1)
+
+
+decayingFilter :: Int -> Tracer a a
+decayingFilter r = Tracer (0 :: Int, 0 :: Int, r - 1) \case
+  Nothing -> return ()
+  Just event -> do
+    (n, d, p) <- get
+    (newN, newP, newD) <- if d == 0
+      then do
+        output event
+        return $ if p == 0
+          then (n + 1, r, 2 ^ (n + 1) - 1)
+          else (n, p - 1, 2 ^ (n + 1) - 1)
+      else return (n, p, d - 1)
+    put (newN, newD, newP)
