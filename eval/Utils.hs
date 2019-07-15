@@ -18,6 +18,9 @@ import qualified Data.IntMap as IntMap
 import Data.IntMap (IntMap)
 import qualified Data.IntSet as IntSet
 import Data.IntSet (IntSet)
+import qualified Data.Set as Set
+import Data.Set (Set)
+import Data.Random
 
 -- | Convenience value for infinity for floating point types
 infinity :: (Floating a, Read a) => a
@@ -146,3 +149,9 @@ floydWarshall n weights =
         let ikj = ik + kj
         when (ij > ikj) $
           unsafeWrite weights (i * n + j) ikj
+
+randomSetElement :: Set a -> RVar a
+randomSetElement set = do
+  let size = Set.size set
+  r <- uniformT 0 (size - 1)
+  return $ Set.elemAt r set

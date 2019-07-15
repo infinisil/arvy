@@ -1,10 +1,17 @@
+{-# LANGUAGE TupleSections #-}
+
 module Parameters.Tree where
 
 import           Arvy.Algorithm.Collection
 import           Arvy.Local
 import           Data.Array.Unboxed
 import qualified Data.Heap                 as H
+import           Data.Set                  (Set)
+import qualified Data.Set                  as Set
 import           Polysemy
+import Polysemy.RandomFu
+import Data.Random.Distribution.Uniform
+import Utils
 
 data InitialTreeParameter s r = InitialTreeParameter
   { initialTreeName :: String
@@ -37,6 +44,29 @@ semiCircles = InitialTreeParameter
         ++ [ (i, (i - 1)) | i <- [h + 1 .. n - 1] ] )
       where
         h = n `div` 2
+
+random :: Member RandomFu r => InitialTreeParameter () r
+random = InitialTreeParameter
+  { initialTreeName = "random"
+  , initialTreeGet = \n _ -> do
+      (root, edges) <- randomSpanningTree n
+      return ( array (0, n - 1) ((root, root) : edges)
+             , listArray (0, n - 1) (replicate n ()) )
+  }
+
+randomSpanningTree :: forall r . Member RandomFu r => NodeCount -> Sem r (Node, [Edge])
+randomSpanningTree n = do
+  root <- sampleRVar (integralUniform 0 (n - 1))
+  (root,) <$> go (Set.singleton root) (Set.fromDistinctAscList ([0..root-1] ++ [root+1..n-1]))
+  where
+  go :: Set Node -> Set Node -> Sem r [Edge]
+  go included excluded
+    | Set.size excluded == 0 = return []
+    | otherwise = do
+        e <- sampleRVar (randomSetElement excluded)
+        i <- sampleRVar (randomSetElement included)
+        ((e, i):) <$> go (Set.insert e included) (Set.delete e excluded)
+
 
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
@@ -77,4 +107,3 @@ mstEdges n weights = go initialHeap where
     | newWeight < weight = H.Entry newWeight (new, dst)
     | otherwise = entry
     where newWeight = weights ! (new, dst)
-
