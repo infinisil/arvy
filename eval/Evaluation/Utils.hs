@@ -3,7 +3,6 @@ module Evaluation.Utils where
 import Evaluation
 import Polysemy.State
 import Polysemy.Output
-import Data.Bifunctor
 import Data.Functor
 import Prelude hiding (id)
 import Control.Category
@@ -29,20 +28,9 @@ meanStddev = Tracer (Nothing :: Maybe (Int, m, m)) \case
           delta2 = v - newMean
           newM2 = m2 + delta * delta2
       put $ Just (newCount, newMean, newM2)
-  Nothing -> get >>= \case
-    Nothing -> return ()
-    Just (1, _, _) -> return ()
-    Just (count, mean, m2) -> do
-      let stddev = sqrt $ m2 / fromIntegral count
-      output (mean, stddev)
-
-
-averaging :: forall n . Fractional n => Tracer n n
-averaging = Tracer (0 :: n, 0 :: Int) \case
-  Nothing -> do
-    (values, count) <- get
-    output $ values / fromIntegral count
-  Just value -> modify $ bimap (+value) (+1)
+      let stddev = sqrt $ newM2 / fromIntegral newCount
+      output (newMean, stddev)
+  Nothing -> return ()
 
 summing :: forall n . Num n => Tracer n n
 summing = Tracer (0 :: n) $ \case
@@ -62,7 +50,6 @@ everyNth n = Tracer (n - 1) \case
     k -> do
       put (k - 1)
 
-
 decayingFilter :: Int -> Tracer a a
 decayingFilter r = Tracer (0 :: Int, 0 :: Int, r - 1) \case
   Nothing -> return ()
@@ -76,3 +63,10 @@ decayingFilter r = Tracer (0 :: Int, 0 :: Int, r - 1) \case
           else (n, p - 1, 2 ^ (n + 1) - 1)
       else return (n, p, d - 1)
     put (newN, newD, newP)
+
+lastOne :: forall a . Tracer a a
+lastOne = Tracer (Nothing :: Maybe a) \case
+  Nothing -> get >>= \case
+    Nothing -> return ()
+    Just value -> output value
+  Just value -> put $ Just value
