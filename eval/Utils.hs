@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 module Utils where
 
 import Polysemy
@@ -61,7 +63,7 @@ mapState'
 mapState' getter setter = reinterpret \case
   Get -> gets getter
   Put v -> do
-    old <- get
+    !old <- get
     put $ setter old v
 
 -- | Transforms a stateful computation over @a@ to a computation over @(a, b)
