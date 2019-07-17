@@ -44,11 +44,11 @@ runRequests tree getRequest requestCount =
         put (k - 1)
         immutableTree <- sendM $ freeze tree
         Just <$> raise (getRequest immutableTree)
-        
+
 -- | Run local weights with weights in a matrix and a current node
 runLocalWeights :: GraphWeights -> Node -> Sem (LocalWeights Node ': r) a -> Sem r a
 runLocalWeights weights src = interpret $ \case
-  WeightTo dst -> return $ weights ! (src, dst)
+  WeightTo dst -> return $ weights ! (src, forward dst)
 
 
 -- | The type of events that happen during an arvy execution
@@ -106,24 +106,24 @@ runArvyLocal weights tree stateArray (Arvy inst) = runArvyLocal' inst where
           -- If the node that made the request has no successor, immediately grant
           then output $ Just $ RequestGranted i i Local
           else do
-            msg <- runNode i (arvyInitiate i)
+            msg <- runNode i (arvyInitiate i successor)
             setSuccessor i i
             output $ Just $ RequestTravel i successor (show msg)
             root <- send msg successor
             output $ Just $ RequestGranted i root Received
         go
-        
+
       where
 
       -- | Send a message to some node and repeatedly applies the arvy algorithm until eventually the root node is found, which gets returned
       send :: msg Node -> Node -> Sem r' Int
       send msg i = getSuccessor i >>= \successor -> if i == successor
         then do
-          newSucc <- runNode i (arvyReceive i msg)
+          newSucc <- runNode i (arvyReceive msg i)
           setSuccessor i newSucc
           return i
         else do
-          (newSucc, newMsg) <- runNode i (arvyTransmit i msg)
+          (newSucc, newMsg) <- runNode i (arvyTransmit msg i successor)
           setSuccessor i newSucc
           output $ Just $ RequestTravel i successor (show newMsg)
           send newMsg successor

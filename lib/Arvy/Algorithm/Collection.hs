@@ -12,10 +12,10 @@ newtype ArrowMessage i = ArrowMessage i deriving Show
 -- | The Arrow Arvy algorithm, which always inverts all edges requests travel through. The shape of the tree therefore always stays the same
 arrow :: forall s r . Show s => Arvy s r
 arrow = arvy @ArrowMessage @s ArvyInst
-  { arvyInitiate = return . ArrowMessage
-  , arvyTransmit = \i (ArrowMessage sender) ->
+  { arvyInitiate = \i _ -> return (ArrowMessage i)
+  , arvyTransmit = \(ArrowMessage sender) i _ ->
       return (sender, ArrowMessage i)
-  , arvyReceive = \_ (ArrowMessage sender) ->
+  , arvyReceive = \(ArrowMessage sender) _ ->
       return sender
   }
 
@@ -25,10 +25,10 @@ newtype IvyMessage i = IvyMessage i deriving Show
 -- | The Ivy Arvy algorithm, which always points all nodes back to the root node where the request originated from.
 ivy :: forall s r . Show s => Arvy s r
 ivy = arvy @IvyMessage @s ArvyInst
-  { arvyInitiate = return . IvyMessage
-  , arvyTransmit = \_ (IvyMessage root) ->
+  { arvyInitiate = \i _ -> return (IvyMessage i)
+  , arvyTransmit = \(IvyMessage root) i _ ->
       return (root, IvyMessage (forward root))
-  , arvyReceive = \_ (IvyMessage root) ->
+  , arvyReceive = \(IvyMessage root) _ ->
       return root
   }
 
@@ -60,7 +60,7 @@ data RingNodeState
 -- | An Arvy algorithm that runs in constant competitive ratio on ring graphs. It works by splitting the ring into two semi-circles, connected by a bridge. The semi-circles are always kept intact, but whenever the bridge is traversed, the root node is selected as the new bridge end, while the previous bridge end becomes the new bridge start.
 constantRing :: Arvy RingNodeState r
 constantRing = arvy @RingMessage @RingNodeState ArvyInst
-  { arvyInitiate = \i -> get >>= \case
+  { arvyInitiate = \i _ -> get >>= \case
       -- If our initial node is part of a semi-circle, the message won't be crossing the bridge yet if at all
       SemiNode -> return (BeforeCrossing i i)
       -- If our initial node is the bridge node, the message will travel accross the bridge, and our current node will become a semi-circle one
@@ -68,7 +68,7 @@ constantRing = arvy @RingMessage @RingNodeState ArvyInst
         put SemiNode
         return (Crossing i)
 
-  , arvyTransmit = \i -> \case
+  , arvyTransmit = \msg i _ -> case msg of
       BeforeCrossing { root, sender } -> get >>= \case
         -- If we haven't crossed the bridge yet, and the message traverses through another non-bridge node
         SemiNode ->
@@ -84,7 +84,7 @@ constantRing = arvy @RingMessage @RingNodeState ArvyInst
       AfterCrossing { sender } ->
         return (sender, AfterCrossing i)
 
-  , arvyReceive = \_ -> \case
+  , arvyReceive = \msg _ -> case msg of
       BeforeCrossing { sender } -> return sender
       Crossing { root } -> do
         put BridgeNode
