@@ -50,7 +50,7 @@ mapState
 mapState getter setter = interpret \case
   Get -> gets getter
   Put v -> do
-    old <- get
+    !old <- get
     put $ setter old v
 
 -- TODO: Use lenses
