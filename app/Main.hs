@@ -61,9 +61,9 @@ main = runM
   --    (\((k, _), (str, _)) -> show k ++ " " ++ show str)
   ]
 
-toAll :: Monad m => [Consumer i m ()] -> Consumer i m ()
-toAll [c] = c
-toAll (c:cs) = P.tee c >-> toAll cs
+-- Forwards all values to all given consumers
+distribute :: (Monad m, Foldable f) => f (Consumer i m ()) -> Consumer i m ()
+distribute = foldr (\c -> (P.tee c >->)) P.drain
 
   --, hopCount @Double `runAs` RunTrace show
   --, hopCount @Double `runAs` RunFile "hopcount" show
