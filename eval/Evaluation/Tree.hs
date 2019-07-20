@@ -2,8 +2,6 @@ module Evaluation.Tree where
 
 import           Arvy.Local
 import           Evaluation
-import           Evaluation.Utils
-import Evaluation.Request
 
 import           Data.Array.IO
 import           Data.Array.Unboxed
@@ -12,33 +10,27 @@ import qualified Data.IntMap        as IntMap
 import           Data.IntSet        (IntSet)
 import qualified Data.IntSet        as IntSet
 import           Polysemy
-import           Polysemy.Output
 import           Polysemy.Reader
 import Prelude hiding ((.))
-import Control.Category
 import Control.Monad
+import Pipes
+import qualified Pipes.Prelude as P
 
 --sparseTreeStretchDiameter :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent (Double, Double)
 --sparseTreeStretchDiameter nodeCount weights n = snd <$> treeStretchDiameter nodeCount weights . decayingFilter n . requests (const ())
 
-treeStretchDiameter :: NodeCount -> GraphWeights -> Tracer a (a, (Double, Double))
-treeStretchDiameter nodeCount weights = Tracer () \case
-  Nothing -> return ()
-  Just event -> do
-    Env tree <- ask
-    frozen <- sendM $ freeze tree
-    let stretchDiameter = avgTreeStretchDiameter nodeCount weights frozen
-    output (event, stretchDiameter)
+treeStretchDiameter :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => NodeCount -> GraphWeights -> Pipe a (Double, Double) (Sem r) x
+treeStretchDiameter nodeCount weights = P.mapM \_ -> do
+  Env tree <- ask
+  frozen <- sendM $ freeze tree
+  return $ avgTreeStretchDiameter nodeCount weights frozen
 
-totalTreeWeight :: NodeCount -> GraphWeights -> Tracer a Double
-totalTreeWeight n weights = Tracer () \case
-  Nothing -> return ()
-  _ -> do
-    Env tree <- ask
-    s <- sum <$> forM [0 .. n - 1] \a -> do
-      b <- sendM $ readArray tree a
-      return $ weights ! (a, b)
-    output s
+totalTreeWeight :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => NodeCount -> GraphWeights -> Pipe a Double (Sem r) x
+totalTreeWeight n weights = P.mapM \_ -> do
+  Env tree <- ask
+  sum <$> forM [0 .. n - 1] \a -> do
+    b <- sendM $ readArray tree a
+    return $ weights ! (a, b)
 
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretchDiameter :: NodeCount -> GraphWeights -> RootedTree -> (Double, Double)
