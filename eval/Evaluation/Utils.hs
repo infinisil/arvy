@@ -36,6 +36,14 @@ meanStddev = do
       yield (newMean, stddev)
       go newCount newMean newM2
 
+enumerate :: forall n m a . Monad m => Pipe n (Int, n) m a
+enumerate = go 0 where
+  go :: Int -> Pipe n (Int, n) m a
+  go n = do
+    v <- await
+    yield (n, v)
+    go (n + 1)
+
 --enumerate :: Tracer a (Int, a)
 --enumerate = Tracer (0 :: Int) \case
 --  Nothing -> return ()
