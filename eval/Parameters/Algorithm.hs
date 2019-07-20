@@ -19,21 +19,21 @@ arrow = AlgorithmParameter
 
 ivy :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 ivy tree = AlgorithmParameter
-  { algorithmName = "Ivy"
+  { algorithmName = "Ivy-" ++ Tree.initialTreeName tree
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.ivy
   }
 
 constantRing :: AlgorithmParameter r
 constantRing = AlgorithmParameter
-  { algorithmName = "Constant Ring"
+  { algorithmName = "ConstantRing"
   , algorithmInitialTree = Tree.semiCircles
   , algorithmGet = Arvy.constantRing
   }
 
 half :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 half tree = AlgorithmParameter
-  { algorithmName = "half node"
+  { algorithmName = "HalfNodeode-" ++ Tree.initialTreeName tree
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.half
   }

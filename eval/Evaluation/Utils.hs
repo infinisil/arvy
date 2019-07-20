@@ -7,6 +7,7 @@ import Data.Functor
 import Prelude hiding (id)
 import Control.Category
 import Control.Monad
+import Data.Bifunctor
 
 logging :: Show a => Tracer a String
 logging = id <&> show
@@ -32,6 +33,14 @@ meanStddev = Tracer (Nothing :: Maybe (Int, m, m)) \case
       output (newMean, stddev)
   Nothing -> return ()
 
+enumerate :: Tracer a (Int, a)
+enumerate = Tracer (0 :: Int) \case
+  Nothing -> return ()
+  Just value -> do
+    n <- get
+    output (n, value)
+    put (n + 1)
+
 summing :: forall n . Num n => Tracer n n
 summing = Tracer (0 :: n) $ \case
   Nothing -> return ()
@@ -54,15 +63,15 @@ decayingFilter :: Int -> Tracer a a
 decayingFilter r = Tracer (0 :: Int, 0 :: Int, r - 1) \case
   Nothing -> return ()
   Just event -> do
-    (n, d, p) <- get
-    (newN, newP, newD) <- if d == 0
-      then do
-        output event
-        return $ if p == 0
-          then (n + 1, r, 2 ^ (n + 1) - 1)
-          else (n, p - 1, 2 ^ (n + 1) - 1)
-      else return (n, p, d - 1)
-    put (newN, newD, newP)
+    (n, p, d) <- get
+    when (p == 0) (output event)
+    (newN, newP, newD) <- if p == 0
+      then
+        return $ if d == 0
+          then (n + 1, 2 ^ (n + 1) - 1, r)
+          else (n, 2 ^ n - 1, d - 1)
+      else return (n, p - 1, d)
+    put (newN, newP, newD)
 
 lastOne :: forall a . Tracer a a
 lastOne = Tracer (Nothing :: Maybe a) \case
@@ -70,3 +79,22 @@ lastOne = Tracer (Nothing :: Maybe a) \case
     Nothing -> return ()
     Just value -> output value
   Just value -> put $ Just value
+
+
+batch :: forall a . Int -> Tracer a [a]
+batch n = Tracer (0 :: Int, [] :: [a]) \case
+  Nothing -> get >>= \case
+    (0, _) -> return ()
+    (_, xs) -> output xs
+  Just value -> do
+    (k, xs) <- get
+    if k + 1 == n
+      then do
+        output $ reverse $ value : xs
+        put (0, [])
+      else modify (bimap (1+) (value:))
+
+meanStddevList :: Floating a => [a] -> (a, a)
+meanStddevList values = (mean, sqrt $ sum $ map (\v -> (v - mean) ^^ 2) values) where
+  mean = sum values / fromIntegral len
+  len = length values

@@ -18,17 +18,17 @@ import Prelude hiding ((.))
 import Control.Category
 import Control.Monad
 
-sparseTreeStretchDiameter :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent (Double, Double)
-sparseTreeStretchDiameter nodeCount weights n = treeStretchDiameter nodeCount weights . decayingFilter n . requests (const ())
+--sparseTreeStretchDiameter :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent (Double, Double)
+--sparseTreeStretchDiameter nodeCount weights n = snd <$> treeStretchDiameter nodeCount weights . decayingFilter n . requests (const ())
 
-treeStretchDiameter :: NodeCount -> GraphWeights -> Tracer a (Double, Double)
+treeStretchDiameter :: NodeCount -> GraphWeights -> Tracer a (a, (Double, Double))
 treeStretchDiameter nodeCount weights = Tracer () \case
   Nothing -> return ()
-  _ -> do
+  Just event -> do
     Env tree <- ask
     frozen <- sendM $ freeze tree
     let stretchDiameter = avgTreeStretchDiameter nodeCount weights frozen
-    output stretchDiameter
+    output (event, stretchDiameter)
 
 totalTreeWeight :: NodeCount -> GraphWeights -> Tracer a Double
 totalTreeWeight n weights = Tracer () \case

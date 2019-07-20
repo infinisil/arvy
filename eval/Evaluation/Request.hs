@@ -1,4 +1,8 @@
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Evaluation.Request where
 
 import Arvy.Local
@@ -9,10 +13,12 @@ import Data.Monoid
 import Data.Functor
 import Data.Bifunctor
 import Polysemy.State
+import GHC.Generics
 import Polysemy.Output
 import Data.Array.Unboxed
 import Prelude hiding ((.))
 import Control.Category
+import Control.DeepSeq
 
 data Request a = Request
   { requestFrom :: Int
