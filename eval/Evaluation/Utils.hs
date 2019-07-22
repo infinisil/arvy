@@ -4,7 +4,7 @@ import Data.Functor
 import Prelude hiding (id, (.))
 import Control.Monad
 import Pipes
-import Control.Applicative
+import qualified Pipes.Prelude as P
 
 -- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 meanStddev :: forall n m a . Monad m => Floating n => Pipe n (n, n) m a
@@ -48,6 +48,9 @@ decayingFilter r = go 0 0 (r - 1) where
       (0, 0) -> go (n + 1) (2 ^ (n + 1) - 1) r
       (0, _) -> go n (2 ^ n - 1) (d - 1)
       _ -> go n (p - 1) d
+
+distribute :: (Monad m, Foldable f) => f (Consumer i m ()) -> Consumer i m ()
+distribute = foldr (\con rest -> P.tee con >-> rest) P.drain
 
 --lastOne :: forall a . Tracer a a
 --lastOne = Tracer (Nothing :: Maybe a) \case
