@@ -42,6 +42,7 @@ library
   build-depends:       array
                      , mono-traversable
                      , containers
+                     , pipes
 
 library arvy-eval
   import:              defaults
@@ -70,6 +71,7 @@ library arvy-eval
                      , containers
                      , multiset
                      , heaps
+                     , pipes
 
 executable arvy
   import:              defaults
@@ -91,6 +93,7 @@ executable arvy
                      , containers
                      , multiset
                      , random-fu
+                     , pipes
 
 test-suite arvy-tests
   import:              defaults

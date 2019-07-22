@@ -24,6 +24,7 @@ import Polysemy.Reader
 import Data.Time (getCurrentTime)
 import System.Random.MWC
 import Utils
+import Pipes
 
 
 data Parameters r = Parameters
@@ -45,7 +46,7 @@ instance Show (Parameters r) where
     "\tInitial tree: " ++ initialTreeName algorithmInitialTree ++ "\n" ++
     "\tRequests: " ++ requestsName requests ++ "\n"
 
-runParams :: forall r . Members '[Lift IO, Trace] r => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> Eval (Reader (Env IOUArray) ': RandomFu ': r)) -> Sem r ()
+runParams :: forall r . Members '[Lift IO, Trace] r => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> Consumer ArvyEvent (Sem (Reader (Env IOUArray) ': RandomFu ': r)) ()) -> Sem r ()
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
@@ -77,9 +78,9 @@ runParams params@Parameters
     reqs <- requestsGet nodeCount weights
 
     trace $ "Running arvy.."
-    runEval (evaluation nodeCount weights) (Env mutableTree)
-      $ runRequests @IO mutableTree (raise . reqs) requestCount
-      $ runArvyLocal @IO @s @IOArray weights mutableTree mutableStates algorithm
+    runEffect $ runRequests mutableTree reqs requestCount
+      >-> runArvyLocal weights mutableTree mutableStates algorithm
+      >-> hoist (runReader (Env mutableTree)) (evaluation nodeCount weights)
 
 timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
 timestampTraces = interpret \case

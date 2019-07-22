@@ -69,6 +69,7 @@ let
     nativeBuildInputs = old.nativeBuildInputs or [] ++ [
       pkgs.haskellPackages.cabal-install
       pkgs.gnuplot
+      pkgs.ghostscript
     ];
   });
 
