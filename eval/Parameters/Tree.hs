@@ -14,13 +14,15 @@ import Data.Random.Distribution.Uniform
 import Utils
 
 data InitialTreeParameter s r = InitialTreeParameter
-  { initialTreeName :: String
+  { initialTreeId :: String
+  , initialTreeDescription :: String
   , initialTreeGet  :: Int -> GraphWeights -> Sem r (RootedTree, Array Node s)
   }
 
 ring :: InitialTreeParameter () r
 ring = InitialTreeParameter
-  { initialTreeName = "ring"
+  { initialTreeId = "ring"
+  , initialTreeDescription = "Ring"
   , initialTreeGet = \n _ ->
       return ( listArray (0, n - 1) (0 : [0..])
              , listArray (0, n - 1) (replicate n ()))
@@ -32,7 +34,8 @@ ring = InitialTreeParameter
 -- | Constructs a ring-like tree where the root is in the middle
 semiCircles :: InitialTreeParameter RingNodeState r
 semiCircles = InitialTreeParameter
-  { initialTreeName = "semi circles"
+  { initialTreeId = "semi"
+  , initialTreeDescription = "Semi circles"
   , initialTreeGet = \n _ -> return ( tree n
                                     , listArray (0, n - 1) (replicate n SemiNode) // [ (n `div` 2 - 1, BridgeNode) ] )
   }
@@ -47,7 +50,8 @@ semiCircles = InitialTreeParameter
 
 random :: Member RandomFu r => InitialTreeParameter () r
 random = InitialTreeParameter
-  { initialTreeName = "random"
+  { initialTreeId = "random"
+  , initialTreeDescription = "Random tree"
   , initialTreeGet = \n _ -> do
       (root, edges) <- randomSpanningTree n
       return ( array (0, n - 1) ((root, root) : edges)
@@ -72,7 +76,8 @@ randomSpanningTree n = do
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
 mst :: InitialTreeParameter () r
 mst = InitialTreeParameter
-  { initialTreeName = "mst"
+  { initialTreeId = "mst"
+  , initialTreeDescription = "Minimum spanning tree"
   , initialTreeGet = \n weights ->
       return ( array (0, n - 1) ((0, 0) : fmap edgeToElem (mstEdges n weights))
              , listArray (0, n - 1) (replicate n ()) )

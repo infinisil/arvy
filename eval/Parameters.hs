@@ -37,14 +37,16 @@ data Parameters r = Parameters
   }
 
 instance Show (Parameters r) where
-  show (Parameters { algorithm = AlgorithmParameter { algorithmName, algorithmInitialTree }, .. }) = "Parameters:\n" ++
+  show (Parameters { algorithm = AlgorithmParameter { algorithmDescription }, .. }) = "Parameters:\n" ++
     "\tRandom seed: " ++ show randomSeed ++ "\n" ++
     "\tNode count: " ++ show nodeCount ++ "\n" ++
     "\tRequest count: " ++ show requestCount ++ "\n" ++
-    "\tWeights: " ++ weightsName weights ++ "\n" ++
-    "\tAlgorithm: " ++ algorithmName ++ "\n" ++
-    "\tInitial tree: " ++ initialTreeName algorithmInitialTree ++ "\n" ++
-    "\tRequests: " ++ requestsName requests ++ "\n"
+    "\tWeights: " ++ weightsDescription weights ++ "\n" ++
+    "\tAlgorithm: " ++ algorithmDescription ++ "\n" ++
+    "\tRequests: " ++ requestsDescription requests ++ "\n"
+
+paramPath :: Parameters r -> FilePath
+paramPath params = weightsId (weights params) ++ "-" ++ algorithmId (algorithm params) ++ "-" ++ requestsId (requests params)
 
 runParams :: forall r . Members '[Lift IO, Trace] r => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> Consumer ArvyEvent (Sem (Reader (Env IOUArray) ': RandomFu ': r)) ()) -> Sem r ()
 runParams params@Parameters

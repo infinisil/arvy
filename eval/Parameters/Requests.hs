@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Parameters.Requests
   ( RequestsParameter(..)
-  , worst
+  , farthest
   , random
   , pareto
   , interactive
@@ -20,13 +20,15 @@ import Data.Random.Distribution.Uniform
 import Data.Random
 
 data RequestsParameter r = RequestsParameter
-  { requestsName :: String
+  { requestsId :: String
+  , requestsDescription :: String
   , requestsGet  :: Int -> GraphWeights -> Sem r (RootedTree -> Sem r Int)
   }
 
-worst :: RequestsParameter r
-worst = RequestsParameter
-  { requestsName = "worst"
+farthest :: RequestsParameter r
+farthest = RequestsParameter
+  { requestsId = "farthest"
+  , requestsDescription = "Farthest"
   , requestsGet = \_ weights -> return $ \tree -> return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
 
   } where
@@ -40,7 +42,8 @@ worst = RequestsParameter
 
 random :: Member RandomFu r => RequestsParameter r
 random = RequestsParameter
-  { requestsName = "random"
+  { requestsId = "random"
+  , requestsDescription = "Uniformly random requests"
   , requestsGet = get
   } where
   get :: Member RandomFu r => Int -> GraphWeights -> Sem r (RootedTree -> Sem r Int)
@@ -61,7 +64,8 @@ instance (Floating a, Distribution StdUniform a) => Distribution Lorenz a where
 
 pareto :: forall r . Member RandomFu r => RequestsParameter r
 pareto = RequestsParameter
-  { requestsName = "80-20 Pareto distribution (alpha = log 5 / log 4)"
+  { requestsId = "pareto"
+  , requestsDescription = "80-20 Pareto distribution (alpha = log 5 / log 4)"
   , requestsGet = \n _ -> do
       -- Generate a random node order such that in graphs whose node indices indicate the graph structure this distribution is truly random
       order <- listArray @UArray (0, n - 1) <$> sampleRVar (shuffle [0 .. n - 1])
@@ -75,12 +79,10 @@ pareto = RequestsParameter
 
 interactive :: Member (Lift IO) r => RequestsParameter r
 interactive = RequestsParameter
-  { requestsName = "interactive"
+  { requestsId = "interactive"
+  , requestsDescription = "Interactive"
   , requestsGet = \_ _ -> return $ \tree -> do
       -- TODO: Use haskeline, add haskeline effect to polysemy
       sendM $ putStrLn $ T.drawTree $ fmap show $ treeStructure tree
       read <$> sendM getLine
   }
-
-
-

@@ -35,7 +35,8 @@ import qualified Data.Array as A
 
 
 data WeightsParameter r = WeightsParameter
-  { weightsName :: String
+  { weightsId :: String
+  , weightsDescription :: String
   , weightsGet  :: Int -> Sem r GraphWeights
   }
 
@@ -70,14 +71,16 @@ shortestPathWeights n graph = runSTUArray $ do
 
 ring :: WeightsParameter r
 ring = WeightsParameter
-  { weightsName = "Ring graph"
+  { weightsId = "ring"
+  , weightsDescription = "Ring graph"
   , weightsGet = \n ->
       return $ shortestPathWeights n $ GA.symmetricClosure $ GA.circuit [0..n-1]
   }
 
 unitEuclidian :: Member RandomFu r => Int -> WeightsParameter r
 unitEuclidian dim = WeightsParameter
-  { weightsName = "Euclidian distances for uniformly random points in a " ++ show dim ++ "-dimensional hypercube"
+  { weightsId = "uniform" ++ show dim
+  , weightsDescription = "Euclidian distances for uniformly random points in a " ++ show dim ++ "-dimensional hypercube"
   , weightsGet = \n -> do
       points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
       return $ array ((0, 0), (n - 1, n - 1))
@@ -110,7 +113,8 @@ erdosProb (ErdosProbEpsilon e) n = (1 + e) * log (fromIntegral n) / (fromIntegra
 
 erdosRenyi :: Members '[RandomFu, Trace] r => ErdosProb -> WeightsParameter r
 erdosRenyi prob = WeightsParameter
-  { weightsName = "Erdos Renyi random graph"
+  { weightsId = "erdos"
+  , weightsDescription = "Erdos Renyi random graph"
   , weightsGet = \n -> do
       graph <- generate (erdosProb prob n) n
       return $ shortestPathWeights n graph
@@ -133,7 +137,8 @@ erdosRenyi prob = WeightsParameter
 
 barabasiAlbert :: Member RandomFu r => Int -> WeightsParameter r
 barabasiAlbert m = WeightsParameter
-  { weightsName = "Barabasi Albert random graph"
+  { weightsId = "barabasi"
+  , weightsDescription = "Barabasi Albert random graph"
   , weightsGet = \n -> do
       graph <- barabasiAlbertGen n m
       return $ shortestPathWeights n $ GA.symmetricClosure graph

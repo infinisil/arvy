@@ -5,35 +5,40 @@ import qualified Arvy.Algorithm.Collection as Arvy
 import qualified Parameters.Tree           as Tree
 
 data AlgorithmParameter r = forall s . AlgorithmParameter
-  { algorithmName        :: String
+  { algorithmId        :: String
+  , algorithmDescription :: String
   , algorithmInitialTree :: Tree.InitialTreeParameter s r
   , algorithmGet         :: Arvy s r
   }
 
 arrow :: AlgorithmParameter r
 arrow = AlgorithmParameter
-  { algorithmName = "Arrow"
+  { algorithmId = "arrow"
+  , algorithmDescription = "Arrow"
   , algorithmInitialTree = Tree.mst
   , algorithmGet = Arvy.arrow
   }
 
 ivy :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 ivy tree = AlgorithmParameter
-  { algorithmName = "Ivy-" ++ Tree.initialTreeName tree
+  { algorithmId = "ivy-" ++ Tree.initialTreeId tree
+  , algorithmDescription = "Ivy"
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.ivy
   }
 
 constantRing :: AlgorithmParameter r
 constantRing = AlgorithmParameter
-  { algorithmName = "ConstantRing"
+  { algorithmId = "ring"
+  , algorithmDescription = "Constant ring"
   , algorithmInitialTree = Tree.semiCircles
   , algorithmGet = Arvy.constantRing
   }
 
 half :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 half tree = AlgorithmParameter
-  { algorithmName = "HalfNodeode-" ++ Tree.initialTreeName tree
+  { algorithmId = "half-" ++ Tree.initialTreeId tree
+  , algorithmDescription = "Half node"
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.half
   }
