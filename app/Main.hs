@@ -16,73 +16,86 @@ import Evaluation.Request
 
 import           Polysemy
 import           Polysemy.RandomFu
-import           Polysemy.State
-import           Polysemy.Output
 import           Polysemy.Trace
-import           Data.Monoid
-import           Control.Category
 import           Control.Monad
 import           System.IO
 import           Prelude hiding ((.), id)
 import Pipes
 import qualified Pipes.Prelude as P
-import Data.Functor
-
-params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
-params =
-  [ Parameters
-    { randomSeed = 0
-    , nodeCount = 1000
-    , requestCount = 1000
-    , weights = Weights.ring
-    , requests = Requests.random
-    , algorithm = alg
-    }
-  | alg <- [ --Alg.ivy Tree.random
-           -- Alg.ivy Tree.mst
-           Alg.constantRing
-           ]
-  ]
+import Arvy.Local
+import Polysemy.Reader
+import Data.Array.MArray
+import System.Directory
+import System.FilePath
 
 main :: IO ()
-main = runM
-  $ runTraceIO
-  $ forM_ params
-  $ \par -> runParams par
-  $ \n w -> distribute
-  [ Evaluation.Utils.enumerate >-> P.show >-> P.stdoutLn
+main = runM $ runTraceIO
+  initialTreeMatters
 
-  --Evaluation.Request.requests (const ()) >-> decayingFilter 1 >-> treeStretchDiameter n w >-> P.map (\(s, d) -> show s ++ " " ++ show d) >-> P.stdoutLn
-  , Evaluation.Request.requests (const ()) >-> Evaluation.Utils.enumerate >-> everyNth 100 >-> P.map (show . fst) >-> P.stdoutLn
+createHandle :: FilePath -> IO Handle
+createHandle path = do
+  createDirectoryIfMissing True (takeDirectory path)
+  liftIO $ putStrLn $ "Opening handle to " ++ path
+  openFile path WriteMode
 
-  --[ --sparseTreeStretchDiameter n w 1 `runAs` RunTrace (\(avg, diam) -> "Average tree stretch: " ++ show avg ++ ", tree diameter: " ++ show diam)
-    --(enumerate . (meanStddevList <$> (batch 100 . ratio w))) `runAs` RunFile ("ratio" ++ Alg.algorithmName (algorithm par)) (\(n, (mean, stddev)) -> show n ++ " " ++ show mean ++ " " ++ show stddev)
-  --, (decayingFilter 1 . meanStddev . hopCount @Double) `runAs` RunTrace (\(mean, stddev) -> "Hop count mean: " ++ show mean ++ ", hop count stddev: " ++ show stddev)
-  --, (lastOne . ratio w) `runAs` RunTrace (\ratio -> "Ratio: " ++ show ratio)
-  --, (everyNth 10 . enumerate . logging . Evaluation.Request.requests (const ())) `runAs` RunTrace (\(n, _) -> show n)
-   --(treeStretchDiameter n w . Evaluation.Request.requests (const ())) `runAs` RunTrace (\(s, d) -> show s ++ " " ++ show d)
-  --    (\((k, _), (str, _)) -> show k ++ " " ++ show str)
-  ]
 
--- Forwards all values to all given consumers
-distribute :: (Monad m, Foldable f) => f (Consumer i m ()) -> Consumer i m ()
-distribute = foldr (\con rest -> P.tee con >-> rest) P.drain
+initialTreeMatters :: Members '[Lift IO, Trace] r => Sem r ()
+initialTreeMatters = forM_ params $ \par -> do
+  let stretchPath = "initialTreeMatters" </> paramFile par "stretch"
+  stretchHandle <- liftIO $ createHandle stretchPath
+  let ratioPath = "initialTreeMatters" </> paramFile par "ratio"
+  ratioHandle <- liftIO $ createHandle ratioPath
+  runParams par
+    $ eval (stretchHandle, ratioHandle)
+  liftIO $ hClose stretchHandle
+  liftIO $ hClose ratioHandle
 
-  --, hopCount @Double `runAs` RunTrace show
-  --, hopCount @Double `runAs` RunFile "hopcount" show
-  --, (totalTreeWeight n w . everyNth 100 . Evaluation.Request.requests (const ())) `runAs` RunTrace (\ttw -> "Total tree weight: " ++ show ttw)
+  where
 
-traceOutput :: Member Trace r => (x -> String) -> Sem (Output x ': r) a -> Sem r a
-traceOutput f = interpret \case Output x -> trace $ f x
+  params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
+  params =
+    [ Parameters
+      { randomSeed = 0
+      , nodeCount = 1000
+      , requestCount = 100000
+      , weights = weights
+      , requests = reqs
+      , algorithm = alg
+      }
+    | weights <-
+      [ Weights.ring
+      ]
+    , tree <-
+      [ Tree.random
+      , Tree.mst
+      ]
+    , alg <- ($ tree) <$>
+      [ Alg.ivy
+      , Alg.half
+      ]
+    , reqs <-
+      [ Requests.random
+      ]
+    ]
+  eval :: (MArray arr Node IO, Members '[Reader (Env arr), Lift IO] r) => (Handle, Handle) -> Int -> GraphWeights -> Consumer ArvyEvent (Sem r) ()
+  eval (stretchHandle, ratioHandle) n w = ratio w
+    >-> Evaluation.Utils.enumerate
+    >-> distribute
+    [ decayingFilter 4
+      >-> treeStretchDiameter n w
+      >-> P.map (\((i, _), (stretch, _)) -> show i ++ " " ++ show stretch)
+      >-> P.toHandle stretchHandle
+    , P.map (\(i, rat) -> show i ++ " " ++ show rat)
+      >-> P.toHandle ratioHandle
+    , everyNth 1000
+      >-> P.map (\(i, _) -> show i)
+      >-> P.stdoutLn
+    ]
 
-mapOutput :: Member (Output y) r => (x -> y) -> Sem (Output x ': r) a -> Sem r a
-mapOutput f = interpret \case Output x -> output $ f x
-
-runOutputToFile :: Member (Lift IO) r => FilePath -> Sem (Output String ': r) a -> Sem r a
-runOutputToFile file sem = do
-  handle <- sendM $ openFile file WriteMode
-  res <- interpret
-    \case Output str -> sendM $ hPutStrLn handle str
-    sem
-  sendM $ hClose handle
-  return res
+toFile :: MonadIO m => FilePath -> Consumer String m ()
+toFile path = do
+  liftIO $ createDirectoryIfMissing True (takeDirectory path)
+  liftIO $ putStrLn $ "Writing to " ++path
+  handle <- liftIO $ openFile path WriteMode
+  () <- P.toHandle handle
+  liftIO $ hClose handle

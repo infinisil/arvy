@@ -45,8 +45,8 @@ instance Show (Parameters r) where
     "\tAlgorithm: " ++ algorithmDescription ++ "\n" ++
     "\tRequests: " ++ requestsDescription requests ++ "\n"
 
-paramPath :: Parameters r -> FilePath
-paramPath params = weightsId (weights params) ++ "/" ++ requestsId (requests params) ++ "/" ++ algorithmId (algorithm params)
+paramFile :: Parameters r -> String -> FilePath
+paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params) ++ "/metric:" ++ metric ++ "/algorithm:" ++ algorithmId (algorithm params)
 
 runParams :: forall r . Members '[Lift IO, Trace] r => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> Consumer ArvyEvent (Sem (Reader (Env IOUArray) ': RandomFu ': r)) ()) -> Sem r ()
 runParams params@Parameters

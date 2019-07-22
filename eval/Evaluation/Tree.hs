@@ -19,11 +19,11 @@ import qualified Pipes.Prelude as P
 --sparseTreeStretchDiameter :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent (Double, Double)
 --sparseTreeStretchDiameter nodeCount weights n = snd <$> treeStretchDiameter nodeCount weights . decayingFilter n . requests (const ())
 
-treeStretchDiameter :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => NodeCount -> GraphWeights -> Pipe a (Double, Double) (Sem r) x
-treeStretchDiameter nodeCount weights = P.mapM \_ -> do
+treeStretchDiameter :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => NodeCount -> GraphWeights -> Pipe a (a, (Double, Double)) (Sem r) x
+treeStretchDiameter nodeCount weights = P.mapM \event -> do
   Env tree <- ask
   frozen <- sendM $ freeze tree
-  return $ avgTreeStretchDiameter nodeCount weights frozen
+  return $ (event, avgTreeStretchDiameter nodeCount weights frozen)
 
 totalTreeWeight :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => NodeCount -> GraphWeights -> Pipe a Double (Sem r) x
 totalTreeWeight n weights = P.mapM \_ -> do

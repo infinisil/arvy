@@ -94,6 +94,8 @@ executable arvy
                      , multiset
                      , random-fu
                      , pipes
+                     , directory
+                     , filepath
 
 test-suite arvy-tests
   import:              defaults
