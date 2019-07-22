@@ -1,22 +1,10 @@
 module Evaluation.Utils where
 
-import Evaluation
-import Polysemy.State
-import Polysemy.Output
 import Data.Functor
 import Prelude hiding (id, (.))
-import Control.Category
 import Control.Monad
-import Data.Bifunctor
 import Pipes
-
---logging :: Show a => Tracer a String
---logging = id <&> show
---
---filtering :: (a -> Bool) -> Tracer a a
---filtering f = Tracer () \case
---  Nothing -> return ()
---  Just event -> when (f event) (output event)
+import Control.Applicative
 
 -- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 meanStddev :: forall n m a . Monad m => Floating n => Pipe n (n, n) m a
@@ -32,7 +20,8 @@ meanStddev = do
           newMean = mean + delta / fromIntegral newCount
           delta2 = v - newMean
           newM2 = m2 + delta * delta2
-      let stddev = sqrt $ newM2 / fromIntegral newCount
+
+          stddev = sqrt $ newM2 / fromIntegral newCount
       yield (newMean, stddev)
       go newCount newMean newM2
 
@@ -43,23 +32,6 @@ enumerate = go 0 where
     v <- await
     yield (n, v)
     go (n + 1)
-
---enumerate :: Tracer a (Int, a)
---enumerate = Tracer (0 :: Int) \case
---  Nothing -> return ()
---  Just value -> do
---    n <- get
---    output (n, value)
---    put (n + 1)
---
---summing :: forall n . Num n => Tracer n n
---summing = Tracer (0 :: n) $ \case
---  Nothing -> return ()
---  Just value -> do
---    total <- gets (+value)
---    put total
---    output total
---
 
 everyNth :: forall n m a . Monad m => Int -> Pipe n n m a
 everyNth n = go (n - 1) where

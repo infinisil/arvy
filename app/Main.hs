@@ -26,20 +26,21 @@ import           System.IO
 import           Prelude hiding ((.), id)
 import Pipes
 import qualified Pipes.Prelude as P
+import Data.Functor
 
 params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
 params =
   [ Parameters
     { randomSeed = 0
     , nodeCount = 1000
-    , requestCount = 10000
+    , requestCount = 1000
     , weights = Weights.ring
     , requests = Requests.random
     , algorithm = alg
     }
-  | alg <- [ Alg.ivy Tree.random
-           , Alg.ivy Tree.mst
-           , Alg.constantRing
+  | alg <- [ --Alg.ivy Tree.random
+           -- Alg.ivy Tree.mst
+           Alg.constantRing
            ]
   ]
 
@@ -48,9 +49,11 @@ main = runM
   $ runTraceIO
   $ forM_ params
   $ \par -> runParams par
-  $ \n w -> toAll
-  [ --P.show >-> P.stdoutLn
-  Evaluation.Request.requests (const ()) >-> decayingFilter 4 >-> treeStretchDiameter n w >-> P.map (\(s, d) -> show s ++ " " ++ show d) >-> P.stdoutLn
+  $ \n w -> distribute
+  [ Evaluation.Utils.enumerate >-> P.show >-> P.stdoutLn
+
+  --Evaluation.Request.requests (const ()) >-> decayingFilter 1 >-> treeStretchDiameter n w >-> P.map (\(s, d) -> show s ++ " " ++ show d) >-> P.stdoutLn
+  , Evaluation.Request.requests (const ()) >-> Evaluation.Utils.enumerate >-> everyNth 100 >-> P.map (show . fst) >-> P.stdoutLn
 
   --[ --sparseTreeStretchDiameter n w 1 `runAs` RunTrace (\(avg, diam) -> "Average tree stretch: " ++ show avg ++ ", tree diameter: " ++ show diam)
     --(enumerate . (meanStddevList <$> (batch 100 . ratio w))) `runAs` RunFile ("ratio" ++ Alg.algorithmName (algorithm par)) (\(n, (mean, stddev)) -> show n ++ " " ++ show mean ++ " " ++ show stddev)
@@ -63,7 +66,7 @@ main = runM
 
 -- Forwards all values to all given consumers
 distribute :: (Monad m, Foldable f) => f (Consumer i m ()) -> Consumer i m ()
-distribute = foldr (\c -> (P.tee c >->)) P.drain
+distribute = foldr (\con rest -> P.tee con >-> rest) P.drain
 
   --, hopCount @Double `runAs` RunTrace show
   --, hopCount @Double `runAs` RunFile "hopcount" show
