@@ -1,7 +1,6 @@
 module Evaluation.Tree where
 
 import           Arvy.Local
-import           Evaluation
 
 import           Data.Array.IO
 import           Data.Array.Unboxed
@@ -10,27 +9,22 @@ import qualified Data.IntMap        as IntMap
 import           Data.IntSet        (IntSet)
 import qualified Data.IntSet        as IntSet
 import           Polysemy
-import           Polysemy.Reader
 import Prelude hiding ((.))
 import Control.Monad
 import Pipes
 import qualified Pipes.Prelude as P
 
---sparseTreeStretchDiameter :: NodeCount -> GraphWeights -> Int -> Tracer ArvyEvent (Double, Double)
---sparseTreeStretchDiameter nodeCount weights n = snd <$> treeStretchDiameter nodeCount weights . decayingFilter n . requests (const ())
-
-treeStretchDiameter :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => NodeCount -> GraphWeights -> Pipe a (a, (Double, Double)) (Sem r) x
-treeStretchDiameter nodeCount weights = P.mapM \event -> do
-  Env tree <- ask
+treeStretchDiameter :: (MArray arr Node m, Member (Lift m) r) => NodeCount -> GraphWeights -> arr Node Node -> Pipe a (a, (Double, Double)) (Sem r) x
+treeStretchDiameter nodeCount weights tree = P.mapM \event -> do
   frozen <- sendM $ freeze tree
   return $ (event, avgTreeStretchDiameter nodeCount weights frozen)
 
-totalTreeWeight :: (MArray arr Node m, Members '[Reader (Env arr), Lift m] r) => NodeCount -> GraphWeights -> Pipe a Double (Sem r) x
-totalTreeWeight n weights = P.mapM \_ -> do
-  Env tree <- ask
-  sum <$> forM [0 .. n - 1] \a -> do
+totalTreeWeight :: (MArray arr Node m, Member (Lift m) r) => NodeCount -> GraphWeights -> arr Node Node -> Pipe a (a, Double) (Sem r) x
+totalTreeWeight n weights tree = P.mapM \event -> do
+  res <- sum <$> forM [0 .. n - 1] \a -> do
     b <- sendM $ readArray tree a
     return $ weights ! (a, b)
+  return (event, res)
 
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretchDiameter :: NodeCount -> GraphWeights -> RootedTree -> (Double, Double)

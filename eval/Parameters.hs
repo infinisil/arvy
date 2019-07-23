@@ -12,7 +12,6 @@ import Parameters.Tree
 import Parameters.Requests
 import Parameters.Weights
 import Parameters.Algorithm
-import Evaluation
 
 import Polysemy
 import Polysemy.RandomFu
@@ -20,7 +19,6 @@ import qualified Data.Vector as V
 import GHC.Word
 import Data.Array.IO
 import Polysemy.Trace
-import Polysemy.Reader
 import Data.Time (getCurrentTime)
 import System.Random.MWC
 import Utils
@@ -48,7 +46,12 @@ instance Show (Parameters r) where
 paramFile :: Parameters r -> String -> FilePath
 paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params) ++ "/metric:" ++ metric ++ "/algorithm:" ++ algorithmId (algorithm params)
 
-runParams :: forall r . Members '[Lift IO, Trace] r => Parameters (RandomFu ': r) -> (Int -> GraphWeights -> Consumer ArvyEvent (Sem (Reader (Env IOUArray) ': RandomFu ': r)) ()) -> Sem r ()
+runParams
+  :: forall r
+  . Members '[Lift IO, Trace] r
+  => Parameters (RandomFu ': r)
+  -> (NodeCount -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem (RandomFu ': r)) ())
+  -> Sem r ()
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
@@ -82,7 +85,7 @@ runParams params@Parameters
     trace $ "Running arvy.."
     runEffect $ runRequests mutableTree reqs requestCount
       >-> runArvyLocal weights mutableTree mutableStates algorithm
-      >-> hoist (runReader (Env mutableTree)) (evaluation nodeCount weights)
+      >-> evaluation nodeCount weights mutableTree
 
 timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
 timestampTraces = interpret \case

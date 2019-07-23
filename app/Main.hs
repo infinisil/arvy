@@ -1,4 +1,3 @@
-{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE BangPatterns #-}
 
 module Main where
@@ -9,10 +8,7 @@ import qualified Parameters.Tree as Tree
 import qualified Parameters.Requests as Requests
 import qualified Parameters.Algorithm as Alg
 
-import           Evaluation
-import           Evaluation.Tree
-import Evaluation.Utils
-import Evaluation.Request
+import Evaluation
 
 import           Polysemy
 import           Polysemy.RandomFu
@@ -20,11 +16,10 @@ import           Polysemy.Trace
 import           Control.Monad
 import           System.IO
 import           Prelude hiding ((.), id)
-import Pipes
+import Pipes hiding (enumerate)
 import qualified Pipes.Prelude as P
 import Arvy.Local
-import Polysemy.Reader
-import Data.Array.MArray
+import Data.Array.IO
 import System.Directory
 import System.FilePath
 
@@ -37,7 +32,6 @@ createHandle path = do
   createDirectoryIfMissing True (takeDirectory path)
   liftIO $ putStrLn $ "Opening handle to " ++ path
   openFile path WriteMode
-
 
 initialTreeMatters :: Members '[Lift IO, Trace] r => Sem r ()
 initialTreeMatters = forM_ params $ \par -> do
@@ -78,20 +72,20 @@ initialTreeMatters = forM_ params $ \par -> do
       [ Requests.random
       ]
     ]
-  eval :: (MArray arr Node IO, Members '[Reader (Env arr), Lift IO] r) => (Handle, Handle) -> Int -> GraphWeights -> Consumer ArvyEvent (Sem r) ()
-  eval (stretchHandle, ratioHandle) n w = ratio w
+  eval :: Member (Lift IO) r => (Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
+  eval (stretchHandle, ratioHandle) n w t = ratio w
     >-> distribute
-    [ Evaluation.Utils.enumerate
+    [ enumerate
       >-> decayingFilter 4
-      >-> treeStretchDiameter n w
+      >-> treeStretchDiameter n w t
       >-> P.map (\((i, _), (stretch, _)) -> show i ++ " " ++ show stretch)
       >-> P.toHandle stretchHandle
     , movingAverage True 100
-      >-> Evaluation.Utils.enumerate
+      >-> enumerate
       >-> decayingFilter 10
       >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
       >-> P.toHandle ratioHandle
-    , Evaluation.Utils.enumerate
+    , enumerate
       >-> decayingFilter 10
       >-> P.map (\(i, _) -> show i)
       >-> P.stdoutLn
