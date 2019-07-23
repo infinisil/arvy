@@ -44,6 +44,12 @@ instance Show (Parameters r) where
     "\tAlgorithm: " ++ algorithmDescription ++ "\n" ++
     "\tRequests: " ++ requestsDescription requests ++ "\n"
 
+data ConstParameters = ConstParameters
+  { paramNodeCount :: NodeCount
+  , paramWeights :: GraphWeights
+  , paramTree :: IOUArray Node Node
+  }
+
 paramFile :: Parameters r -> String -> FilePath
 paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params) ++ "/metric:" ++ metric ++ "/algorithm:" ++ algorithmId (algorithm params)
 
@@ -61,38 +67,35 @@ runParams params@Parameters
   , requests = RequestsParameter { requestsGet }
   , algorithm = AlgorithmParameter { algorithmGet, algorithmInitialTree }
   } evaluation = do
+  trace $ show params
   gen <- sendM $ initialize (V.singleton seed)
-  runRandomSource' gen
-    $ go algorithmInitialTree algorithmGet
+  runRandomSource' gen $ do
+    generatedParams <- genParams algorithmInitialTree
+    runAlg generatedParams algorithmGet
 
   where
-  go :: forall s . InitialTreeParameter s (RandomFu ': r) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) ()
-  go InitialTreeParameter { initialTreeGet } algorithm = do
-    trace $ show params
 
-    -- TODO: Cache (and paralellize) these computations to make this faster
+    genParams :: forall s . InitialTreeParameter s (RandomFu ': r) -> Sem (RandomFu ': r) (ConstParameters, IOArray Node s)
+    genParams InitialTreeParameter { initialTreeGet } = do
+      -- TODO: Cache (and paralellize) these computations to make this faster
+      trace "Generating weights.."
+      !weights <- weightsGet nodeCount
 
-    trace $ "Generating weights.."
-    !weights <- weightsGet nodeCount
+      trace "Generating initial tree.."
+      !(tree, states) <- initialTreeGet nodeCount weights
+      mutableTree <- sendM (thaw tree :: IO (IOUArray Int Int))
+      mutableStates <- sendM (thaw states :: IO (IOArray Int s))
 
+      return (ConstParameters nodeCount weights mutableTree, mutableStates)
 
-    trace $ "Generating initial tree.."
-    !(tree, states) <- initialTreeGet nodeCount weights
-    mutableTree <- sendM (thaw tree :: IO (IOUArray Int Int))
-    mutableStates <- sendM (thaw states :: IO (IOArray Int s))
+    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) ()
+    runAlg (ConstParameters { .. }, states) algorithm = do
+      reqs <- requestsGet nodeCount paramWeights
 
-    reqs <- requestsGet nodeCount weights
-
-    trace $ "Running arvy.."
-    start <- sendM getCurrentTime
-    runEffect $ runRequests mutableTree reqs requestCount
-      >-> runArvyLocal weights mutableTree mutableStates algorithm
-      >-> evaluation nodeCount weights mutableTree
-    end <- sendM getCurrentTime
-    trace $ "Took " ++ show (end `diffUTCTime` start)
-
-timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
-timestampTraces = interpret \case
-  Trace v -> do
-    time <- sendM getCurrentTime
-    trace $ "[" ++ show time ++ "] " ++ v
+      trace $ "Running arvy.."
+      start <- sendM getCurrentTime
+      runEffect $ runRequests paramTree reqs requestCount
+        >-> runArvyLocal paramWeights paramTree states algorithm
+        >-> evaluation nodeCount paramWeights paramTree
+      end <- sendM getCurrentTime
+      trace $ "Took " ++ show (end `diffUTCTime` start)
