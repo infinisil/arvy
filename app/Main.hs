@@ -25,13 +25,24 @@ import System.FilePath
 
 main :: IO ()
 main = runM $ runTraceIO
-  initialTreeMatters
+  --initialTreeMatters
+  performanceTester
 
 createHandle :: FilePath -> IO Handle
 createHandle path = do
   createDirectoryIfMissing True (takeDirectory path)
   liftIO $ putStrLn $ "Opening handle to " ++ path
   openFile path WriteMode
+
+performanceTester :: Members '[Lift IO, Trace] r => Sem r ()
+performanceTester = runParams Parameters
+  { randomSeed = 0
+  , nodeCount = 100
+  , requestCount = 100000
+  , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
+  , requests = Requests.random
+  , algorithm = Alg.ivy Tree.random
+  } \n w t -> P.drain
 
 initialTreeMatters :: Members '[Lift IO, Trace] r => Sem r ()
 initialTreeMatters = forM_ params $ \par -> do

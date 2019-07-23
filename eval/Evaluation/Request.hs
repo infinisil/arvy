@@ -17,8 +17,8 @@ data Request a = Request
   , path :: a
   } deriving (Functor, Show)
 
-requests :: forall a m x . (Monoid a, Monad m) => (Edge -> a) -> Pipe ArvyEvent (Request a) m x
-requests f = go 0 mempty where
+collectRequests :: forall a m x . (Monoid a, Monad m) => (Edge -> a) -> Pipe ArvyEvent (Request a) m x
+collectRequests f = go 0 mempty where
   go :: Int -> a -> Pipe ArvyEvent (Request a) m x
   go requestFrom as = await >>= \case
     RequestMade requestFrom' -> go requestFrom' mempty
@@ -29,9 +29,9 @@ requests f = go 0 mempty where
     _ -> go requestFrom as
 
 hopCount :: (Num n, Monad m) => Pipe ArvyEvent n m x
-hopCount = requests (\_ -> Sum 1) >-> P.map (getSum . path)
+hopCount = collectRequests (\_ -> Sum 1) >-> P.map (getSum . path)
 
 ratio :: Monad m => GraphWeights -> Pipe ArvyEvent Double m x
-ratio weights = requests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
+ratio weights = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
   >-> P.filter (\(Request a b _) -> a /= b) -- Only look at requests where start node != end node
   >-> P.map (\(Request a b (Sum path)) -> path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length

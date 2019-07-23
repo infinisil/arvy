@@ -23,6 +23,7 @@ import Data.Time (getCurrentTime)
 import System.Random.MWC
 import Utils
 import Pipes
+import Data.Time
 
 
 data Parameters r = Parameters
@@ -83,9 +84,12 @@ runParams params@Parameters
     reqs <- requestsGet nodeCount weights
 
     trace $ "Running arvy.."
+    start <- sendM getCurrentTime
     runEffect $ runRequests mutableTree reqs requestCount
       >-> runArvyLocal weights mutableTree mutableStates algorithm
       >-> evaluation nodeCount weights mutableTree
+    end <- sendM getCurrentTime
+    trace $ "Took " ++ show (end `diffUTCTime` start)
 
 timestampTraces :: Members '[Lift IO, Trace] r => Sem (Trace ': r) a -> Sem r a
 timestampTraces = interpret \case
