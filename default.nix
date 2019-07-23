@@ -1,6 +1,6 @@
 { pkgs ? import (fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/tarball/7815c86c104a99417db844791dcda34fe7a7965f";
-    sha256 = "0k6ws2b2b6vrvq2g5h8fi8qscb0wk0wy097cnf36f9acd126k43j";
+    url = "https://github.com/NixOS/nixpkgs/tarball/c4fec1c6314c0c9c7af59bb465a17d1950ec7464";
+    sha256 = "1w8wjvmsap0jn4gq2gg76yphsgvl6a9v5vsnkjr0jzda1q83zw4h";
   }) {}
 }:
 let
@@ -18,13 +18,6 @@ let
     "arvy.cabal"
   ];
 
-  polysemySrc = pkgs.fetchFromGitHub {
-    owner = "isovector";
-    repo = "polysemy";
-    rev = "b5d086b85999708d1da98f5d3f7aa5f7067bc8a8";
-    sha256 = "06wchcz0wk8hx85i8412zw8cb74hrm22nphxj5sg4038f3ql7i2j";
-  };
-
   hpkgs = pkgs.haskell.packages.ghc865.override (old: {
     overrides = lib.composeExtensions (old.overrides or (self: super: {})) (self: super: {
 
@@ -37,28 +30,20 @@ let
         haddockPhase = builtins.replaceStrings ["haddock --html"] ["haddock lib:arvy --html"] old.haddockPhase;
       });
 
-      th-abstraction = super.th-abstraction_0_3_1_0;
+      # https://github.com/snowleopard/alga/pull/210
+      algebraic-graphs = hlib.dontCheck (hlib.unmarkBroken super.algebraic-graphs);
 
-      polysemy = (super.callCabal2nixWithOptions "polysemy" polysemySrc "--no-hpack" {}).overrideAttrs (old: {
-        configureFlags = [ "-f -error-messages" ];
-      });
+      th-abstraction = self.th-abstraction_0_3_1_0;
+      th-lift = self.th-lift_0_8_0_1;
 
-      polysemy-plugin = super.callCabal2nixWithOptions "polysemy-plugin" "${polysemySrc}/polysemy-plugin" "--no-hpack" {
-        inspection-testing = self.inspection-testing_0_4_2;
+      polysemy = hlib.unmarkBroken super.polysemy;
+      polysemy-plugin = hlib.dontCheck (hlib.unmarkBroken super.polysemy-plugin);
+      polysemy-zoo = hlib.dontCheck (hlib.unmarkBroken super.polysemy-zoo);
+      polysemy-RandomFu = hlib.unmarkBroken super.polysemy-RandomFu;
+
+      type-errors = (hlib.unmarkBroken super.type-errors).override {
+        first-class-families = self.first-class-families_0_5_0_0;
       };
-
-      polysemy-zoo = super.callCabal2nixWithOptions "polysemy-zoo" (pkgs.fetchFromGitHub {
-        owner = "isovector";
-        repo = "polysemy-zoo";
-        rev = "152401ba522b3182f35121100dc56ea25fea1bc3";
-        sha256 = "01jifzd182212hdb075196y76sqk69rczhxwdi21j2p7ycwq7fxp";
-      }) "--no-hpack" {};
-
-      polysemy-RandomFu = hlib.doJailbreak (super.callHackageDirect {
-        pkg = "polysemy-RandomFu";
-        ver = "0.2.0.0";
-        sha256 = "0yax8mzcw0gvy54fxzh433rw6dzc19j4wv3gdn83fm8jlrx8jqjn";
-      } {});
 
     });
   });
