@@ -5,6 +5,8 @@ import Prelude hiding (id, (.))
 import Control.Monad
 import Pipes
 import qualified Pipes.Prelude as P
+import qualified Data.Sequence as S
+import Data.Sequence (Seq, (|>))
 
 -- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 meanStddev :: forall n m a . Monad m => Floating n => Pipe n (n, n) m a
@@ -52,28 +54,34 @@ decayingFilter r = go 0 0 (r - 1) where
 distribute :: (Monad m, Foldable f) => f (Consumer i m ()) -> Consumer i m ()
 distribute = foldr (\con rest -> P.tee con >-> rest) P.drain
 
---lastOne :: forall a . Tracer a a
---lastOne = Tracer (Nothing :: Maybe a) \case
---  Nothing -> get >>= \case
---    Nothing -> return ()
---    Just value -> output value
---  Just value -> put $ Just value
---
---
---batch :: forall a . Int -> Tracer a [a]
---batch n = Tracer (0 :: Int, [] :: [a]) \case
---  Nothing -> get >>= \case
---    (0, _) -> return ()
---    (_, xs) -> output xs
---  Just value -> do
---    (k, xs) <- get
---    if k + 1 == n
---      then do
---        output $ reverse $ value : xs
---        put (0, [])
---      else modify (bimap (1+) (value:))
---
---meanStddevList :: Floating a => [a] -> (a, a)
---meanStddevList values = (mean, sqrt $ sum $ map (\v -> (v - mean) ^^ 2) values) where
---  mean = sum values / fromIntegral len
---  len = length values
+chunk :: Monad m => Int -> Pipe i [i] m ()
+chunk k = replicateM k await >>= yield >> chunk k
+
+movingAverage :: forall n m . (Monad m, Fractional n) => Bool -> Int -> Pipe n n m ()
+movingAverage initial window = do
+  v <- await
+  go v (S.singleton v)
+  where
+    go :: n -> Seq n -> Pipe n n m ()
+    go mean hist
+      | count < window = do
+          when initial (yield mean)
+          v <- await
+          go ((mean * fromIntegral count + v) / (fromIntegral count + 1)) (hist |> v)
+      | otherwise = go' mean hist
+      where
+        count = S.length hist
+    go' :: n -> Seq n -> Pipe n n m ()
+    go' mean hist = do
+      yield mean
+      v <- await
+      case S.viewl hist of
+        S.EmptyL -> error "Shouldn't be empty"
+        old S.:< rest -> do
+          let newMean = mean + (v - old) / fromIntegral window
+          go' newMean (rest |> v)
+
+meanStddevList :: Floating a => [a] -> (a, a)
+meanStddevList values = (mean, sqrt $ sum $ map (\v -> (v - mean) ^^ (2 :: Int)) values) where
+  mean = sum values / fromIntegral len
+  len = length values

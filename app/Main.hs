@@ -63,7 +63,8 @@ initialTreeMatters = forM_ params $ \par -> do
       , algorithm = alg
       }
     | weights <-
-      [ Weights.ring
+      [ Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
+      , Weights.ring
       ]
     , tree <-
       [ Tree.random
@@ -79,18 +80,22 @@ initialTreeMatters = forM_ params $ \par -> do
     ]
   eval :: (MArray arr Node IO, Members '[Reader (Env arr), Lift IO] r) => (Handle, Handle) -> Int -> GraphWeights -> Consumer ArvyEvent (Sem r) ()
   eval (stretchHandle, ratioHandle) n w = ratio w
-    >-> Evaluation.Utils.enumerate
     >-> distribute
-    [ decayingFilter 4
+    [ Evaluation.Utils.enumerate
+      >-> decayingFilter 4
       >-> treeStretchDiameter n w
       >-> P.map (\((i, _), (stretch, _)) -> show i ++ " " ++ show stretch)
       >-> P.toHandle stretchHandle
-    , P.map (\(i, rat) -> show i ++ " " ++ show rat)
+    , movingAverage True 100
+      >-> Evaluation.Utils.enumerate
+      >-> decayingFilter 10
+      >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
       >-> P.toHandle ratioHandle
-    , everyNth 1000
+    , Evaluation.Utils.enumerate
+      >-> decayingFilter 10
       >-> P.map (\(i, _) -> show i)
       >-> P.stdoutLn
-    ]
+    ] where
 
 toFile :: MonadIO m => FilePath -> Consumer String m ()
 toFile path = do
