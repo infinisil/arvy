@@ -1,11 +1,17 @@
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Arvy.Algorithm.Collection
-  ( arrow, ivy, half, constantRing
+  ( arrow, ivy, half, constantRing, inbetween
   , RingNodeState(..)
   ) where
 
 import Arvy.Algorithm
 import Data.Sequences
 import Data.NonNull
+import Data.Ratio
+import qualified Data.Sequence as S
+import Data.Sequence (Seq, ViewL(..), ViewR(..))
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
@@ -37,6 +43,23 @@ half :: Show s => Arvy s r
 half = simpleArvy middle where
   middle xs = return $ xs' `unsafeIndex` (lengthIndex xs' `div` 2) where
     xs' = toNullable xs
+
+data InbetweenMessage i = InbetweenMessage Int i (Seq i) deriving (Functor, Show)
+
+inbetween :: forall s r . Show s => Ratio Int -> Arvy s r
+inbetween ratio = arvy @InbetweenMessage @s ArvyInst
+  { arvyInitiate = \i _ -> return (InbetweenMessage 1 i S.empty)
+  , arvyTransmit = \(InbetweenMessage k f (fmap forward -> seq)) i _ ->
+      let s = S.length seq + 1
+          newK = k + 1
+          (newF, newSeq) = if (newK - s) % newK < ratio
+            then case S.viewl seq of
+              S.EmptyL -> (i, S.empty)
+              fir S.:< rest -> (fir, rest S.|> i)
+            else (forward f, seq S.|> i)
+      in return (f, InbetweenMessage newK newF newSeq)
+  , arvyReceive = \(InbetweenMessage _ f _) _ -> return f
+  }
 
 data RingMessage i
   = BeforeCrossing

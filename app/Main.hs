@@ -21,12 +21,67 @@ import qualified Pipes.Prelude as P
 import Arvy.Local
 import Data.Array.IO
 import System.Directory
+import Data.Ratio
 import System.FilePath
 
 main :: IO ()
 main = runM $ runTraceIO
   --initialTreeMatters
-  performanceTester
+  inbetweenParameter
+  --testing
+
+inbetweenParameter :: Members '[Lift IO, Trace] r => Sem r ()
+inbetweenParameter = forM_ params $ \par -> do
+  let ratioPath = "inbetweenParameter" </> paramFile par "ratio"
+  ratioHandle <- liftIO $ createHandle ratioPath
+  runParams par
+    $ eval ratioHandle
+  liftIO $ hClose ratioHandle
+
+  where
+
+  params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
+  params =
+    [ Parameters
+      { randomSeed = 0
+      , nodeCount = 1000
+      , requestCount = 50000
+      , weights = weights
+      , requests = reqs
+      , algorithm = alg
+      }
+    | weights <-
+      [ Weights.unitEuclidian 2
+      ]
+    , alg <-
+      [ Alg.arrow
+      , Alg.inbetween (1 % 2) Tree.mst
+      , Alg.inbetween (1 % 3) Tree.mst
+      , Alg.inbetween (1 % 4) Tree.mst
+      , Alg.inbetween (1 % 5) Tree.mst
+      , Alg.inbetween (1 % 6) Tree.mst
+      , Alg.inbetween (1 % 7) Tree.mst
+      , Alg.inbetween (1 % 8) Tree.mst
+      , Alg.ivy Tree.mst
+      ]
+    , reqs <-
+      [ --Requests.random
+       Requests.pareto
+      ]
+    ]
+  eval :: Member (Lift IO) r => Handle -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
+  eval ratioHandle n w t = ratio w
+    >-> distribute
+    [ movingAverage True 250
+      >-> enumerate
+      >-> decayingFilter 10
+      >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
+      >-> P.toHandle ratioHandle
+    , enumerate
+      >-> everyNth 2000
+      >-> P.map (\(i, _) -> show i)
+      >-> P.stdoutLn
+    ] where
 
 createHandle :: FilePath -> IO Handle
 createHandle path = do
@@ -34,15 +89,15 @@ createHandle path = do
   liftIO $ putStrLn $ "Opening handle to " ++ path
   openFile path WriteMode
 
-performanceTester :: Members '[Lift IO, Trace] r => Sem r ()
-performanceTester = runParams Parameters
+testing :: Members '[Lift IO, Trace] r => Sem r ()
+testing = runParams Parameters
   { randomSeed = 0
-  , nodeCount = 100
-  , requestCount = 100000
+  , nodeCount = 20
+  , requestCount = 10
   , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
-  , requests = Requests.random
-  , algorithm = Alg.ivy Tree.random
-  } \n w t -> P.drain
+  , requests = Requests.interactive
+  , algorithm = Alg.inbetween (1 % 2) Tree.random
+  } \n w t -> P.show >-> P.stdoutLn
 
 initialTreeMatters :: Members '[Lift IO, Trace] r => Sem r ()
 initialTreeMatters = forM_ params $ \par -> do

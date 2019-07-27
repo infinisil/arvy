@@ -21,8 +21,7 @@ type GraphWeightsArr arr = arr Edge Weight
 -- | The type to represent immutable graph weights
 type GraphWeights = GraphWeightsArr UArray
 
-
--- | A rooted spanning tree, an array of nodes where each node either points to a successor signified with 'Just' or is the root node, signified with 'Nothing'
+-- | A rooted spanning tree, an array of nodes where each node either points to a successor or is the root node by pointing to itself.
 type RootedTree = UArray Node Node
 
 {-# INLINABLE runRequests #-}
@@ -110,8 +109,6 @@ runArvyLocal weights tree stateArray (Arvy inst) = runArvyLocal' inst where
       go
       where
 
-    --  where
-
       -- | Send a message to some node and repeatedly applies the arvy algorithm until eventually the root node is found, which gets returned
       {-# INLINE send #-}
       send :: msg Node -> Node -> Pipe Node ArvyEvent (Sem r) Int
@@ -136,7 +133,7 @@ runArvyLocal weights tree stateArray (Arvy inst) = runArvyLocal' inst where
       setSuccessor :: Node -> Node -> Pipe Node ArvyEvent (Sem r) ()
       setSuccessor i newSucc = do
         lift $ sendM $ writeArray tree i newSucc
-        --output $ Just $ SuccessorChange i newSucc
+        yield $ SuccessorChange i newSucc
 
       {-# INLINE runNodeState #-}
       -- | Interprets the state in a node as array operations to the state array at that nodes index

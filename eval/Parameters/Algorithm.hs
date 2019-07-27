@@ -3,6 +3,7 @@ module Parameters.Algorithm where
 import           Arvy.Algorithm
 import qualified Arvy.Algorithm.Collection as Arvy
 import qualified Parameters.Tree           as Tree
+import Data.Ratio
 
 data AlgorithmParameter r = forall s . AlgorithmParameter
   { algorithmId        :: String
@@ -41,4 +42,12 @@ half tree = AlgorithmParameter
   , algorithmDescription = "Half node"
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.half
+  }
+
+inbetween :: Show s => Ratio Int -> Tree.InitialTreeParameter s r -> AlgorithmParameter r
+inbetween ratio tree = AlgorithmParameter
+  { algorithmId = "inbetween" ++ show (numerator ratio) ++ "%" ++ show (denominator ratio) ++ "-" ++ Tree.initialTreeId tree
+  , algorithmDescription = "Inbetween"
+  , algorithmInitialTree = tree
+  , algorithmGet = Arvy.inbetween ratio
   }
