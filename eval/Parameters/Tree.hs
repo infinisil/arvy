@@ -12,24 +12,26 @@ import           Polysemy
 import Polysemy.RandomFu
 import Data.Random.Distribution.Uniform
 import Utils
+import Data.Tuple (swap)
 
+-- | A representation of how an initial spanning tree and node states @s@ is generated
 data InitialTreeParameter s r = InitialTreeParameter
   { initialTreeId :: String
+  -- ^ The identifying string for this type of initial trees
   , initialTreeDescription :: String
-  , initialTreeGet  :: Int -> GraphWeights -> Sem r (RootedTree, Array Node s)
+  -- ^ The description of how this tree is generetade
+  , initialTreeGet  :: NodeCount -> GraphWeights -> Sem r (RootedTree, Array Node s)
+  -- ^ How to generate the tree and node states from a given number of nodes and their edge weights
   }
 
 ring :: InitialTreeParameter () r
 ring = InitialTreeParameter
   { initialTreeId = "ring"
-  , initialTreeDescription = "Ring"
+  , initialTreeDescription = "Ring tree"
   , initialTreeGet = \n _ ->
       return ( listArray (0, n - 1) (0 : [0..])
              , listArray (0, n - 1) (replicate n ()))
   }
-
-
-
 
 -- | Constructs a ring-like tree where the root is in the middle
 semiCircles :: InitialTreeParameter RingNodeState r
@@ -42,36 +44,41 @@ semiCircles = InitialTreeParameter
   where
     tree :: NodeCount -> RootedTree
     tree n = array (0, n - 1)
-        ( [ (i, (i + 1)) | i <- [0 .. h - 1] ]
+        ( [ (i, i + 1) | i <- [0 .. h - 1] ]
         ++ [ (h, h) ]
-        ++ [ (i, (i - 1)) | i <- [h + 1 .. n - 1] ] )
+        ++ [ (i, i - 1) | i <- [h + 1 .. n - 1] ] )
       where
         h = n `div` 2
 
 random :: Member RandomFu r => InitialTreeParameter () r
 random = InitialTreeParameter
   { initialTreeId = "random"
-  , initialTreeDescription = "Random tree"
+  , initialTreeDescription = "Random spanning tree"
   , initialTreeGet = \n _ -> do
-      (root, edges) <- randomSpanningTree n
-      return ( array (0, n - 1) ((root, root) : edges)
+      tree <- randomSpanningTree n
+      return ( tree
              , listArray (0, n - 1) (replicate n ()) )
   }
 
-randomSpanningTree :: forall r . Member RandomFu r => NodeCount -> Sem r (Node, [Edge])
+-- | Generates a uniform random spanning tree in a complete graph. Complexity /O(n * log(n))/
+randomSpanningTree :: forall r . Member RandomFu r => NodeCount -> Sem r RootedTree
 randomSpanningTree n = do
+  -- Select a random root
   root <- sampleRVar (integralUniform 0 (n - 1))
-  (root,) <$> go (Set.singleton root) (Set.fromDistinctAscList ([0..root-1] ++ [root+1..n-1]))
+  -- Connect all non-root nodes randomly to the root
+  edges <- go (Set.singleton root) (Set.fromDistinctAscList ([0..root-1] ++ [root+1..n-1]))
+  return $ array (0, n - 1) ((root, root) : edges)
   where
+  -- | @go in ex@ randomly extends nodes @in@ included in the spanning tree randomly with nodes @ex@ not yet included. Outputs all necessary edges
   go :: Set Node -> Set Node -> Sem r [Edge]
   go included excluded
     | Set.size excluded == 0 = return []
     | otherwise = do
+        -- Select a random node from the excluded set and one from the included set
         e <- sampleRVar (randomSetElement excluded)
         i <- sampleRVar (randomSetElement included)
+        -- Recurse while inserting the previously-excluded node to the included ones and deleting it from the excluded ones
         ((e, i):) <$> go (Set.insert e included) (Set.delete e excluded)
-
-
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
 mst :: InitialTreeParameter () r
@@ -79,12 +86,9 @@ mst = InitialTreeParameter
   { initialTreeId = "mst"
   , initialTreeDescription = "Minimum spanning tree"
   , initialTreeGet = \n weights ->
-      return ( array (0, n - 1) ((0, 0) : fmap edgeToElem (mstEdges n weights))
+      return ( array (0, n - 1) ((0, 0) : fmap swap (mstEdges n weights))
              , listArray (0, n - 1) (replicate n ()) )
   }
-  where
-    edgeToElem :: Edge -> (Node, Node)
-    edgeToElem (x, y) = (y, x)
 
 type MSTEntry = H.Entry Double Edge
 

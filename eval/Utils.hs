@@ -152,6 +152,7 @@ floydWarshall n weights =
         when (ij > ikj) $
           unsafeWrite weights (i * n + j) ikj
 
+-- | Selects a random element from a set. Complexity /O(log(n))/
 randomSetElement :: Set a -> RVar a
 randomSetElement set = do
   let size = Set.size set
