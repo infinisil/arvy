@@ -44,25 +44,23 @@ inbetweenParameter = forM_ params $ \par -> do
   params =
     [ Parameters
       { randomSeed = 0
-      , nodeCount = 1000
-      , requestCount = 50000
+      , nodeCount = 2000
+      , requestCount = 100000
       , weights = weights
       , requests = reqs
       , algorithm = alg
       }
     | weights <-
-      [ Weights.unitEuclidian 2
+      [ Weights.unitEuclidian 10
       ]
     , alg <-
       [ Alg.arrow
       , Alg.inbetween (1 % 2) Tree.mst
-      , Alg.inbetween (1 % 3) Tree.mst
       , Alg.inbetween (1 % 4) Tree.mst
-      , Alg.inbetween (1 % 5) Tree.mst
       , Alg.inbetween (1 % 6) Tree.mst
-      , Alg.inbetween (1 % 7) Tree.mst
       , Alg.inbetween (1 % 8) Tree.mst
       , Alg.ivy Tree.mst
+      , Alg.random Tree.mst
       ]
     , reqs <-
       [ --Requests.random

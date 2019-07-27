@@ -43,6 +43,8 @@ library
                      , mono-traversable
                      , containers
                      , pipes
+                     , polysemy-RandomFu
+                     , random-fu
 
 library arvy-eval
   import:              defaults

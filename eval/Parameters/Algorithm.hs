@@ -4,6 +4,8 @@ import           Arvy.Algorithm
 import qualified Arvy.Algorithm.Collection as Arvy
 import qualified Parameters.Tree           as Tree
 import Data.Ratio
+import Polysemy
+import Polysemy.RandomFu
 
 data AlgorithmParameter r = forall s . AlgorithmParameter
   { algorithmId        :: String
@@ -50,4 +52,12 @@ inbetween ratio tree = AlgorithmParameter
   , algorithmDescription = "Inbetween"
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.inbetween ratio
+  }
+
+random :: (Show s, Member RandomFu r) => Tree.InitialTreeParameter s r -> AlgorithmParameter r
+random tree = AlgorithmParameter
+  { algorithmId = "random-" ++ Tree.initialTreeId tree
+  , algorithmDescription = "Random"
+  , algorithmInitialTree = tree
+  , algorithmGet = Arvy.random
   }

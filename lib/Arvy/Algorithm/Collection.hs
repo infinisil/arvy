@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Arvy.Algorithm.Collection
-  ( arrow, ivy, half, constantRing, inbetween
+  ( arrow, ivy, half, constantRing, inbetween, random
   , RingNodeState(..)
   ) where
 
@@ -11,7 +11,10 @@ import Data.Sequences
 import Data.NonNull
 import Data.Ratio
 import qualified Data.Sequence as S
-import Data.Sequence (Seq, ViewL(..), ViewR(..))
+import Data.Sequence (Seq, (|>), ViewL(..))
+import Polysemy
+import Polysemy.RandomFu
+import Data.Random
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
@@ -54,12 +57,29 @@ inbetween ratio = arvy @InbetweenMessage @s ArvyInst
           newK = k + 1
           (newF, newSeq) = if (newK - s) % newK < ratio
             then case S.viewl seq of
-              S.EmptyL -> (i, S.empty)
-              fir S.:< rest -> (fir, rest S.|> i)
-            else (forward f, seq S.|> i)
+              EmptyL -> (i, S.empty)
+              fir :< rest -> (fir, rest |> i)
+            else (forward f, seq |> i)
       in return (f, InbetweenMessage newK newF newSeq)
   , arvyReceive = \(InbetweenMessage _ f _) _ -> return f
   }
+
+random :: forall s r . (Member RandomFu r, Show s) => Arvy s r
+random = arvy @Seq @s ArvyInst
+  { arvyInitiate = \i _ -> return (S.singleton i)
+  , arvyTransmit = \s i _ -> do
+      suc <- sampleRVar (randomSeq s)
+      return (suc, fmap forward s |> i)
+  , arvyReceive = \s _ ->
+      sampleRVar (randomSeq s)
+  }
+
+-- | Selects a random element from a 'Seq' in /O(log n)/
+randomSeq :: Seq a -> RVar a
+randomSeq s = do
+  i <- uniformT 0 (S.length s - 1)
+  return $ S.index s i
+
 
 data RingMessage i
   = BeforeCrossing
