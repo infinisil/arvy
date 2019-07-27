@@ -4,6 +4,7 @@
 module Parameters.Weights
   ( WeightsParameter(..)
   , ring
+  , clique
   , unitEuclidian
   , barabasiAlbert
   , ErdosProb(..)
@@ -47,7 +48,7 @@ shortestPathWeights :: NodeCount -> GA.AdjacencyIntMap -> GraphWeights
 shortestPathWeights n graph = runSTUArray $ do
   -- Initialize array with all edges being infinity, representing no paths between any nodes
   weights <- newArray ((0, 0), (n - 1, n - 1)) infinity
-  
+
   -- Set all known edges to weight 1
   forM_ (GA.edgeList graph) $ \edge ->
     writeArray weights edge 1
@@ -77,6 +78,19 @@ ring = WeightsParameter
       return $ shortestPathWeights n $ GA.symmetricClosure $ GA.circuit [0..n-1]
   }
 
+clique :: WeightsParameter r
+clique = WeightsParameter
+  { weightsId = "clique"
+  , weightsDescription = "Clique, all nodes are connected with weight 1 to all other nodes"
+  , weightsGet = \n ->
+      return $ array ((0, 0), (n - 1, n - 1))
+        [ ((i, j), weight)
+        | i <- [0 .. n - 1]
+        , j <- [0 .. n - 1]
+        , let weight = if i == j then 0 else 1
+        ]
+  }
+
 unitEuclidian :: Member RandomFu r => Int -> WeightsParameter r
 unitEuclidian dim = WeightsParameter
   { weightsId = "uniform" ++ show dim
@@ -91,7 +105,7 @@ unitEuclidian dim = WeightsParameter
   } where
   randomPoint :: Member RandomFu r => Sem r (UArray Int Double)
   randomPoint = listArray (0, dim - 1) <$> replicateM dim (sampleRVar doubleStdUniform)
-  
+
   distance :: UArray Int Double -> UArray Int Double -> Double
   distance x y = sqrt $ sum
     [ (x ! d - y ! d) ** 2
@@ -119,8 +133,8 @@ erdosRenyi prob = WeightsParameter
       graph <- generate (erdosProb prob n) n
       return $ shortestPathWeights n graph
   } where
-  
-  
+
+
   generate :: Members '[RandomFu, Trace] r => Double -> Int -> Sem r GA.AdjacencyIntMap
   generate p n = do
     edges <- forM [ (u, v) | u <- [0 .. n - 1], v <- [u + 1 .. n - 1]] $ \edge -> do
@@ -133,7 +147,7 @@ erdosRenyi prob = WeightsParameter
       else do
         trace $ "Erdos Renyi graph wasn't connected with edge probability p=" ++ show p ++ " and node count n=" ++ show n ++ " retrying.."
         generate p n
-    
+
 
 barabasiAlbert :: Member RandomFu r => Int -> WeightsParameter r
 barabasiAlbert m = WeightsParameter
