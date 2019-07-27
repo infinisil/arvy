@@ -1,5 +1,4 @@
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE BangPatterns #-}
 
 module Parameters.Weights
   ( WeightsParameter(..)
@@ -9,7 +8,6 @@ module Parameters.Weights
   , barabasiAlbert
   , ErdosProb(..)
   , erdosRenyi
-  , floydWarshall
   , shortestPathWeights
   ) where
 
@@ -34,13 +32,16 @@ import Data.Array.ST
 import Data.Array.Unboxed
 import qualified Data.Array as A
 
-
+-- TODO: Differentiate between graphs that have an underlying graph and ones that don't
+-- | A type for generating certain complete graph weights with access to effects in @r@
 data WeightsParameter r = WeightsParameter
   { weightsId :: String
+  -- ^ The identifying string for this type of weights
   , weightsDescription :: String
-  , weightsGet  :: Int -> Sem r GraphWeights
+  -- ^ The description of how these weights are generated
+  , weightsGet  :: NodeCount -> Sem r GraphWeights
+  -- ^ Generate weights for a certain number of nodes
   }
-
 
 -- TODO: Does this really not use any additional storage?
 -- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is /O(m + n^3)/ with n being the number of vertices and m being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
@@ -64,7 +65,6 @@ shortestPathWeights n graph = runSTUArray $ do
       ++ ", shift all node indices down to fill the range."
     else writeArray weights (x, x) 0
 
-
   -- Compute shortest paths
   floydWarshall n weights
 
@@ -73,7 +73,7 @@ shortestPathWeights n graph = runSTUArray $ do
 ring :: WeightsParameter r
 ring = WeightsParameter
   { weightsId = "ring"
-  , weightsDescription = "Ring graph"
+  , weightsDescription = "All nodes are connected in a circle with weight 1"
   , weightsGet = \n ->
       return $ shortestPathWeights n $ GA.symmetricClosure $ GA.circuit [0..n-1]
   }
@@ -94,7 +94,7 @@ clique = WeightsParameter
 unitEuclidian :: Member RandomFu r => Int -> WeightsParameter r
 unitEuclidian dim = WeightsParameter
   { weightsId = "uniform" ++ show dim
-  , weightsDescription = "Euclidian distances for uniformly random points in a " ++ show dim ++ "-dimensional hypercube"
+  , weightsDescription = "Euclidian distances for uniformly random points in a " ++ show dim ++ "-dimensional unit-hypercube"
   , weightsGet = \n -> do
       points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
       return $ array ((0, 0), (n - 1, n - 1))
@@ -103,9 +103,11 @@ unitEuclidian dim = WeightsParameter
         , v <- [0 .. n - 1]
         ]
   } where
+  -- | Selects a uniformly distributed random point in a multi-dimensional unit-hypercube
   randomPoint :: Member RandomFu r => Sem r (UArray Int Double)
   randomPoint = listArray (0, dim - 1) <$> replicateM dim (sampleRVar doubleStdUniform)
 
+  -- | Multi-dimensional L2-distance
   distance :: UArray Int Double -> UArray Int Double -> Double
   distance x y = sqrt $ sum
     [ (x ! d - y ! d) ** 2
@@ -120,31 +122,35 @@ data ErdosProb
   | ErdosProbEpsilon Double
   -- ^ An epsilon value for the formula (1 + e) * ln n / n
 
+-- | Extract the probability from an 'ErdosProb' for the given number of edges
 erdosProb :: ErdosProb -> Int -> Double
 erdosProb (ErdosProbNum p) _ = p
 erdosProb (ErdosProbTargetExpected f) n = fromIntegral (f n) / fromIntegral (n * (n - 1) `div` 2)
-erdosProb (ErdosProbEpsilon e) n = (1 + e) * log (fromIntegral n) / (fromIntegral n)
+erdosProb (ErdosProbEpsilon e) n = (1 + e) * log (fromIntegral n) / fromIntegral n
 
 erdosRenyi :: Members '[RandomFu, Trace] r => ErdosProb -> WeightsParameter r
 erdosRenyi prob = WeightsParameter
   { weightsId = "erdos"
-  , weightsDescription = "Erdos Renyi random graph"
-  , weightsGet = \n -> do
-      graph <- generate (erdosProb prob n) n
-      return $ shortestPathWeights n graph
+  , weightsDescription = "Erdos Renyi G(n, p) graph, where every edge has probability p of existing"
+  , weightsGet = \n -> generate (erdosProb prob n) n
   } where
 
-
-  generate :: Members '[RandomFu, Trace] r => Double -> Int -> Sem r GA.AdjacencyIntMap
+  generate :: Members '[RandomFu, Trace] r => Double -> Int -> Sem r GraphWeights
   generate p n = do
+    -- Generate the random edges from lower to higher node indices only
     edges <- forM [ (u, v) | u <- [0 .. n - 1], v <- [u + 1 .. n - 1]] $ \edge -> do
       value <- sampleRVar doubleStdUniform
       return [ edge | value < p ]
+
+    -- Make all edges bidirectional
     let graph = GA.symmetricClosure (GA.edges (concat edges))
-    let !weights = shortestPathWeights n graph
+    -- Calculate the weights with from the shortest paths
+    let weights = shortestPathWeights n graph
+    -- The graph is only connected when there exists a shortest paths between all nodes, which above function indicates with no infinity values
     if all (not . isInfinite) (elems weights)
-      then return graph
+      then return weights
       else do
+        -- Try again if not connected
         trace $ "Erdos Renyi graph wasn't connected with edge probability p=" ++ show p ++ " and node count n=" ++ show n ++ " retrying.."
         generate p n
 
@@ -152,7 +158,7 @@ erdosRenyi prob = WeightsParameter
 barabasiAlbert :: Member RandomFu r => Int -> WeightsParameter r
 barabasiAlbert m = WeightsParameter
   { weightsId = "barabasi"
-  , weightsDescription = "Barabasi Albert random graph"
+  , weightsDescription = "Barabasi Albert scale-free network random graph with m = " ++ show m
   , weightsGet = \n -> do
       graph <- barabasiAlbertGen n m
       return $ shortestPathWeights n $ GA.symmetricClosure graph
