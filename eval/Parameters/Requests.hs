@@ -29,15 +29,16 @@ farthest :: RequestsParameter r
 farthest = RequestsParameter
   { requestsId = "farthest"
   , requestsDescription = "Farthest"
-  , requestsGet = \_ weights -> return $ \tree -> return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
-
+  , requestsGet = \_ weights -> return $ \tree ->
+      return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
   } where
   -- | Computes the distance from all nodes to the root in /O(n)/
   lengthsToRoot :: GraphWeights -> RootedTree -> Array Int Double
   lengthsToRoot weights tree = loeb fs
     where
       fs :: Array Int (Array Int Double -> Double)
-      fs = aimap (\i v -> \others -> (\o -> others ! o + weights ! (i, o)) v)
+      fs = aimap (\i o others -> if i == o then 0
+                   else others ! o + weights ! (i, o))
                   tree
 
 random :: Member RandomFu r => RequestsParameter r
