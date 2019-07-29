@@ -80,9 +80,11 @@ library arvy-eval
                      , directory
                      , filepath
                      , bytestring
+                     , async
 
 executable arvy
   import:              defaults
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:      app
   main-is:             Main.hs
   build-depends:       base ^>=4.12.0.0

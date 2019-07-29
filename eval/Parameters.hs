@@ -25,6 +25,8 @@ import Utils
 import Pipes
 import Data.Time
 import Cache
+import Polysemy.Async
+import qualified Control.Concurrent.Async as A
 
 
 data Parameters r = Parameters
@@ -56,10 +58,10 @@ paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests
 
 runParams
   :: forall r
-  . Members '[Lift IO, Trace] r
+  . Members '[Async, Lift IO, Trace] r
   => Parameters (RandomFu ': r)
   -> (NodeCount -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem (RandomFu ': r)) ())
-  -> Sem r ()
+  -> Sem r (A.Async (Maybe ()))
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
@@ -89,8 +91,8 @@ runParams params@Parameters
 
       return (ConstParameters nodeCount weights mutableTree, mutableStates)
 
-    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) ()
-    runAlg (ConstParameters { .. }, states) algorithm = do
+    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) (A.Async (Maybe ()))
+    runAlg (ConstParameters { .. }, states) algorithm = async do
       reqs <- requestsGet nodeCount paramWeights
 
       trace $ "Running arvy.."
