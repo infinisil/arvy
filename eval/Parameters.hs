@@ -80,9 +80,8 @@ runParams params@Parameters
 
     genParams :: forall s . InitialTreeParameter s (RandomFu ': r) -> Sem (RandomFu ': r) (ConstParameters, IOArray Node s)
     genParams InitialTreeParameter { initialTreeGet } = do
-      -- TODO: Cache (and paralellize) these computations to make this faster
       trace "Generating weights.."
-      !weights <- cache (CacheKey ("weights-" ++ weightsId ++ "-" ++ show seed)) (weightsGet nodeCount)
+      !weights <- cache (CacheKey ("weights-" ++ weightsId ++ "-" ++ show nodeCount ++ "-" ++ show seed)) (weightsGet nodeCount)
 
       trace "Generating initial tree.."
       !(tree, states) <- initialTreeGet nodeCount weights

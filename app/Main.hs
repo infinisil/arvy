@@ -92,7 +92,7 @@ badIvy = do
       >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
       >-> P.toHandle ratioHandle
     , enumerate
-      >-> everyNth 2000
+      >-> everyNth 10000
       >-> P.map (\(i, _) -> show i)
       >-> P.stdoutLn
     ] where
