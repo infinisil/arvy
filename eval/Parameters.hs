@@ -24,6 +24,7 @@ import System.Random.MWC
 import Utils
 import Pipes
 import Data.Time
+import Cache
 
 
 data Parameters r = Parameters
@@ -62,7 +63,7 @@ runParams
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
-  , weights = WeightsParameter { weightsGet }
+  , weights = WeightsParameter { weightsGet, weightsId }
   , requestCount
   , requests = RequestsParameter { requestsGet }
   , algorithm = AlgorithmParameter { algorithmGet, algorithmInitialTree }
@@ -79,7 +80,7 @@ runParams params@Parameters
     genParams InitialTreeParameter { initialTreeGet } = do
       -- TODO: Cache (and paralellize) these computations to make this faster
       trace "Generating weights.."
-      !weights <- weightsGet nodeCount
+      !weights <- cache (CacheKey ("weights-" ++ weightsId ++ "-" ++ show seed)) (weightsGet nodeCount)
 
       trace "Generating initial tree.."
       !(tree, states) <- initialTreeGet nodeCount weights

@@ -61,6 +61,7 @@ library arvy-eval
                      , Evaluation.Utils
                      , Utils
                      , Utils.Connected
+                     , Cache
   build-depends:       arvy
                      , polysemy-RandomFu
                      , random-fu
@@ -75,6 +76,10 @@ library arvy-eval
                      , multiset
                      , heaps
                      , pipes
+                     , store
+                     , directory
+                     , filepath
+                     , bytestring
 
 executable arvy
   import:              defaults
