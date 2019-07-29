@@ -115,23 +115,17 @@ unitEuclidian dim = WeightsParameter
 
 
 data ErdosProb
-  = ErdosProbNum Double
-  -- ^ Probability for an edge being connected
-  | ErdosProbTargetExpected (Int -> Int)
-  -- ^ A function from node count to expected number of edges
-  | ErdosProbEpsilon Double
+  = ErdosProbEpsilon Double
   -- ^ An epsilon value for the formula (1 + e) * ln n / n
 
 -- | Extract the probability from an 'ErdosProb' for the given number of edges
 erdosProb :: ErdosProb -> Int -> Double
-erdosProb (ErdosProbNum p) _ = p
-erdosProb (ErdosProbTargetExpected f) n = fromIntegral (f n) / fromIntegral (n * (n - 1) `div` 2)
 erdosProb (ErdosProbEpsilon e) n = (1 + e) * log (fromIntegral n) / fromIntegral n
 
 erdosRenyi :: Members '[RandomFu, Trace] r => ErdosProb -> WeightsParameter r
-erdosRenyi prob = WeightsParameter
-  { weightsId = "erdos"
-  , weightsDescription = "Erdos Renyi G(n, p) graph, where every edge has probability p of existing"
+erdosRenyi prob@(ErdosProbEpsilon e) = WeightsParameter
+  { weightsId = "erdos" ++ show e
+  , weightsDescription = "Erdos Renyi G(n, p) graph, where every edge has probability p = (1 + " ++ show e ++ ") * ln n / n of existing"
   , weightsGet = \n -> generate (erdosProb prob n) n
   } where
 
@@ -157,7 +151,7 @@ erdosRenyi prob = WeightsParameter
 
 barabasiAlbert :: Member RandomFu r => Int -> WeightsParameter r
 barabasiAlbert m = WeightsParameter
-  { weightsId = "barabasi"
+  { weightsId = "barabasi" ++ show m
   , weightsDescription = "Barabasi Albert scale-free network random graph with m = " ++ show m
   , weightsGet = \n -> do
       graph <- barabasiAlbertGen n m
