@@ -28,7 +28,7 @@ meanStddev = do
       go newCount newMean newM2
 
 enumerate :: forall n m a . Monad m => Pipe n (Int, n) m a
-enumerate = go 0 where
+enumerate = go 1 where
   go :: Int -> Pipe n (Int, n) m a
   go n = do
     v <- await
