@@ -14,6 +14,14 @@ data AlgorithmParameter r = forall s . AlgorithmParameter
   , algorithmGet         :: Arvy s r
   }
 
+genArrow :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
+genArrow tree = AlgorithmParameter
+  { algorithmId = "genArrow-" ++ Tree.initialTreeId tree
+  , algorithmDescription = "Generalized Arrow, always choosing the node with lowest weight"
+  , algorithmInitialTree = tree
+  , algorithmGet = Arvy.genArrow
+  }
+
 arrow :: AlgorithmParameter r
 arrow = AlgorithmParameter
   { algorithmId = "arrow"
