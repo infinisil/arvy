@@ -1,8 +1,9 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Arvy.Algorithm.Collection
-  ( arrow, ivy, half, constantRing, inbetween, random
+  ( arrow, ivy, half, constantRing, inbetween, random, genArrow
   , RingNodeState(..)
   ) where
 
@@ -15,6 +16,13 @@ import Data.Sequence (Seq, (|>), ViewL(..))
 import Polysemy
 import Polysemy.RandomFu
 import Data.Random
+import Data.MonoTraversable
+import Data.Ord (comparing)
+
+genArrow :: forall s r . Show s => Arvy s r
+genArrow = simpleArvy \xs -> do
+  weights <- traverse (\i -> (i,) <$> weightTo i) (otoList xs)
+  return $ fst $ minimumByEx (comparing snd) weights
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
