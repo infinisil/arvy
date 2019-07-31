@@ -30,8 +30,66 @@ main :: IO ()
 main = runM $ runTraceIO $ runAsync
   --initialTreeMatters
   --inbetweenParameter
-  badIvy
+  --badIvy
+  genArrowTest
   --testing
+
+
+genArrowTest :: Members '[Async, Lift IO, Trace] r => Sem r ()
+genArrowTest = do
+  asyncs <- forM params $ \par -> do
+    let stretchPath = "genArrowTest" </> paramFile par "stretch"
+    stretchHandle <- liftIO $ createHandle stretchPath
+    let ratioPath = "genArrowTest" </> paramFile par "ratio"
+    ratioHandle <- liftIO $ createHandle ratioPath
+    asyn <- runParams par
+      $ eval (stretchHandle, ratioHandle)
+    return $ asyn $> (stretchHandle, ratioHandle)
+  forM_ asyncs (PA.await >=> (\(a, b) -> liftIO (hClose a) >> liftIO (hClose b)))
+  where
+
+  params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
+  params =
+    [ Parameters
+      { randomSeed = 0
+      , nodeCount = 1000
+      , requestCount = 100000
+      , weights = weights
+      , requests = reqs
+      , algorithm = alg
+      }
+    | weights <-
+      [ Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
+      --, Weights.unitEuclidian 3
+      ]
+    , alg <-
+      [ Alg.arrow
+      , Alg.genArrow Tree.mst
+      --, Alg.genArrow Tree.random
+      ]
+    , reqs <-
+      [ Requests.random
+      --, Requests.pareto
+      ]
+    ]
+  eval :: Member (Lift IO) r => (Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
+  eval (stretchHandle, ratioHandle) n w t = ratio w
+    >-> distribute
+    [ enumerate
+      >-> decayingFilter 4
+      >-> treeStretchDiameter n w t
+      >-> P.map (\((i, _), (stretch, _)) -> show i ++ " " ++ show stretch)
+      >-> P.toHandle stretchHandle
+    , movingAverage True 100
+      >-> enumerate
+      >-> decayingFilter 10
+      >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
+      >-> P.toHandle ratioHandle
+    , enumerate
+      >-> decayingFilter 10
+      >-> P.map (\(i, _) -> show i)
+      >-> P.stdoutLn
+    ] where
 
 badIvy :: Members '[Async, Lift IO, Trace] r => Sem r ()
 badIvy = do
