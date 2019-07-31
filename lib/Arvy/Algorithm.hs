@@ -60,6 +60,7 @@ data ArvyInst msg s r = (forall i . NodeIndex i => Show (msg i), Show s) => Arvy
 
 class ( Show (Pred i), Show i, Show (Succ i)
       , Forwardable (Pred i) i -- Can forward from predecessor index to current index
+      , Forwardable (Pred i) (Succ i)
       , Forwardable i (Succ i) -- Can forward from current index to successor index
       , Succ (Pred i) ~ i -- successor of the predecessor is a noop
       , Pred (Succ i) ~ i -- predecessor of the successor is a noop
@@ -104,13 +105,13 @@ newtype SimpleMsg i = SimpleMsg (NonNull (Seq i)) deriving Show
 simpleArvy
   :: forall s r
   . Show s
-  => (forall i seq . (NodeIndex i, IsSequence seq, Element seq ~ Pred i) => NonNull seq -> Sem (State s ': r) (Pred i))
+  => (forall i seq . (NodeIndex i, IsSequence seq, Element seq ~ Pred i) => NonNull seq -> Sem (LocalWeights (Succ i) ': State s ': r) (Pred i))
   -> Arvy s r
 simpleArvy selector = arvy @SimpleMsg @s ArvyInst
   { arvyInitiate = \i _ -> return $ SimpleMsg $ singleton i
   , arvyTransmit = \(SimpleMsg msg) i _ -> do
-      s <- raise $ selector msg
+      s <- selector msg
       return (s, SimpleMsg $ i `cons` mapNonNull forward msg)
   , arvyReceive = \(SimpleMsg msg) _ ->
-      raise $ selector msg
+      selector msg
   }
