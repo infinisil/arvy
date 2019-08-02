@@ -56,9 +56,10 @@ data ArvyEvent
   | StateChange Node String -- ^ The state at a node changed to a new value. The 'String' contains the 'show' of the new state
   | RequestMade Node -- ^ A node made a request for the token
   | RequestGranted Node Node GrantType -- ^ A request for a node has been granted by some node
+  deriving (Eq)
 
 -- | How the request was granted, either locally if the request was there already, or by another node
-data GrantType = Local | Received
+data GrantType = Local | Received deriving (Eq, Show)
 
 instance Show ArvyEvent where
   show (RequestTravel a b msg) = "[MSG] " ++ show a ++ " -> " ++ show b ++ " (" ++ msg ++ ")"
@@ -140,9 +141,7 @@ runArvyLocal weights tree stateArray (Arvy inst) = runArvyLocal' inst where
       runNodeState :: Node -> Sem (State s ': r) x -> Pipe Node ArvyEvent (Sem r) x
       runNodeState i = lift . interpret \case
         Get -> sendM $ readArray stateArray i
-        Put s -> do
-          sendM $ writeArray stateArray i s
-          --output $ Just $ StateChange i (show s)
+        Put s -> sendM $ writeArray stateArray i s
 
       {-# INLINE runNode #-}
       -- | Runs a node with its local effects
