@@ -39,6 +39,7 @@ library
   exposed-modules:     Arvy.Algorithm
                        Arvy.Algorithm.Collection
                        Arvy.Local
+                       Arvy.Pure
   build-depends:       array
                      , mono-traversable
                      , containers
