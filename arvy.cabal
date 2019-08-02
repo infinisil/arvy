@@ -111,6 +111,7 @@ executable arvy
 test-suite arvy-tests
   import:              defaults
   other-modules:       AlgorithmSpec
+                     , CollectionSpec
   type:                exitcode-stdio-1.0
   main-is:             Main.hs
   hs-source-dirs:      tests
@@ -128,3 +129,4 @@ test-suite arvy-tests
                      , mwc-random
                      , pipes
                      , mono-traversable
+                     , random-fu

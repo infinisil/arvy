@@ -7,6 +7,7 @@
 module Main where
 
 import           AlgorithmSpec
+import           CollectionSpec
 import           Control.DeepSeq
 import           Control.Exception
 import           Data.Array.Unboxed
@@ -21,6 +22,7 @@ import           Utils
 main :: IO ()
 main = hspec $ do
   algorithmSpec
+  collectionSpec
 
   describe "Parameters.Weights.shortestPathWeights" $ do
     it "calculates the transitive shortest paths" $

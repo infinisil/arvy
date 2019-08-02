@@ -102,9 +102,9 @@ algorithmSpec :: Spec
 algorithmSpec = do
   describe "Arvy.Local.runArvyLocal" $
     it "Returns the correct event sequence" $
-      runArvyLocalPure weights tree state algorithm requests `shouldBe` events show
+      snd (fst (runArvyLocalPure weights tree state algorithm requests)) `shouldBe` events show
 
   describe "Arvy.Algorithm.simpleArvy" $ do
     it "Returns the same as the non-simple version" $
-      runArvyLocalPure weights tree state simpleAlgorithm requests `shouldBe`
+      snd (fst (runArvyLocalPure weights tree state simpleAlgorithm requests)) `shouldBe`
         events (\list -> "SimpleMsg (NonNull {toNullable = fromList " ++ show list ++ "})")
