@@ -5,14 +5,19 @@ module Parameters.Tree where
 import           Arvy.Algorithm.Collection
 import           Arvy.Local
 import           Data.Array.Unboxed
+import           Data.Array.ST
+import Control.Monad.ST
 import qualified Data.Heap                 as H
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
+import           Data.IntSet                  (IntSet)
+import qualified Data.IntSet as IntSet
 import           Polysemy
 import Polysemy.RandomFu
 import Data.Random.Distribution.Uniform
 import Utils
 import Data.Tuple (swap)
+import Control.Monad
 
 -- | A representation of how an initial spanning tree and node states @s@ is generated
 data InitialTreeParameter s r = InitialTreeParameter
@@ -79,6 +84,71 @@ randomSpanningTree n = do
         i <- sampleRVar (randomSetElement included)
         -- Recurse while inserting the previously-excluded node to the included ones and deleting it from the excluded ones
         ((e, i):) <$> go (Set.insert e included) (Set.delete e excluded)
+
+shortPairs :: InitialTreeParameter () r
+shortPairs = InitialTreeParameter
+  { initialTreeId = "shortpairs"
+  , initialTreeDescription = "a tree that tries to get a short total distance between all pairs"
+  , initialTreeGet = \n w -> do
+      return ( shortPairDistances n w
+             , listArray (0, n - 1) (replicate n ()) )
+  }
+
+shortPairDistances :: NodeCount -> GraphWeights -> RootedTree
+shortPairDistances n weights = runST $ do
+  distArr <- newArray ((0, 0), (n - 1, n - 1)) 0
+  nodeArr <- newArray (0, n - 1) 0
+  edges <- go distArr nodeArr
+  return $ array (0, n - 1) ((0, 0) : edges)
+  where
+
+  go :: forall s . STUArray s Edge Double -> STUArray s Node Double -> ST s [Edge]
+  go dists nodes = step (IntSet.singleton 0) (IntSet.fromDistinctAscList [1..n-1])
+    where
+    step :: IntSet -> IntSet -> ST s [Edge]
+    step included excluded
+      | IntSet.size excluded == 0 = return []
+      | otherwise = do
+          let excluded' = IntSet.elems excluded
+              included' = IntSet.elems included
+              includedCount = fromIntegral $ IntSet.size included
+          (old, new, _) <- foldM (\acc@(_, _, cost) candidateNew -> do
+                                    (candidateOld, candidateCost) <- getBestNode candidateNew included' includedCount
+                                    return $ if candidateCost < cost
+                                      then (candidateOld, candidateNew, candidateCost)
+                                      else acc
+                                ) (-1, -1, infinity) excluded'
+          update new old includedCount
+          rest <- step (IntSet.insert new included) (IntSet.delete new excluded)
+          return $ (new, old) : rest
+
+    getBestNode :: Node -> [Node] -> Double -> ST s (Node, Double)
+    getBestNode newNode included includedCount = do
+      let f :: (Node, Double) -> Node -> ST s (Node, Double)
+          f acc@(_, bestCost) otherNode = do
+            otherValue <- readArray nodes otherNode
+            let otherCost = includedCount * weights ! (newNode, otherNode) + otherValue
+            return $ if otherCost < bestCost
+              then (otherNode, otherCost)
+              else acc
+      foldM f (-1, infinity) included
+
+    update :: Node -> Node -> Double -> ST s ()
+    update newNode bestNode includedCount = do
+      let bestWeight = weights ! (newNode, bestNode)
+
+      forM_ [0..newNode-1] $ \i -> do
+        dist <- (+bestWeight) <$> readArray dists (bestNode, i)
+        writeArray dists (newNode, i) dist
+        writeArray dists (i, newNode) dist
+
+      bestValue <- readArray nodes bestNode
+      writeArray nodes newNode (bestValue + includedCount * bestWeight)
+      forM_ [0..newNode-1] $ \i -> do
+        dist <- readArray dists (bestNode, i)
+        prev <- readArray nodes i
+        let new = prev + bestWeight + dist
+        writeArray nodes i new
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
 mst :: InitialTreeParameter () r
