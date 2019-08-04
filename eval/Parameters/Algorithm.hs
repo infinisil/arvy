@@ -22,11 +22,11 @@ genArrow tree = AlgorithmParameter
   , algorithmGet = Arvy.genArrow
   }
 
-arrow :: AlgorithmParameter r
-arrow = AlgorithmParameter
-  { algorithmId = "arrow"
+arrow :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
+arrow tree = AlgorithmParameter
+  { algorithmId = "arrow-" ++ Tree.initialTreeId tree
   , algorithmDescription = "Arrow"
-  , algorithmInitialTree = Tree.mst
+  , algorithmInitialTree = tree
   , algorithmGet = Arvy.arrow
   }
 
