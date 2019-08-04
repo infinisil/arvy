@@ -42,10 +42,12 @@ genArrowTest = do
     stretchHandle <- liftIO $ createHandle stretchPath
     let ratioPath = "genArrowTest" </> paramFile par "ratio"
     ratioHandle <- liftIO $ createHandle ratioPath
+    let weightPath = "genArrowTest" </> paramFile par "weight"
+    weightHandle <- liftIO $ createHandle weightPath
     asyn <- runParams par
-      $ eval (stretchHandle, ratioHandle)
-    return $ asyn $> (stretchHandle, ratioHandle)
-  forM_ asyncs (PA.await >=> (\(a, b) -> liftIO (hClose a) >> liftIO (hClose b)))
+      $ eval (stretchHandle, ratioHandle, weightHandle)
+    return $ asyn $> (stretchHandle, ratioHandle, weightHandle)
+  forM_ asyncs (PA.await >=> (\(a, b, c) -> liftIO (hClose a) >> liftIO (hClose b) >> liftIO (hClose c)))
   where
 
   params :: Members '[RandomFu, Lift IO, Trace] r => [Parameters r]
@@ -53,27 +55,30 @@ genArrowTest = do
     [ Parameters
       { randomSeed = 0
       , nodeCount = 1000
-      , requestCount = 100000
+      , requestCount = 1000000
       , weights = weights
       , requests = reqs
       , algorithm = alg
       }
     | weights <-
-      [ Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
-      --, Weights.unitEuclidian 3
+      [ --Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
+       Weights.unitEuclidian 3
       ]
     , alg <-
-      [ Alg.arrow
+      [ Alg.arrow Tree.mst
+      , Alg.arrow Tree.shortPairs
+      , Alg.arrow Tree.random
       , Alg.genArrow Tree.mst
-      --, Alg.genArrow Tree.random
+      , Alg.genArrow Tree.shortPairs
+      , Alg.genArrow Tree.random
       ]
     , reqs <-
       [ Requests.random
       --, Requests.pareto
       ]
     ]
-  eval :: Member (Lift IO) r => (Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
-  eval (stretchHandle, ratioHandle) n w t = ratio w
+  eval :: Member (Lift IO) r => (Handle, Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
+  eval (stretchHandle, ratioHandle, weightHandle) n w t = ratio w
     >-> distribute
     [ enumerate
       >-> decayingFilter 4
@@ -85,6 +90,11 @@ genArrowTest = do
       >-> decayingFilter 10
       >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
       >-> P.toHandle ratioHandle
+    , enumerate
+      >-> decayingFilter 8
+      >-> totalTreeWeight w t
+      >-> P.map (\((i, _), ttw) -> show i ++ " " ++ show ttw)
+      >-> P.toHandle weightHandle
     , enumerate
       >-> decayingFilter 10
       >-> P.map (\(i, _) -> show i)
@@ -128,7 +138,7 @@ badIvy = do
       , Weights.erdosRenyi (Weights.ErdosProbEpsilon 1)
       ]
     , alg <-
-      [ Alg.arrow
+      [ Alg.arrow Tree.mst
       , Alg.inbetween (1 % 2) Tree.mst
       , Alg.inbetween (1 % 4) Tree.mst
       , Alg.inbetween (1 % 6) Tree.mst
@@ -182,7 +192,7 @@ inbetweenParameter = do
       [ Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
       ]
     , alg <-
-      [ Alg.arrow
+      [ Alg.arrow Tree.mst
       , Alg.inbetween (1 % 2) Tree.mst
       , Alg.inbetween (1 % 4) Tree.mst
       , Alg.inbetween (1 % 6) Tree.mst
@@ -226,7 +236,7 @@ testing = do
     , requests = Requests.interactive
     , algorithm = Alg.inbetween (1 % 2) Tree.random
     } \n w t -> P.show >-> P.stdoutLn
-  PA.await asyn
+  _ <- PA.await asyn
   return ()
 
 initialTreeMatters :: Members '[Async, Lift IO, Trace] r => Sem r ()
