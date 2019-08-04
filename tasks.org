@@ -1,0 +1,24 @@
+* List of tasks to work on
+
+** Program structure
+- Handle open handles better
+- Better parallelism, only start as many params as cores
+- Make output better, show progress, maybe with nice terminal bars that go to the right
+
+** Functionality
+- Automatically generate graphs from haskell with plotting library
+- Write all used parameters to result files
+- Inbetween algorithm with weights
+- Separate weights into ones that represent a true graph and ones that don't, prepare for plotting 2D graphs?
+
+** Evaluations
+- Perform evaluations with clique such that the weights are out of the equation
+- Ivy with completely random requests seems to perform kinda bad. But really, ivy seems to be made for cases where a lot of requests are coming from the same nodes. So probably 20-80 random requests make it perform much better
+- Should ivy make the average tree stretch starting from an initial random tree converge down? Maybe with 20-80
+- Other Arvy algorithms
+- Is MST the optimal tree? How about minimum average stretch or something else?
+
+
+* Future
+- Graph shortest path distributions for weights
+  Actually this might be very indicative of how well algorithms perform on weights. E.g. it might turn out that arrow is good for a specific weight shape.
