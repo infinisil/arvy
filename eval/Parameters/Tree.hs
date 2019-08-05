@@ -90,20 +90,20 @@ shortPairs = InitialTreeParameter
   { initialTreeId = "shortpairs"
   , initialTreeDescription = "a tree that tries to get a short total distance between all pairs"
   , initialTreeGet = \n w -> do
-      return ( shortPairDistances n w
+      return ( shortPairDistances n w 0
              , listArray (0, n - 1) (replicate n ()) )
   }
 
-shortPairDistances :: NodeCount -> GraphWeights -> RootedTree
-shortPairDistances n weights = runST $ do
+shortPairDistances :: NodeCount -> GraphWeights -> Node -> RootedTree
+shortPairDistances n weights root = runST $ do
   distArr <- newArray ((0, 0), (n - 1, n - 1)) 0
   nodeArr <- newArray (0, n - 1) 0
   edges <- go distArr nodeArr
-  return $ array (0, n - 1) ((0, 0) : edges)
+  return $ array (0, n - 1) ((root, root) : edges)
   where
 
   go :: forall s . STUArray s Edge Double -> STUArray s Node Double -> ST s [Edge]
-  go dists nodes = step (IntSet.singleton 0) (IntSet.fromDistinctAscList [1..n-1])
+  go dists nodes = step (IntSet.singleton root) (IntSet.delete root (IntSet.fromDistinctAscList [0..n-1]))
     where
     step :: IntSet -> IntSet -> ST s [Edge]
     step included excluded
