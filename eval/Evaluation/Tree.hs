@@ -12,6 +12,7 @@ import           Polysemy
 import Prelude
 import Pipes
 import qualified Pipes.Prelude as P
+import Evaluation.Utils
 
 treeStretchDiameter :: (MArray arr Node m, Member (Lift m) r) => NodeCount -> GraphWeights -> arr Node Node -> Pipe a (a, (Double, Double)) (Sem r) x
 treeStretchDiameter nodeCount weights tree = P.mapM \event -> do
@@ -26,6 +27,9 @@ totalTreeWeight :: (MArray arr Node m, Member (Lift m) r) => GraphWeights -> arr
 totalTreeWeight weights tree = P.mapM \event -> do
   res <- sendM $ sumMapAssocs (weights !) tree
   return (event, res)
+
+totalPairWeight :: NodeCount -> GraphWeights -> RootedTree -> Double
+totalPairWeight n weights tree = sum (elems (treeWeights n tree weights)) / 2
 
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretchDiameter :: NodeCount -> GraphWeights -> RootedTree -> (Double, Double)

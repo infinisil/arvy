@@ -7,6 +7,10 @@ import Pipes
 import qualified Pipes.Prelude as P
 import qualified Data.Sequence as S
 import Data.Sequence (Seq, (|>))
+import Arvy.Local
+import Data.Array.ST
+import Data.Array.IArray
+import Utils
 
 -- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 meanStddev :: forall n m a . Monad m => Floating n => Pipe n (n, n) m a
@@ -85,3 +89,15 @@ meanStddevList :: Floating a => [a] -> (a, a)
 meanStddevList values = (mean, sqrt $ sum $ map (\v -> (v - mean) ^^ (2 :: Int)) values) where
   mean = sum values / fromIntegral len
   len = length values
+
+
+treeWeights :: NodeCount -> RootedTree -> GraphWeights -> GraphWeights
+treeWeights n tree weights = runSTUArray $ do
+  shortest <- newArray ((0, 0), (n - 1, n - 1)) infinity
+  forM_ (indices tree) $ \i -> writeArray shortest (i, i) 0
+  forM_ (assocs tree) $ \(i, e) -> when (i /= e) $ do
+    writeArray shortest (i, e) (weights ! (i, e))
+    writeArray shortest (e, i) (weights ! (i, e))
+
+  floydWarshall n shortest
+  return shortest
