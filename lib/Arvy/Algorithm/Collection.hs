@@ -43,7 +43,7 @@ newtype IvyMessage i = IvyMessage i deriving Show
 ivy :: forall s r . Show s => Arvy s r
 ivy = arvy @IvyMessage @s ArvyInst
   { arvyInitiate = \i _ -> return (IvyMessage i)
-  , arvyTransmit = \(IvyMessage root) i _ ->
+  , arvyTransmit = \(IvyMessage root) _ _ ->
       return (root, IvyMessage (forward root))
   , arvyReceive = \(IvyMessage root) _ ->
       return root
@@ -60,14 +60,14 @@ data InbetweenMessage i = InbetweenMessage Int i (Seq i) deriving (Functor, Show
 inbetween :: forall s r . Show s => Ratio Int -> Arvy s r
 inbetween ratio = arvy @InbetweenMessage @s ArvyInst
   { arvyInitiate = \i _ -> return (InbetweenMessage 1 i S.empty)
-  , arvyTransmit = \(InbetweenMessage k f (fmap forward -> seq)) i _ ->
-      let s = S.length seq + 1
+  , arvyTransmit = \(InbetweenMessage k f (fmap forward -> seq')) i _ ->
+      let s = S.length seq' + 1
           newK = k + 1
           (newF, newSeq) = if (newK - s) % newK < ratio
-            then case S.viewl seq of
+            then case S.viewl seq' of
               EmptyL -> (i, S.empty)
               fir :< rest -> (fir, rest |> i)
-            else (forward f, seq |> i)
+            else (forward f, seq' |> i)
       in return (f, InbetweenMessage newK newF newSeq)
   , arvyReceive = \(InbetweenMessage _ f _) _ -> return f
   }

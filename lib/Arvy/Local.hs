@@ -7,7 +7,8 @@ import           Polysemy.State
 import Arvy.Algorithm
 import Polysemy.Trace
 import Data.Array.Unboxed
-import Pipes
+import Conduit
+
 
 -- | The type of our nodes (indices)
 type Node = Int
@@ -32,9 +33,9 @@ runRequests
   => arr Node Node
   -> (RootedTree -> Sem r Int)
   -> Int
-  -> Producer Node (Sem r) ()
+  -> ConduitT () Node (Sem r) ()
 runRequests tree getRequest requestCount = go requestCount where
-  go :: Int -> Producer Node (Sem r) ()
+  go :: Int -> ConduitT () Node (Sem r) ()
   go 0 = return ()
   go k = do
     immutableTree <- lift $ sendM $ freeze tree
@@ -80,7 +81,7 @@ Run an Arvy algorithm locally, taking requests as input and outputting the event
 -}
 {-# INLINABLE runArvyLocal #-}
 runArvyLocal
-  :: forall m s sarr tarr r a
+  :: forall m s sarr tarr r
   . ( Members '[ Lift m, Trace ] r
     , MArray sarr s m
     , MArray tarr Node m )
@@ -88,31 +89,33 @@ runArvyLocal
   -> tarr Node Node -- ^ The (initial) spanning tree, which this function modifies as requests are coming in. This is to allow request generators access to it from the outside.
   -> sarr Node s
   -> Arvy s r -- ^ The Arvy algorithm to run
-  -> Pipe Node ArvyEvent (Sem r) a
+  -> ConduitT Node ArvyEvent (Sem r) ()
 runArvyLocal weights tree stateArray (Arvy inst) = runArvyLocal' inst where
-  runArvyLocal' :: forall msg . ArvyInst msg s r -> Pipe Node ArvyEvent (Sem r) a
+  runArvyLocal' :: forall msg . ArvyInst msg s r -> ConduitT Node ArvyEvent (Sem r) ()
   runArvyLocal' ArvyInst { .. } = go where
 
     -- | The main loop which repeatedly takes a request as input and processes it on the current state
     {-# INLINE go #-}
-    go :: Pipe Node ArvyEvent (Sem r) a
-    go = await >>= \i -> do
-      yield $ RequestMade i
-      getSuccessor i >>= \successor -> if i == successor
-        -- If the node that made the request has no successor, immediately grant
-        then yield $ RequestGranted i i Local
-        else do
-          msg <- runNode i (arvyInitiate i successor)
-          setSuccessor i i
-          yield $ RequestTravel i successor (show msg)
-          root <- send msg successor
-          yield $ RequestGranted i root Received
-      go
+    go :: ConduitT Node ArvyEvent (Sem r) ()
+    go = await >>= \case
+      Just i -> do
+        yield $ RequestMade i
+        getSuccessor i >>= \successor -> if i == successor
+          -- If the node that made the request has no successor, immediately grant
+          then yield $ RequestGranted i i Local
+          else do
+            msg <- runNode i (arvyInitiate i successor)
+            setSuccessor i i
+            yield $ RequestTravel i successor (show msg)
+            root <- send msg successor
+            yield $ RequestGranted i root Received
+        go
+      Nothing -> return ()
       where
 
       -- | Send a message to some node and repeatedly applies the arvy algorithm until eventually the root node is found, which gets returned
       {-# INLINE send #-}
-      send :: msg Node -> Node -> Pipe Node ArvyEvent (Sem r) Int
+      send :: msg Node -> Node -> ConduitT Node ArvyEvent (Sem r) Int
       send msg i = getSuccessor i >>= \successor -> if i == successor
         then do
           newSucc <- runNode i (arvyReceive msg i)
@@ -126,24 +129,24 @@ runArvyLocal weights tree stateArray (Arvy inst) = runArvyLocal' inst where
 
       {-# INLINE getSuccessor #-}
       -- | Convenience function for getting the successor to a node by reading from the tree array
-      getSuccessor :: Node -> Pipe Node ArvyEvent (Sem r) Node
+      getSuccessor :: Node -> ConduitT Node ArvyEvent (Sem r) Node
       getSuccessor i = lift $ sendM $ readArray tree i
 
       {-# INLINE setSuccessor #-}
       -- | Convenience function for setting the successor to a node by writing to the tree array
-      setSuccessor :: Node -> Node -> Pipe Node ArvyEvent (Sem r) ()
+      setSuccessor :: Node -> Node -> ConduitT Node ArvyEvent (Sem r) ()
       setSuccessor i newSucc = do
         lift $ sendM $ writeArray tree i newSucc
         yield $ SuccessorChange i newSucc
 
       {-# INLINE runNodeState #-}
       -- | Interprets the state in a node as array operations to the state array at that nodes index
-      runNodeState :: Node -> Sem (State s ': r) x -> Pipe Node ArvyEvent (Sem r) x
+      runNodeState :: Node -> Sem (State s ': r) x -> ConduitT Node ArvyEvent (Sem r) x
       runNodeState i = lift . interpret \case
         Get -> sendM $ readArray stateArray i
         Put s -> sendM $ writeArray stateArray i s
 
       {-# INLINE runNode #-}
       -- | Runs a node with its local effects
-      runNode :: Node -> Sem (LocalWeights Node ': State s ': r) x -> Pipe Node ArvyEvent (Sem r) x
+      runNode :: Node -> Sem (LocalWeights Node ': State s ': r) x -> ConduitT Node ArvyEvent (Sem r) x
       runNode i action = runNodeState i (runLocalWeights weights i action)
