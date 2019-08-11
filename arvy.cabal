@@ -104,7 +104,8 @@ executable arvy
                      , containers
                      , multiset
                      , random-fu
-                     , pipes
+                     , conduit
+                     , bytestring
                      , directory
                      , filepath
 

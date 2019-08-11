@@ -16,8 +16,6 @@ import           Polysemy.Trace
 import           Control.Monad
 import           System.IO
 import           Prelude
-import Pipes hiding (enumerate)
-import qualified Pipes.Prelude as P
 import Arvy.Local
 import Data.Array.IO
 import System.Directory
@@ -25,14 +23,17 @@ import Data.Ratio
 import System.FilePath
 import Polysemy.Async as PA
 import Data.Functor
+import Conduit
+import qualified Data.Conduit.Combinators as C
+import qualified Data.ByteString.Char8 as BS
 
 main :: IO ()
 main = runM $ runTraceIO $ runAsync
   --initialTreeMatters
   --inbetweenParameter
   --badIvy
-  genArrowTest
-  --testing
+  --genArrowTest
+  testing
 
 
 genArrowTest :: Members '[Async, Lift IO, Trace] r => Sem r ()
@@ -68,7 +69,6 @@ genArrowTest = do
       [ Alg.arrow Tree.mst
       , Alg.arrow Tree.shortPairs
       , Alg.arrow Tree.random
-      , Alg.genArrow Tree.mst
       , Alg.genArrow Tree.shortPairs
       , Alg.genArrow Tree.random
       ]
@@ -77,28 +77,28 @@ genArrowTest = do
       --, Requests.pareto
       ]
     ]
-  eval :: Member (Lift IO) r => (Handle, Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
+  eval :: Member (Lift IO) r => (Handle, Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
   eval (stretchHandle, ratioHandle, weightHandle) n w t = ratio w
-    >-> distribute
+    .| sequenceConduits
     [ enumerate
-      >-> decayingFilter 4
-      >-> treeStretchDiameter n w t
-      >-> P.map (\((i, _), (stretch, _)) -> show i ++ " " ++ show stretch)
-      >-> P.toHandle stretchHandle
+      .| decayingFilter 4
+      .| treeStretchDiameter n w t
+      .| C.map (\((i, _), (stretch, _)) -> BS.pack $ show i ++ " " ++ show stretch)
+      .| C.sinkHandle stretchHandle
     , movingAverage True 100
-      >-> enumerate
-      >-> decayingFilter 10
-      >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
-      >-> P.toHandle ratioHandle
+      .| enumerate
+      .| decayingFilter 10
+      .| C.map (\(i, rat) -> BS.pack $ show i ++ " " ++ show rat)
+      .| C.sinkHandle ratioHandle
     , enumerate
-      >-> decayingFilter 8
-      >-> totalTreeWeight w t
-      >-> P.map (\((i, _), ttw) -> show i ++ " " ++ show ttw)
-      >-> P.toHandle weightHandle
+      .| decayingFilter 8
+      .| totalTreeWeight w t
+      .| C.map (\((i, _), ttw) -> BS.pack $ show i ++ " " ++ show ttw)
+      .| C.sinkHandle weightHandle
     , enumerate
-      >-> decayingFilter 10
-      >-> P.map (\(i, _) -> show i)
-      >-> P.stdoutLn
+      .| decayingFilter 10
+      .| C.map (\(i, _) -> BS.pack $ show i)
+      .| C.stdout
     ] where
 
 badIvy :: Members '[Async, Lift IO, Trace] r => Sem r ()
@@ -151,18 +151,18 @@ badIvy = do
       , Requests.farthest
       ]
     ]
-  eval :: Member (Lift IO) r => Handle -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
-  eval ratioHandle n w t = ratio w
-    >-> distribute
+  eval :: Member (Lift IO) r => Handle -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
+  eval ratioHandle _n w _t = ratio w
+    .| sequenceConduits
     [ movingAverage True 100
-      >-> enumerate
-      >-> decayingFilter 10
-      >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
-      >-> P.toHandle ratioHandle
+      .| enumerate
+      .| decayingFilter 10
+      .| C.map (\(i, rat) -> BS.pack $ show i ++ " " ++ show rat)
+      .| C.sinkHandle ratioHandle
     , enumerate
-      >-> everyNth 10000
-      >-> P.map (\(i, _) -> show i)
-      >-> P.stdoutLn
+      .| everyNth 10000
+      .| C.map (\(i, _) -> BS.pack $ show i)
+      .| C.stdout
     ] where
 
 
@@ -206,18 +206,18 @@ inbetweenParameter = do
       Requests.farthest
       ]
     ]
-  eval :: Member (Lift IO) r => Handle -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
-  eval ratioHandle n w t = ratio w
-    >-> distribute
+  eval :: Member (Lift IO) r => Handle -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
+  eval ratioHandle _n w _t = ratio w
+    .| sequenceConduits
     [ movingAverage True 250
-      >-> enumerate
-      >-> decayingFilter 10
-      >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
-      >-> P.toHandle ratioHandle
+      .| enumerate
+      .| decayingFilter 10
+      .| C.map (\(i, rat) -> BS.pack $ show i ++ " " ++ show rat)
+      .| C.sinkHandle ratioHandle
     , enumerate
-      >-> everyNth 2000
-      >-> P.map (\(i, _) -> show i)
-      >-> P.stdoutLn
+      .| everyNth 2000
+      .| C.map (\(i, _) -> BS.pack $ show i)
+      .| C.stdout
     ] where
 
 createHandle :: FilePath -> IO Handle
@@ -233,9 +233,9 @@ testing = do
     , nodeCount = 20
     , requestCount = 10
     , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
-    , requests = Requests.interactive
+    , requests = Requests.random
     , algorithm = Alg.inbetween (1 % 2) Tree.random
-    } \n w t -> P.show >-> P.stdoutLn
+    } \_n _w _t -> C.print
   _ <- PA.await asyn
   return ()
 
@@ -278,29 +278,29 @@ initialTreeMatters = do
       [ Requests.random
       ]
     ]
-  eval :: Member (Lift IO) r => (Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem r) ()
+  eval :: Member (Lift IO) r => (Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
   eval (stretchHandle, ratioHandle) n w t = ratio w
-    >-> distribute
+    .| sequenceConduits
     [ enumerate
-      >-> decayingFilter 4
-      >-> treeStretchDiameter n w t
-      >-> P.map (\((i, _), (stretch, _)) -> show i ++ " " ++ show stretch)
-      >-> P.toHandle stretchHandle
+      .| decayingFilter 4
+      .| treeStretchDiameter n w t
+      .| C.map (\((i, _), (stretch, _)) -> BS.pack $ show i ++ " " ++ show stretch)
+      .| C.sinkHandle stretchHandle
     , movingAverage True 100
-      >-> enumerate
-      >-> decayingFilter 10
-      >-> P.map (\(i, rat) -> show i ++ " " ++ show rat)
-      >-> P.toHandle ratioHandle
+      .| enumerate
+      .| decayingFilter 10
+      .| C.map (\(i, rat) -> BS.pack $ show i ++ " " ++ show rat)
+      .| C.sinkHandle ratioHandle
     , enumerate
-      >-> decayingFilter 10
-      >-> P.map (\(i, _) -> show i)
-      >-> P.stdoutLn
+      .| decayingFilter 10
+      .| C.map (\(i, _) -> BS.pack $ show i)
+      .| C.stdout
     ] where
 
-toFile :: MonadIO m => FilePath -> Consumer String m ()
+toFile :: MonadIO m => FilePath -> ConduitT BS.ByteString Void m ()
 toFile path = do
   liftIO $ createDirectoryIfMissing True (takeDirectory path)
   liftIO $ putStrLn $ "Writing to " ++path
   handle <- liftIO $ openFile path WriteMode
-  () <- P.toHandle handle
+  () <- C.sinkHandle handle
   liftIO $ hClose handle

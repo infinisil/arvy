@@ -57,11 +57,11 @@ paramFile :: Parameters r -> String -> FilePath
 paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params) ++ "/metric:" ++ metric ++ "/algorithm:" ++ algorithmId (algorithm params)
 
 runParams
-  :: forall r
+  :: forall r x
   . Members '[Async, Lift IO, Trace] r
   => Parameters (RandomFu ': r)
-  -> (NodeCount -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem (RandomFu ': r)) ())
-  -> Sem r (A.Async (Maybe ()))
+  -> (NodeCount -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem (RandomFu ': r)) x)
+  -> Sem r (A.Async (Maybe x))
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
@@ -90,14 +90,15 @@ runParams params@Parameters
 
       return (ConstParameters nodeCount weights mutableTree, mutableStates)
 
-    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) (A.Async (Maybe ()))
+    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) (A.Async (Maybe x))
     runAlg (ConstParameters { .. }, states) algorithm = async do
       reqs <- requestsGet nodeCount paramWeights
 
       trace $ "Running arvy.."
       start <- sendM getCurrentTime
-      runConduit $ runRequests paramTree reqs requestCount
+      res <- runConduit $ runRequests paramTree reqs requestCount
         .| runArvyLocal paramWeights paramTree states algorithm
         .| evaluation nodeCount paramWeights paramTree
       end <- sendM getCurrentTime
       trace $ "Took " ++ show (end `diffUTCTime` start)
+      return res
