@@ -53,6 +53,7 @@ let
   env = pkg.env.overrideAttrs (old: {
     nativeBuildInputs = old.nativeBuildInputs or [] ++ [
       pkgs.haskellPackages.cabal-install
+      pkgs.haskellPackages.ghcid
       pkgs.gnuplot
       pkgs.ghostscript
     ];
