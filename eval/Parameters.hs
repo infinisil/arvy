@@ -13,6 +13,7 @@ import Parameters.Algorithm
 
 import Polysemy
 import Polysemy.RandomFu
+import qualified Polysemy.Async as PA
 import qualified Data.Vector as V
 import GHC.Word
 import Data.Array.IO
@@ -21,6 +22,7 @@ import System.Random.MWC
 import Utils
 import Cache
 import Conduit
+import Control.Concurrent.Async
 
 
 data Parameters r = Parameters
@@ -63,10 +65,10 @@ data Env = Env
 
 runParams
   :: forall r x
-  . Members '[Lift IO, Trace] r
+  . Members '[PA.Async, Lift IO, Trace] r
   => Parameters (RandomFu ': r)
   -> (Env -> ConduitT ArvyEvent Void (Sem (RandomFu ': r)) x)
-  -> Sem r x
+  -> Sem r (Async (Maybe x))
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
@@ -95,8 +97,8 @@ runParams params@Parameters
 
       return (ConstParameters nodeCount weights mutableTree, mutableStates)
 
-    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem r x
-    runAlg (ConstParameters { .. }, states) algorithm = do
+    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem r (Async (Maybe x))
+    runAlg (ConstParameters { .. }, states) algorithm = PA.async $ do
       reqs <- runRandomSeed seed $ requestsGet nodeCount paramWeights
 
       trace "Running arvy.."
