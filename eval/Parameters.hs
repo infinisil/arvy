@@ -62,10 +62,11 @@ data Env = Env
   }
 
 runParams
-  :: forall r
+  :: forall r x
   . Members '[Lift IO, Trace] r
   => Parameters (RandomFu ': r)
-  -> Sem r (Env, ConduitT () ArvyEvent (Sem r) ())
+  -> (Env -> ConduitT ArvyEvent Void (Sem (RandomFu ': r)) x)
+  -> Sem r x
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
@@ -73,12 +74,11 @@ runParams params@Parameters
   , requestCount
   , requests = RequestsParameter { requestsGet }
   , algorithm = AlgorithmParameter { algorithmGet, algorithmInitialTree }
-  } = do
+  } evaluation = do
   trace $ show params
   generatedParams <- genParams algorithmInitialTree
-  (env, cond) <- runRandomSeed seed $ runAlg generatedParams algorithmGet
+  runAlg generatedParams algorithmGet
   --transPipe (runRandomSource' gen) $ runAlg generatedParams algorithmGet
-  return (env, transPipe (runRandomSeed seed) cond)
 
 
   where
@@ -95,10 +95,12 @@ runParams params@Parameters
 
       return (ConstParameters nodeCount weights mutableTree, mutableStates)
 
-    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem (RandomFu ': r) (Env, ConduitT () ArvyEvent (Sem (RandomFu ': r)) ())
+    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem r x
     runAlg (ConstParameters { .. }, states) algorithm = do
-      reqs <- requestsGet nodeCount paramWeights
+      reqs <- runRandomSeed seed $ requestsGet nodeCount paramWeights
 
       trace "Running arvy.."
-      return (Env nodeCount paramWeights paramTree, runRequests paramTree reqs requestCount
-        .| runArvyLocal paramWeights paramTree states algorithm)
+      let env = Env nodeCount paramWeights paramTree
+      runRandomSeed seed $ runConduit $ runRequests paramTree reqs requestCount
+        .| runArvyLocal paramWeights paramTree states algorithm
+        .| evaluation env

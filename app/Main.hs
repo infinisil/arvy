@@ -44,8 +44,7 @@ genArrowTest = do
     ratioHandle <- liftIO $ createHandle ratioPath
     let weightPath = "genArrowTest" </> paramFile par "weight"
     weightHandle <- liftIO $ createHandle weightPath
-    (env, cond) <- runParams par
-    asyn <- async $ runConduit $ cond .| eval (stretchHandle, ratioHandle, weightHandle) env
+    asyn <- async $ runParams par (eval (stretchHandle, ratioHandle, weightHandle))
     return $ asyn $> (stretchHandle, ratioHandle, weightHandle)
   forM_ asyncs (PA.await >=> (\(a, b, c) -> liftIO (hClose a) >> liftIO (hClose b) >> liftIO (hClose c)))
   where
@@ -105,8 +104,7 @@ badIvy = do
   asyncs <- forM params $ \par -> do
     let ratioPath = "badIvy" </> paramFile par "ratio"
     ratioHandle <- liftIO $ createHandle ratioPath
-    (env, cond) <- runParams par
-    asyn <- async $ runConduit $ cond .| eval ratioHandle env
+    asyn <- async $ runParams par (eval ratioHandle)
     return $ asyn $> ratioHandle
   forM_ asyncs (PA.await >=> liftIO . hClose)
 
@@ -170,8 +168,7 @@ inbetweenParameter = do
   asyncs <- forM params $ \par -> do
     let ratioPath = "inbetweenParameter" </> paramFile par "ratio"
     ratioHandle <- liftIO $ createHandle ratioPath
-    (env, cond) <- runParams par
-    asyn <- async $ runConduit $ cond .| eval ratioHandle env
+    asyn <- async $ runParams par (eval ratioHandle)
     return $ asyn $> ratioHandle
   forM_ asyncs (PA.await >=> liftIO . hClose)
 
@@ -226,16 +223,15 @@ createHandle path = do
   openFile path WriteMode
 
 testing :: Members '[Async, Lift IO, Trace] r => Sem r ()
-testing = do
-  (_, cond) <- runParams Parameters
+testing =
+  runParams Parameters
     { randomSeed = 0
     , nodeCount = 20
     , requestCount = 10
     , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
     , requests = Requests.random
     , algorithm = Alg.inbetween (1 % 2) Tree.random
-    }
-  runConduit $ cond .| C.print
+    } (const C.print)
 
 initialTreeMatters :: Members '[Async, Lift IO, Trace] r => Sem r ()
 initialTreeMatters = do
@@ -244,8 +240,7 @@ initialTreeMatters = do
     stretchHandle <- liftIO $ createHandle stretchPath
     let ratioPath = "initialTreeMatters" </> paramFile par "ratio"
     ratioHandle <- liftIO $ createHandle ratioPath
-    (env, cond) <- runParams par
-    asyn <- async $ runConduit $ cond .| eval (stretchHandle, ratioHandle) env
+    asyn <- async $ runParams par (eval (stretchHandle, ratioHandle))
     return $ asyn $> (stretchHandle, ratioHandle)
   forM_ asyncs (PA.await >=> (\(a, b) -> liftIO (hClose a) >> liftIO (hClose b)))
   where
