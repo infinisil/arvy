@@ -8,8 +8,8 @@ import Data.Functor
 import Data.Array.Unboxed
 import Prelude hiding ((.))
 import Control.Category
-import Pipes
-import qualified Pipes.Prelude as P
+import Conduit
+import qualified Data.Conduit.Combinators as C
 
 data Request a = Request
   { requestFrom :: Int
@@ -17,21 +17,22 @@ data Request a = Request
   , path :: a
   } deriving (Functor, Show)
 
-collectRequests :: forall a m x . (Monoid a, Monad m) => (Edge -> a) -> Pipe ArvyEvent (Request a) m x
+collectRequests :: forall a m . (Monoid a, Monad m) => (Edge -> a) -> ConduitT ArvyEvent (Request a) m ()
 collectRequests f = go 0 mempty where
-  go :: Int -> a -> Pipe ArvyEvent (Request a) m x
+  go :: Int -> a -> ConduitT ArvyEvent (Request a) m ()
   go requestFrom as = await >>= \case
-    RequestMade requestFrom' -> go requestFrom' mempty
-    RequestGranted _ root _ -> do
+    Just (RequestMade requestFrom') -> go requestFrom' mempty
+    Just (RequestGranted _ root _) -> do
       yield (Request requestFrom root as)
       go 0 mempty
-    RequestTravel x y _ -> go requestFrom (f (x, y) <> as)
-    _ -> go requestFrom as
+    Just (RequestTravel x y _) -> go requestFrom (f (x, y) <> as)
+    Just _ -> go requestFrom as
+    Nothing -> return ()
 
-hopCount :: (Num n, Monad m) => Pipe ArvyEvent n m x
-hopCount = collectRequests (\_ -> Sum 1) >-> P.map (getSum . path)
+hopCount :: (Num n, Monad m) => ConduitT ArvyEvent n m ()
+hopCount = collectRequests (\_ -> Sum 1) .| C.map (getSum . path)
 
-ratio :: Monad m => GraphWeights -> Pipe ArvyEvent Double m x
+ratio :: Monad m => GraphWeights -> ConduitT ArvyEvent Double m ()
 ratio weights = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
-  >-> P.filter (\(Request a b _) -> a /= b) -- Only look at requests where start node != end node
-  >-> P.map (\(Request a b (Sum path)) -> path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length
+  .| C.filter (\(Request a b _) -> a /= b) -- Only look at requests where start node != end node
+  .| C.map (\(Request a b (Sum path)) -> path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length

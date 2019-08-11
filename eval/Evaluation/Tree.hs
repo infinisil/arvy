@@ -10,12 +10,12 @@ import           Data.IntSet        (IntSet)
 import qualified Data.IntSet        as IntSet
 import           Polysemy
 import Prelude
-import Pipes
-import qualified Pipes.Prelude as P
 import Evaluation.Utils
+import Conduit
+import qualified Data.Conduit.Combinators as C
 
-treeStretchDiameter :: (MArray arr Node m, Member (Lift m) r) => NodeCount -> GraphWeights -> arr Node Node -> Pipe a (a, (Double, Double)) (Sem r) x
-treeStretchDiameter nodeCount weights tree = P.mapM \event -> do
+treeStretchDiameter :: (MArray arr Node m, Member (Lift m) r) => NodeCount -> GraphWeights -> arr Node Node -> ConduitT a (a, (Double, Double)) (Sem r) ()
+treeStretchDiameter nodeCount weights tree = C.mapM \event -> do
   frozen <- sendM $ freeze tree
   return $ (event, avgTreeStretchDiameter nodeCount weights frozen)
 
@@ -23,8 +23,8 @@ treeStretchDiameter nodeCount weights tree = P.mapM \event -> do
 sumMapAssocs :: (Num n, MArray a e m, Ix i) => ((i, e) -> n) -> a i e -> m n
 sumMapAssocs f arr = sum . map f <$> getAssocs arr
 
-totalTreeWeight :: (MArray arr Node m, Member (Lift m) r) => GraphWeights -> arr Node Node -> Pipe a (a, Double) (Sem r) x
-totalTreeWeight weights tree = P.mapM \event -> do
+totalTreeWeight :: (MArray arr Node m, Member (Lift m) r) => GraphWeights -> arr Node Node -> ConduitT a (a, Double) (Sem r) ()
+totalTreeWeight weights tree = C.mapM \event -> do
   res <- sendM $ sumMapAssocs (weights !) tree
   return (event, res)
 

@@ -76,7 +76,7 @@ library arvy-eval
                      , containers
                      , multiset
                      , heaps
-                     , pipes
+                     , conduit
                      , store
                      , directory
                      , filepath

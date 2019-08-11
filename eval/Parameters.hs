@@ -22,11 +22,11 @@ import Polysemy.Trace
 import Data.Time (getCurrentTime)
 import System.Random.MWC
 import Utils
-import Pipes
 import Data.Time
 import Cache
 import Polysemy.Async
 import qualified Control.Concurrent.Async as A
+import Conduit
 
 
 data Parameters r = Parameters
@@ -60,7 +60,7 @@ runParams
   :: forall r
   . Members '[Async, Lift IO, Trace] r
   => Parameters (RandomFu ': r)
-  -> (NodeCount -> GraphWeights -> IOUArray Node Node -> Consumer ArvyEvent (Sem (RandomFu ': r)) ())
+  -> (NodeCount -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem (RandomFu ': r)) ())
   -> Sem r (A.Async (Maybe ()))
 runParams params@Parameters
   { randomSeed = seed
@@ -96,8 +96,8 @@ runParams params@Parameters
 
       trace $ "Running arvy.."
       start <- sendM getCurrentTime
-      runEffect $ runRequests paramTree reqs requestCount
-        >-> runArvyLocal paramWeights paramTree states algorithm
-        >-> evaluation nodeCount paramWeights paramTree
+      runConduit $ runRequests paramTree reqs requestCount
+        .| runArvyLocal paramWeights paramTree states algorithm
+        .| evaluation nodeCount paramWeights paramTree
       end <- sendM getCurrentTime
       trace $ "Took " ++ show (end `diffUTCTime` start)
