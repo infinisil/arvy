@@ -17,7 +17,6 @@ import           Control.Monad
 import           System.IO
 import           Prelude
 import Arvy.Local
-import Data.Array.IO
 import System.Directory
 import Data.Ratio
 import System.FilePath
@@ -45,8 +44,8 @@ genArrowTest = do
     ratioHandle <- liftIO $ createHandle ratioPath
     let weightPath = "genArrowTest" </> paramFile par "weight"
     weightHandle <- liftIO $ createHandle weightPath
-    asyn <- runParams par
-      $ eval (stretchHandle, ratioHandle, weightHandle)
+    (env, cond) <- runParams par
+    asyn <- async $ runConduit $ cond .| eval (stretchHandle, ratioHandle, weightHandle) env
     return $ asyn $> (stretchHandle, ratioHandle, weightHandle)
   forM_ asyncs (PA.await >=> (\(a, b, c) -> liftIO (hClose a) >> liftIO (hClose b) >> liftIO (hClose c)))
   where
@@ -77,8 +76,8 @@ genArrowTest = do
       --, Requests.pareto
       ]
     ]
-  eval :: Member (Lift IO) r => (Handle, Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
-  eval (stretchHandle, ratioHandle, weightHandle) n w t = ratio w
+  eval :: Member (Lift IO) r => (Handle, Handle, Handle) -> Env -> ConduitT ArvyEvent Void (Sem r) [()]
+  eval (stretchHandle, ratioHandle, weightHandle) Env { envNodeCount = n, envWeights = w, envTree = t } = ratio w
     .| sequenceConduits
     [ enumerate
       .| decayingFilter 4
@@ -99,15 +98,15 @@ genArrowTest = do
       .| decayingFilter 10
       .| C.map (\(i, _) -> BS.pack $ show i)
       .| C.stdout
-    ] where
+    ]
 
 badIvy :: Members '[Async, Lift IO, Trace] r => Sem r ()
 badIvy = do
   asyncs <- forM params $ \par -> do
     let ratioPath = "badIvy" </> paramFile par "ratio"
     ratioHandle <- liftIO $ createHandle ratioPath
-    asyn <- runParams par
-      $ eval ratioHandle
+    (env, cond) <- runParams par
+    asyn <- async $ runConduit $ cond .| eval ratioHandle env
     return $ asyn $> ratioHandle
   forM_ asyncs (PA.await >=> liftIO . hClose)
 
@@ -151,8 +150,8 @@ badIvy = do
       , Requests.farthest
       ]
     ]
-  eval :: Member (Lift IO) r => Handle -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
-  eval ratioHandle _n w _t = ratio w
+  eval :: Member (Lift IO) r => Handle -> Env -> ConduitT ArvyEvent Void (Sem r) [()]
+  eval ratioHandle Env { envNodeCount = _n, envWeights = w, envTree = _t } = ratio w
     .| sequenceConduits
     [ movingAverage True 100
       .| enumerate
@@ -171,8 +170,8 @@ inbetweenParameter = do
   asyncs <- forM params $ \par -> do
     let ratioPath = "inbetweenParameter" </> paramFile par "ratio"
     ratioHandle <- liftIO $ createHandle ratioPath
-    asyn <- runParams par
-      $ eval ratioHandle
+    (env, cond) <- runParams par
+    asyn <- async $ runConduit $ cond .| eval ratioHandle env
     return $ asyn $> ratioHandle
   forM_ asyncs (PA.await >=> liftIO . hClose)
 
@@ -206,8 +205,8 @@ inbetweenParameter = do
       Requests.farthest
       ]
     ]
-  eval :: Member (Lift IO) r => Handle -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
-  eval ratioHandle _n w _t = ratio w
+  eval :: Member (Lift IO) r => Handle -> Env -> ConduitT ArvyEvent Void (Sem r) [()]
+  eval ratioHandle Env { envNodeCount = _n, envWeights = w, envTree = _t } = ratio w
     .| sequenceConduits
     [ movingAverage True 250
       .| enumerate
@@ -228,16 +227,15 @@ createHandle path = do
 
 testing :: Members '[Async, Lift IO, Trace] r => Sem r ()
 testing = do
-  asyn <- runParams Parameters
+  (_, cond) <- runParams Parameters
     { randomSeed = 0
     , nodeCount = 20
     , requestCount = 10
     , weights = Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
     , requests = Requests.random
     , algorithm = Alg.inbetween (1 % 2) Tree.random
-    } \_n _w _t -> C.print
-  _ <- PA.await asyn
-  return ()
+    }
+  runConduit $ cond .| C.print
 
 initialTreeMatters :: Members '[Async, Lift IO, Trace] r => Sem r ()
 initialTreeMatters = do
@@ -246,8 +244,8 @@ initialTreeMatters = do
     stretchHandle <- liftIO $ createHandle stretchPath
     let ratioPath = "initialTreeMatters" </> paramFile par "ratio"
     ratioHandle <- liftIO $ createHandle ratioPath
-    asyn <- runParams par
-      $ eval (stretchHandle, ratioHandle)
+    (env, cond) <- runParams par
+    asyn <- async $ runConduit $ cond .| eval (stretchHandle, ratioHandle) env
     return $ asyn $> (stretchHandle, ratioHandle)
   forM_ asyncs (PA.await >=> (\(a, b) -> liftIO (hClose a) >> liftIO (hClose b)))
   where
@@ -278,8 +276,8 @@ initialTreeMatters = do
       [ Requests.random
       ]
     ]
-  eval :: Member (Lift IO) r => (Handle, Handle) -> Int -> GraphWeights -> IOUArray Node Node -> ConduitT ArvyEvent Void (Sem r) [()]
-  eval (stretchHandle, ratioHandle) n w t = ratio w
+  eval :: Member (Lift IO) r => (Handle, Handle) -> Env -> ConduitT ArvyEvent Void (Sem r) [()]
+  eval (stretchHandle, ratioHandle) Env { envNodeCount = n, envWeights = w, envTree = t } = ratio w
     .| sequenceConduits
     [ enumerate
       .| decayingFilter 4
