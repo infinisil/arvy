@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Arvy.Algorithm.Collection
-  ( arrow, ivy, half, constantRing, inbetween, random, genArrow
+  ( arrow, ivy, half, constantRing, inbetween, random, genArrow, inbetweenWeighted
   , RingNodeState(..)
   ) where
 
@@ -18,6 +18,8 @@ import Polysemy.RandomFu
 import Data.Random
 import Data.MonoTraversable
 import Data.Ord (comparing)
+import Prelude hiding (head)
+import Data.Bifunctor
 
 genArrow :: forall s r . Show s => Arvy s r
 genArrow = simpleArvy \xs -> do
@@ -71,6 +73,27 @@ inbetween ratio = arvy @InbetweenMessage @s ArvyInst
       in return (f, InbetweenMessage newK newF newSeq)
   , arvyReceive = \(InbetweenMessage _ f _) _ -> return f
   }
+
+data WeightedInbetweenMessage i = WeightedInbetweenMessage (NonNull [(i, Double)]) deriving Show
+
+-- | @'inbetweenWeighted' ratio@ Chooses the node that lies at @ratio@ inbetween the root node and the last node by weight,
+-- where 0.0 means always choose the root node, 1.0 means always choose the last node
+-- This is equivalent to 'inbetween' if run on a clique
+inbetweenWeighted :: forall s r . Show s => Double -> Arvy s r
+inbetweenWeighted ratio = arvy @WeightedInbetweenMessage @s ArvyInst
+  { arvyInitiate = \i _ -> return (WeightedInbetweenMessage (opoint (i, 0)))
+  , arvyTransmit = \(WeightedInbetweenMessage ps@(head -> (comingFrom, total))) i _ -> do
+      -- Find the first node that's less than ratio * total away, starting from the most recent node
+      -- Nothing can't happen because desired is always >= 0, and ps will always contain the 0 element at the end
+      let Just (newSucc, _) = find ((<= total * ratio) . snd) ps
+      -- The newTotal is the previous total plus the weight to the node we're coming from
+      newTotal <- (total+) <$> weightTo comingFrom
+      return (newSucc, WeightedInbetweenMessage ((i, newTotal) <| mapNonNull (first forward) ps))
+  , arvyReceive = \(WeightedInbetweenMessage ps@(head -> (_, total))) _ -> do
+      let Just (newSucc, _) = find ((<= total * ratio) . snd) ps
+      return newSucc
+  }
+
 
 random :: forall s r . (Member RandomFu r, Show s) => Arvy s r
 random = arvy @Seq @s ArvyInst

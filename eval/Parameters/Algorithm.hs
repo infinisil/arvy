@@ -62,6 +62,14 @@ inbetween ratio tree = AlgorithmParameter
   , algorithmGet = Arvy.inbetween ratio
   }
 
+inbetweenWeighted :: Show s => Double -> Tree.InitialTreeParameter s r -> AlgorithmParameter r
+inbetweenWeighted ratio tree = AlgorithmParameter
+  { algorithmId = "inbetweenWeighted" ++ show ratio ++ "-" ++ Tree.initialTreeId tree
+  , algorithmDescription = "Inbetween, weighted"
+  , algorithmInitialTree = tree
+  , algorithmGet = Arvy.inbetweenWeighted ratio
+  }
+
 random :: (Show s, Member RandomFu r) => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 random tree = AlgorithmParameter
   { algorithmId = "random-" ++ Tree.initialTreeId tree
