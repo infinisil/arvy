@@ -36,6 +36,15 @@ let
       th-abstraction = self.th-abstraction_0_3_1_0;
       th-lift = self.th-lift_0_8_0_1;
 
+      time-compat_1_9_2_2 = hlib.dontCheck super.time-compat_1_9_2_2;
+      time-compat = self.time-compat_1_9_2_2;
+
+      aeson_1_4_4_0 = hlib.dontCheck super.aeson_1_4_4_0;
+
+      hoogle = super.hoogle.overrideScope (self': super': {
+        aeson = self'.aeson_1_4_4_0;
+      });
+
       polysemy = hlib.unmarkBroken super.polysemy;
       polysemy-plugin = hlib.dontCheck (hlib.unmarkBroken super.polysemy-plugin);
       polysemy-zoo = hlib.dontCheck (hlib.unmarkBroken super.polysemy-zoo);
@@ -50,13 +59,15 @@ let
 
   pkg = hpkgs.arvy;
 
-  env = pkg.env.overrideAttrs (old: {
-    nativeBuildInputs = old.nativeBuildInputs or [] ++ [
+  env = hpkgs.shellFor {
+    packages = p: [ p.arvy ];
+    nativeBuildInputs = [
       pkgs.haskellPackages.cabal-install
       pkgs.haskellPackages.ghcid
       pkgs.gnuplot
       pkgs.ghostscript
     ];
-  });
+    withHoogle = true;
+  };
 
 in pkg // { inherit env pkgs hpkgs; }
