@@ -5,11 +5,10 @@ import Prelude hiding (id, (.))
 import Control.Monad
 import qualified Data.Sequence as S
 import Data.Sequence (Seq, (|>))
-import Arvy.Local
-import Data.Array.ST
-import Data.Array.IArray
-import Utils
 import Conduit
+import Polysemy
+import qualified Data.Conduit.Combinators as C
+import Evaluation.Types
 
 -- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 meanStddev :: forall n m . Monad m => Floating n => ConduitT n (n, n) m ()
@@ -93,14 +92,7 @@ meanStddevList values = (mean, sqrt $ sum $ map (\v -> (v - mean) ^^ (2 :: Int))
   mean = sum values / fromIntegral len
   len = length values
 
-
-treeWeights :: NodeCount -> RootedTree -> GraphWeights -> GraphWeights
-treeWeights n tree weights = runSTUArray $ do
-  shortest <- newArray ((0, 0), (n - 1, n - 1)) infinity
-  forM_ (indices tree) $ \i -> writeArray shortest (i, i) 0
-  forM_ (assocs tree) $ \(i, e) -> when (i /= e) $ do
-    writeArray shortest (i, e) (weights ! (i, e))
-    writeArray shortest (e, i) (weights ! (i, e))
-
-  floydWarshall n shortest
-  return shortest
+asConduit :: Member (Lift IO) r => (Env -> IO a) -> (Env -> ConduitT e (e, a) (Sem r) ())
+asConduit f env = C.mapM $ \event -> do
+  result <- sendM $ f env
+  return (event, result)
