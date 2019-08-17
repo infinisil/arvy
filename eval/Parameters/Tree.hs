@@ -29,6 +29,15 @@ data InitialTreeParameter s r = InitialTreeParameter
   -- ^ How to generate the tree and node states from a given number of nodes and their edge weights
   }
 
+instance Eq (InitialTreeParameter s r) where
+  InitialTreeParameter { initialTreeId = id1 } == InitialTreeParameter { initialTreeId = id2 } = id1 == id2
+
+instance Ord (InitialTreeParameter s r) where
+  InitialTreeParameter { initialTreeId = id1 } `compare` InitialTreeParameter { initialTreeId = id2 } = id1 `compare` id2
+
+instance Show (InitialTreeParameter s r) where
+  show InitialTreeParameter { initialTreeDescription = desc } = desc
+
 ring :: InitialTreeParameter () r
 ring = InitialTreeParameter
   { initialTreeId = "ring"

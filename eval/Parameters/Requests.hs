@@ -25,6 +25,15 @@ data RequestsParameter r = RequestsParameter
   , requestsGet  :: Int -> GraphWeights -> Sem r (RootedTree -> Sem r Int)
   }
 
+instance Eq (RequestsParameter r) where
+  RequestsParameter { requestsId = id1 } == RequestsParameter { requestsId = id2 } = id1 == id2
+
+instance Ord (RequestsParameter r) where
+  RequestsParameter { requestsId = id1 } `compare` RequestsParameter { requestsId = id2 } = id1 `compare` id2
+
+instance Show (RequestsParameter r) where
+  show RequestsParameter { requestsDescription = desc } = desc
+
 farthest :: RequestsParameter r
 farthest = RequestsParameter
   { requestsId = "farthest"
@@ -84,6 +93,6 @@ interactive = RequestsParameter
   , requestsDescription = "Interactive"
   , requestsGet = \_ _ -> return $ \tree -> do
       -- TODO: Use haskeline, add haskeline effect to polysemy
-      sendM $ putStrLn $ T.drawTree $ fmap show $ treeStructure tree
+      sendM $ putStrLn $ T.drawTree $ show <$> treeStructure tree
       read <$> sendM getLine
   }

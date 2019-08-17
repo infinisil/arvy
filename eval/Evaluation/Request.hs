@@ -10,6 +10,7 @@ import Prelude hiding ((.))
 import Control.Category
 import Conduit
 import qualified Data.Conduit.Combinators as C
+import Evaluation.Types
 
 data Request a = Request
   { requestFrom :: Int
@@ -32,7 +33,7 @@ collectRequests f = go 0 mempty where
 hopCount :: (Num n, Monad m) => ConduitT ArvyEvent n m ()
 hopCount = collectRequests (\_ -> Sum 1) .| C.map (getSum . path)
 
-ratio :: Monad m => GraphWeights -> ConduitT ArvyEvent Double m ()
-ratio weights = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
+ratio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
+ratio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
   .| C.filter (\(Request a b _) -> a /= b) -- Only look at requests where start node != end node
   .| C.map (\(Request a b (Sum path)) -> path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length

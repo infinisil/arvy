@@ -23,11 +23,17 @@ import Data.IntSet (IntSet)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Random
+import Data.Word
+import qualified Data.Vector as V
+import System.Random.MWC
 
 -- | Convenience value for infinity for floating point types
 infinity :: (Floating a, Read a) => a
 infinity = read "Infinity"
 
+-- | Maps all array index/elem pairs to a number and sums them
+sumMapAssocs :: (Num n, MArray a e m, Ix i) => ((i, e) -> n) -> a i e -> m n
+sumMapAssocs f arr = sum . map f <$> getAssocs arr
 
 -- | Like 'fix' but over a functor structure. See https://github.com/quchen/articles/blob/master/loeb-moeb.md
 loeb :: Functor f => f (f a -> a) -> f a
@@ -47,7 +53,7 @@ mapState
   -> (s -> a -> s) -- ^ How to set the @a@ part in an @s@,
   -> Sem (State a ': r) x
   -> Sem r x
-mapState getter setter = interpret \case
+mapState getter setter = interpret $ \case
   Get -> gets getter
   Put v -> do
     !old <- get
@@ -60,7 +66,7 @@ mapState'
   -> (s -> a -> s) -- ^ How to set the @a@ part in an @s@,
   -> Sem (State a ': r) x
   -> Sem (State s ': r) x
-mapState' getter setter = reinterpret \case
+mapState' getter setter = reinterpret $ \case
   Get -> gets getter
   Put v -> do
     !old <- get
@@ -158,3 +164,9 @@ randomSetElement set = do
   let size = Set.size set
   r <- uniformT 0 (size - 1)
   return $ Set.elemAt r set
+
+-- | Run a RandomFu effect with a certain initial seed
+runRandomSeed :: Members '[Lift IO] r => Word32 -> Sem (RandomFu ': r) a -> Sem r a
+runRandomSeed seed sem = do
+  gen <- sendM $ initialize (V.singleton seed)
+  runRandomSource' gen sem

@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BlockArguments #-}
 
 module Parameters.Weights
@@ -42,6 +43,16 @@ data WeightsParameter r = WeightsParameter
   , weightsGet  :: NodeCount -> Sem r GraphWeights
   -- ^ Generate weights for a certain number of nodes
   }
+
+instance Eq (WeightsParameter r) where
+  WeightsParameter { weightsId = id1 } == WeightsParameter { weightsId = id2 } = id1 == id2
+
+instance Ord (WeightsParameter r) where
+  WeightsParameter { weightsId = id1 } `compare` WeightsParameter { weightsId = id2 } = id1 `compare` id2
+
+instance Show (WeightsParameter r) where
+  show WeightsParameter { weightsDescription = desc } = desc
+
 
 -- TODO: Does this really not use any additional storage?
 -- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is /O(m + n^3)/ with n being the number of vertices and m being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
@@ -114,7 +125,7 @@ unitEuclidian dim = WeightsParameter
     | d <- [0 .. dim - 1] ]
 
 
-data ErdosProb
+newtype ErdosProb
   = ErdosProbEpsilon Double
   -- ^ An epsilon value for the formula (1 + e) * ln n / n
 
@@ -171,7 +182,7 @@ barabasiAlbertGen n m = do
       folder st curNode = do
           let (repeatedNodes, targets, graph) = st
           -- Create new edges (for the current node)
-          let newEdges = map (\t -> (curNode, t)) targets
+          let newEdges = map (curNode,) targets
           -- Add nodes to the repeated nodes multiset
           let newRepeatedNodes = foldl' (flip IntMultiSet.insert) repeatedNodes targets
           let newRepeatedNodes' = IntMultiSet.insertMany curNode m newRepeatedNodes

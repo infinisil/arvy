@@ -14,6 +14,15 @@ data AlgorithmParameter r = forall s . AlgorithmParameter
   , algorithmGet         :: Arvy s r
   }
 
+instance Eq (AlgorithmParameter r) where
+  AlgorithmParameter { algorithmId = id1 } == AlgorithmParameter { algorithmId = id2 } = id1 == id2
+
+instance Ord (AlgorithmParameter r) where
+  AlgorithmParameter { algorithmId = id1 } `compare` AlgorithmParameter { algorithmId = id2 } = id1 `compare` id2
+
+instance Show (AlgorithmParameter r) where
+  show AlgorithmParameter { algorithmDescription = desc } = desc
+
 genArrow :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
 genArrow tree = AlgorithmParameter
   { algorithmId = "genArrow-" ++ Tree.initialTreeId tree
