@@ -5,24 +5,22 @@
 module Parameters where
 
 import Arvy.Local
-import Arvy.Algorithm
 import Parameters.Tree
 import Parameters.Requests
 import Parameters.Weights
 import Parameters.Algorithm
+import Utils
+import Cache
+import Evaluation
 
 import Polysemy
 import Polysemy.RandomFu
-import qualified Polysemy.Async as PA
-import qualified Data.Vector as V
 import GHC.Word
 import Data.Array.IO
 import Polysemy.Trace
-import System.Random.MWC
-import Utils
-import Cache
 import Conduit
-import Control.Concurrent.Async
+import Graphics.Rendering.Chart
+import Data.List
 
 
 data Parameters r = Parameters
@@ -30,79 +28,78 @@ data Parameters r = Parameters
   , nodeCount    :: Int
   , requestCount :: Int
   , weights      :: WeightsParameter r
-  , algorithm    :: AlgorithmParameter r
   , requests     :: RequestsParameter r
-  }
+  } deriving (Eq, Ord)
 
 instance Show (Parameters r) where
-  show Parameters { algorithm = AlgorithmParameter { algorithmDescription }, .. } = "Parameters:\n" ++
+  show Parameters { .. } = "Parameters:\n" ++
     "\tRandom seed: " ++ show randomSeed ++ "\n" ++
     "\tNode count: " ++ show nodeCount ++ "\n" ++
     "\tRequest count: " ++ show requestCount ++ "\n" ++
-    "\tWeights: " ++ weightsDescription weights ++ "\n" ++
-    "\tAlgorithm: " ++ algorithmDescription ++ "\n" ++
-    "\tRequests: " ++ requestsDescription requests ++ "\n"
-
-data ConstParameters = ConstParameters
-  { paramNodeCount :: NodeCount
-  , paramWeights :: GraphWeights
-  , paramTree :: IOUArray Node Node
-  }
+    "\tWeights: " ++ show weights ++ "\n" ++
+    "\tRequests: " ++ show requests ++ "\n"
 
 paramFile :: Parameters r -> String -> FilePath
-paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params) ++ "/metric:" ++ metric ++ "/algorithm:" ++ algorithmId (algorithm params)
+paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params) ++ "/metric:" ++ metric
 
-runRandomSeed :: Members '[Lift IO] r => Word32 -> Sem (RandomFu ': r) a -> Sem r a
-runRandomSeed seed sem = do
-  gen <- sendM $ initialize (V.singleton seed)
-  runRandomSource' gen sem
 
-data Env = Env
-  { envNodeCount :: NodeCount
-  , envWeights :: GraphWeights
-  , envTree :: IOUArray Node Node
-  }
 
-runParams
-  :: forall r x
-  . Members '[PA.Async, Lift IO, Trace] r
+runEvals
+  :: forall r
+   . Members '[Lift IO, Trace] r
   => Parameters (RandomFu ': r)
+  -> [AlgorithmParameter (RandomFu ': r)]
+  -> [Eval (Sem (RandomFu ': r))]
+  -> Sem r [Layout Double Double]
+runEvals params algs evals = do
+  series <- transpose <$> mapM runit algs
+  return $ zipWith toLayout (map evalPlotDefaults evals) series
+  where
+  runit :: AlgorithmParameter (RandomFu ': r) -> Sem r [Series]
+  runit alg = runParams params alg (evalsConduit evals)
+
+  toLayout :: PlotDefaults -> [Series] -> Layout Double Double
+  toLayout PlotDefaults { .. } series = plotDefaultLayout { _layout_plots = zipWith mkPlot algs series }
+    where mkPlot alg serie = toPlot (plotDefaultPlot alg) { _plot_lines_values = [serie] }
+
+
+-- | Generate the final parameter values, caching the weights during that
+genParams :: forall r s . Members '[Trace, Lift IO] r => Parameters (RandomFu ': r) -> InitialTreeParameter s (RandomFu ': r) -> Sem r (Env, IOArray Node s)
+genParams Parameters { randomSeed = seed, nodeCount, weights = WeightsParameter { weightsId, weightsGet } } InitialTreeParameter { initialTreeGet } = do
+  trace "Generating weights.."
+  !weights <- cache (CacheKey ("weights-" ++ weightsId ++ "-" ++ show nodeCount ++ "-" ++ show seed)) (runRandomSeed seed $ weightsGet nodeCount)
+
+  trace "Generating initial tree.."
+  (tree, states) <- runRandomSeed seed $ initialTreeGet nodeCount weights
+  mutableTree <- sendM (thaw tree)
+  mutableStates <- sendM (thaw states)
+
+  return (Env nodeCount weights mutableTree, mutableStates)
+
+-- | Run parameters on an algorithm while doing an evaluation on the resulting events, returning the evaluations result
+runParams
+  :: Members '[Lift IO, Trace] r
+  => Parameters (RandomFu ': r)
+  -> AlgorithmParameter (RandomFu ': r)
   -> (Env -> ConduitT ArvyEvent Void (Sem (RandomFu ': r)) x)
-  -> Sem r (Async (Maybe x))
+  -> Sem r x
 runParams params@Parameters
   { randomSeed = seed
   , nodeCount
-  , weights = WeightsParameter { weightsGet, weightsId }
   , requestCount
   , requests = RequestsParameter { requestsGet }
-  , algorithm = AlgorithmParameter { algorithmGet, algorithmInitialTree }
-  } evaluation = do
+  }
+  AlgorithmParameter { algorithmGet, algorithmInitialTree }
+  evaluation = do
+
   trace $ show params
-  generatedParams <- genParams algorithmInitialTree
-  runAlg generatedParams algorithmGet
-  --transPipe (runRandomSource' gen) $ runAlg generatedParams algorithmGet
 
+  (env@Env { .. }, states) <- genParams params algorithmInitialTree
 
-  where
+  reqs <- runRandomSeed seed $ requestsGet nodeCount envWeights
 
-    genParams :: forall s . InitialTreeParameter s (RandomFu ': r) -> Sem r (ConstParameters, IOArray Node s)
-    genParams InitialTreeParameter { initialTreeGet } = do
-      trace "Generating weights.."
-      !weights <- cache (CacheKey ("weights-" ++ weightsId ++ "-" ++ show nodeCount ++ "-" ++ show seed)) (runRandomSeed seed $ weightsGet nodeCount)
-
-      trace "Generating initial tree.."
-      (tree, states) <- runRandomSeed seed $ initialTreeGet nodeCount weights
-      mutableTree <- sendM (thaw tree :: IO (IOUArray Int Int))
-      mutableStates <- sendM (thaw states :: IO (IOArray Int s))
-
-      return (ConstParameters nodeCount weights mutableTree, mutableStates)
-
-    runAlg :: forall s . (ConstParameters, IOArray Node s) -> Arvy s (RandomFu ': r) -> Sem r (Async (Maybe x))
-    runAlg (ConstParameters { .. }, states) algorithm = PA.async $ do
-      reqs <- runRandomSeed seed $ requestsGet nodeCount paramWeights
-
-      trace "Running arvy.."
-      let env = Env nodeCount paramWeights paramTree
-      runRandomSeed seed $ runConduit $ runRequests paramTree reqs requestCount
-        .| runArvyLocal paramWeights paramTree states algorithm
-        .| evaluation env
+  trace "Running arvy.."
+  runRandomSeed seed $ runConduit $
+    runRequests envTree reqs requestCount
+    .| runArvyLocal envWeights envTree states algorithmGet
+    .| evaluation env
