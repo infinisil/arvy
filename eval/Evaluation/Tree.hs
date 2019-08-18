@@ -12,6 +12,7 @@ import Prelude
 import Evaluation.Types
 import Utils
 import Control.Monad
+import Control.DeepSeq
 
 totalTreeWeight :: Env -> IO Double
 totalTreeWeight Env { envWeights = weights, envTree = tree } = sumMapAssocs (weights !) tree
@@ -36,11 +37,11 @@ shortestTreePaths Env { envNodeCount = n, envWeights = weights, envTree = tree }
 totalPairWeight :: Env -> IO Double
 totalPairWeight env = do
   tw <- shortestTreePaths env
-  return $ sum (elems tw) / 2
+  return $! sum (elems tw) / 2
 
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretchDiameter :: Env -> IO (Double, Double)
-avgTreeStretchDiameter Env { envNodeCount = n, envWeights = weights, envTree = tree' } = go <$> freeze tree' where
+avgTreeStretchDiameter Env { envNodeCount = n, envWeights = weights, envTree = tree' } = go <$!!> freeze tree' where
 
   go :: RootedTree -> (Double, Double)
   go tree = (sum summed / fromIntegral (n * (n - 1)), maximum maxed) where

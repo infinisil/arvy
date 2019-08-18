@@ -11,7 +11,6 @@ import Parameters.Weights
 import Parameters.Algorithm
 import Utils
 import Cache
-import Evaluation
 
 import Polysemy
 import Polysemy.RandomFu
@@ -19,8 +18,8 @@ import GHC.Word
 import Data.Array.IO
 import Polysemy.Trace
 import Conduit
-import Graphics.Rendering.Chart
-import Data.List
+import Evaluation.Types
+import Evaluation.Request
 
 
 data Parameters r = Parameters
@@ -38,30 +37,6 @@ instance Show (Parameters r) where
     "\tRequest count: " ++ show requestCount ++ "\n" ++
     "\tWeights: " ++ show weights ++ "\n" ++
     "\tRequests: " ++ show requests ++ "\n"
-
-paramFile :: Parameters r -> String -> FilePath
-paramFile params metric = "weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params) ++ "/metric:" ++ metric
-
-
-
-runEvals
-  :: forall r
-   . Members '[Lift IO, Trace] r
-  => Parameters (RandomFu ': r)
-  -> [AlgorithmParameter (RandomFu ': r)]
-  -> [Eval (Sem (RandomFu ': r))]
-  -> Sem r [Layout Double Double]
-runEvals params algs evals = do
-  series <- transpose <$> mapM runit algs
-  return $ zipWith toLayout (map evalPlotDefaults evals) series
-  where
-  runit :: AlgorithmParameter (RandomFu ': r) -> Sem r [Series]
-  runit alg = runParams params alg (evalsConduit evals)
-
-  toLayout :: PlotDefaults -> [Series] -> Layout Double Double
-  toLayout PlotDefaults { .. } series = plotDefaultLayout { _layout_plots = zipWith mkPlot algs series }
-    where mkPlot alg serie = toPlot (plotDefaultPlot alg) { _plot_lines_values = [serie] }
-
 
 -- | Generate the final parameter values, caching the weights during that
 genParams :: forall r s . Members '[Trace, Lift IO] r => Parameters (RandomFu ': r) -> InitialTreeParameter s (RandomFu ': r) -> Sem r (Env, IOArray Node s)
@@ -89,10 +64,11 @@ runParams params@Parameters
   , requestCount
   , requests = RequestsParameter { requestsGet }
   }
-  AlgorithmParameter { algorithmGet, algorithmInitialTree }
+  alg@AlgorithmParameter { algorithmGet, algorithmInitialTree }
   evaluation = do
 
   trace $ show params
+  trace $ show alg
 
   (env@Env { .. }, states) <- genParams params algorithmInitialTree
 
@@ -102,4 +78,5 @@ runParams params@Parameters
   runRandomSeed seed $ runConduit $
     runRequests envTree reqs requestCount
     .| runArvyLocal envWeights envTree states algorithmGet
+    .| traceRequests
     .| evaluation env

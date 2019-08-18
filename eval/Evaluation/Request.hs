@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE BangPatterns  #-}
+{-# LANGUAGE DeriveFunctor #-}
 module Evaluation.Request where
 
 import Arvy.Local
@@ -11,6 +12,10 @@ import Control.Category
 import Conduit
 import qualified Data.Conduit.Combinators as C
 import Evaluation.Types
+import Polysemy
+import Polysemy.Trace
+import Data.Time
+import Control.Monad
 
 data Request a = Request
   { requestFrom :: Int
@@ -30,10 +35,29 @@ collectRequests f = go 0 mempty where
     Just _ -> go requestFrom as
     Nothing -> return ()
 
+traceRequests :: forall r . Members '[Lift IO, Trace] r => ConduitT ArvyEvent ArvyEvent (Sem r) ()
+traceRequests = do
+  time <- lift $ sendM getCurrentTime
+  go 0 time where
+  go :: Int -> UTCTime -> ConduitT ArvyEvent ArvyEvent (Sem r) ()
+  go k prev = await >>= \case
+    Nothing -> lift $ trace "Done"
+    Just event -> do
+      yield event
+      case event of
+        RequestMade _ -> do
+          let k' = k + 1
+          time <- lift $ sendM getCurrentTime
+          when (time `diffUTCTime` prev > 0.1) $
+            lift $ trace $ "[" ++ show k' ++ "]"
+          go k' time
+        _ -> go k prev
+
+
 hopCount :: (Num n, Monad m) => ConduitT ArvyEvent n m ()
 hopCount = collectRequests (\_ -> Sum 1) .| C.map (getSum . path)
 
-ratio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
-ratio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
+requestRatio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
+requestRatio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
   .| C.filter (\(Request a b _) -> a /= b) -- Only look at requests where start node != end node
   .| C.map (\(Request a b (Sum path)) -> path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length
