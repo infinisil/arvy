@@ -23,7 +23,6 @@ import Arvy.Local
 import Polysemy
 import Data.Functor
 import Data.Default.Class
-import Graphics.Rendering.Chart
 import Graphics.Rendering.Chart.Easy
 import Data.List
 import Parameters
@@ -33,8 +32,6 @@ import Polysemy.RandomFu
 import Polysemy.Trace
 import System.Directory
 import System.FilePath
-import Graphics.Rendering.Chart.Axis.Floating
-import Control.Lens
 
 type Series = [(Double, Double)]
 
@@ -55,17 +52,22 @@ evalsConduit evals env = sequenceConduits $ fmap (\eval -> evalFun eval env .| C
 runEvals
   :: forall r
    . Members '[Lift IO, Trace] r
-  => Parameters (RandomFu ': r)
+  => String
+  -> Parameters (RandomFu ': r)
   -> [AlgorithmParameter (RandomFu ': r)]
   -> [Eval (Sem (RandomFu ': r))]
   -> Sem r ()
-runEvals params algs evals = do
+runEvals key params@Parameters { .. } algs evals = do
   series <- transpose <$> mapM runit algs
-  let layouts@(l:ls) = zipWith toLayout (map evalPlotDefaults evals) series
-      stacked = def { _slayouts_layouts = map StackedLayout
-                      (l { _layout_legend = Nothing } : ls) }
-      path = "evals/weights:" ++ weightsId (weights params)
-        ++ "/requests:" ++ requestsId (requests params)
+  let layouts = zipWith toLayout (map evalPlotDefaults evals) series
+      layouts' = layouts
+        & ix 0.layout_title .~ paramDescr params
+        & _init.traverse.layout_legend .~ Nothing
+      stacked = def
+        & slayouts_layouts .~ map StackedLayout layouts'
+        & slayouts_compress_legend .~ False
+      path = "evals/" ++ key ++ "/" ++ weightsId weights
+        ++ "-" ++ requestsId requests
         ++ ".png"
       width = 2000
       height = width `div` 2 * length layouts
@@ -79,7 +81,7 @@ runEvals params algs evals = do
 
     lineColors :: [AlphaColour Double] = opaque <$>
       -- TODO: Automatically select colors, e.g. using palette library
-      [purple, red, green, orange, pink, error "Not enough different colors defined"]
+      [purple, red, green, orange, pink, blue, error "Not enough different colors defined"]
 
     axisStyle :: AxisStyle = def
       & axis_label_style.font_size .~ 20
@@ -87,7 +89,7 @@ runEvals params algs evals = do
     toLayout :: PlotDefaults -> [Series] -> Layout Double Double
     toLayout PlotDefaults { .. } series = plotDefaultLayout
       & layout_plots .~ zipWith3 mkPlot algs lineColors series
-      & layout_title_style.font_size .~ 30
+      & layout_title_style.font_size .~ 50
       & layout_title_style.font_weight .~ FontWeightNormal
       & layout_x_axis.laxis_generate .~ autoScaledLogAxis (def & loga_labelf .~ map (show . floor))
       & layout_x_axis.laxis_title .~ "Requests"
@@ -96,6 +98,7 @@ runEvals params algs evals = do
       & layout_y_axis.laxis_title_style.font_size .~ 40
       & layout_y_axis.laxis_style .~ axisStyle
       & layout_legend._Just.legend_label_style.font_size .~ 30
+      & layout_margin .~ 40
 
       where
 
@@ -136,7 +139,25 @@ ratio = Eval
     , plotDefaultPlot = def
     }
   , evalFun = \env -> requestRatio env
+      .| movingAverage True 150
       .| enumerate
       .| logFilter env 100
       .| C.map (\(i, rat) -> (fromIntegral i, rat))
+  }
+
+treeWeight :: Member (Lift IO) r => Eval (Sem r)
+treeWeight = Eval
+  { evalPlotDefaults = PlotDefaults
+    { plotDefaultLayout = def
+      { _layout_y_axis = def
+        { _laxis_title = "Tree weight"
+        }
+      }
+    , plotDefaultPlot = def
+    }
+  , evalFun = \env -> collectRequests (const ())
+      .| enumerate
+      .| logFilter env 100
+      .| asConduit totalTreeWeight env
+      .| C.map (\((i, _), rat) -> (fromIntegral i, rat))
   }

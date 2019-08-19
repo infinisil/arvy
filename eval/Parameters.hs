@@ -30,6 +30,9 @@ data Parameters r = Parameters
   , requests     :: RequestsParameter r
   } deriving (Eq, Ord)
 
+paramDescr :: Parameters r -> String
+paramDescr Parameters { .. } = "weights: " ++ weightsId weights ++ ", node count: " ++ show nodeCount ++ ", requests: " ++ requestsId requests
+
 instance Show (Parameters r) where
   show Parameters { .. } = "Parameters:\n" ++
     "\tRandom seed: " ++ show randomSeed ++ "\n" ++
