@@ -15,7 +15,6 @@ import Evaluation.Types
 import Polysemy
 import Polysemy.Trace
 import Data.Time
-import Control.Monad
 
 data Request a = Request
   { requestFrom :: Int
@@ -42,16 +41,20 @@ traceRequests = do
   go :: Int -> UTCTime -> ConduitT ArvyEvent ArvyEvent (Sem r) ()
   go k prev = await >>= \case
     Nothing -> lift $ trace "Done"
+    Just event@(RequestMade _) -> do
+      let k' = k + 1
+      time <- lift $ sendM getCurrentTime
+      if time `diffUTCTime` prev > 0.1
+        then do
+          lift $ trace $ "[" ++ show k' ++ "]"
+          yield event
+          go k' time
+        else do
+          yield event
+          go k' prev
     Just event -> do
       yield event
-      case event of
-        RequestMade _ -> do
-          let k' = k + 1
-          time <- lift $ sendM getCurrentTime
-          when (time `diffUTCTime` prev > 0.1) $
-            lift $ trace $ "[" ++ show k' ++ "]"
-          go k' time
-        _ -> go k prev
+      go k prev
 
 
 hopCount :: (Num n, Monad m) => ConduitT ArvyEvent n m ()
