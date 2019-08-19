@@ -40,7 +40,7 @@ instance Show (Parameters r) where
 
 -- | Generate the final parameter values, caching the weights during that
 genParams :: forall r s . Members '[Trace, Lift IO] r => Parameters (RandomFu ': r) -> InitialTreeParameter s (RandomFu ': r) -> Sem r (Env, IOArray Node s)
-genParams Parameters { randomSeed = seed, nodeCount, weights = WeightsParameter { weightsId, weightsGet } } InitialTreeParameter { initialTreeGet } = do
+genParams Parameters { randomSeed = seed, nodeCount, requestCount, weights = WeightsParameter { weightsId, weightsGet } } InitialTreeParameter { initialTreeGet } = do
   trace "Generating weights.."
   !weights <- cache (CacheKey ("weights-" ++ weightsId ++ "-" ++ show nodeCount ++ "-" ++ show seed)) (runRandomSeed seed $ weightsGet nodeCount)
 
@@ -49,7 +49,7 @@ genParams Parameters { randomSeed = seed, nodeCount, weights = WeightsParameter 
   mutableTree <- sendM (thaw tree)
   mutableStates <- sendM (thaw states)
 
-  return (Env nodeCount weights mutableTree, mutableStates)
+  return (Env nodeCount requestCount weights mutableTree, mutableStates)
 
 -- | Run parameters on an algorithm while doing an evaluation on the resulting events, returning the evaluations result
 runParams

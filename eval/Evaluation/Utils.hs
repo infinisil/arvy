@@ -1,7 +1,7 @@
 module Evaluation.Utils where
 
 import Data.Functor
-import Prelude hiding (id, (.))
+import Prelude
 import Control.Monad
 import qualified Data.Sequence as S
 import Data.Sequence (Seq, (|>))
@@ -9,6 +9,8 @@ import Conduit
 import Polysemy
 import qualified Data.Conduit.Combinators as C
 import Evaluation.Types
+import qualified Data.NonNull as NN
+import Data.List
 
 -- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 meanStddev :: forall n m . Monad m => Floating n => ConduitT n (n, n) m ()
@@ -60,6 +62,25 @@ decayingFilter r = go 0 0 (r - 1) where
         (0, 0) -> go (n + 1) (2 ^ (n + 1) - 1) r
         (0, _) -> go n (2 ^ n - 1) (d - 1)
         _ -> go n (p - 1) d
+
+logFilter :: forall a m . Monad m => Env -> Int -> ConduitT a a m ()
+logFilter Env { envRequestCount } count = go (NN.impureNonNull indices) 1 where
+
+  lc :: Double = log (fromIntegral envRequestCount)
+  indices = map head $ group $ map (floor . exp) [0.0, lc / (fromIntegral count - 1) .. lc]
+
+  go :: NN.NonNull [Int] -> Int -> ConduitT a a m ()
+  go indcs k = await >>= \case
+    Nothing -> return ()
+    Just a -> do
+      let (i, rest) = NN.nuncons indcs
+      if i == k then do
+        yield a
+        case rest of
+          Nothing -> awaitForever yield
+          Just is -> go is (k + 1)
+      else go indcs (k + 1)
+
 
 movingAverage :: forall n m . (Monad m, Fractional n) => Bool -> Int -> ConduitT n n m ()
 movingAverage initial window = await >>= \case
