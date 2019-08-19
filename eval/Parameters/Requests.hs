@@ -18,11 +18,13 @@ import Data.Ord
 import Data.List
 import Data.Random.Distribution.Uniform
 import Data.Random
+import Evaluation.Types
+import Data.Array.MArray
 
 data RequestsParameter r = RequestsParameter
   { requestsId :: String
   , requestsDescription :: String
-  , requestsGet  :: Int -> GraphWeights -> Sem r (RootedTree -> Sem r Int)
+  , requestsGet  :: Env -> Sem r (Sem r Int)
   }
 
 instance Eq (RequestsParameter r) where
@@ -34,12 +36,13 @@ instance Ord (RequestsParameter r) where
 instance Show (RequestsParameter r) where
   show RequestsParameter { requestsDescription = desc } = desc
 
-farthest :: RequestsParameter r
+farthest :: Member (Lift IO) r => RequestsParameter r
 farthest = RequestsParameter
   { requestsId = "farthest"
   , requestsDescription = "Farthest"
-  , requestsGet = \_ weights -> return $ \tree ->
-      return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
+  , requestsGet = \Env { envWeights = weights, envTree = tree' } -> do
+      tree <- sendM $ freeze tree'
+      return $ return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
   } where
   -- | Computes the distance from all nodes to the root in /O(n)/
   lengthsToRoot :: GraphWeights -> RootedTree -> Array Int Double
@@ -54,10 +57,10 @@ random :: Member RandomFu r => RequestsParameter r
 random = RequestsParameter
   { requestsId = "random"
   , requestsDescription = "Uniformly random requests"
-  , requestsGet = get
+  , requestsGet = return . get
   } where
-  get :: Member RandomFu r => Int -> GraphWeights -> Sem r (RootedTree -> Sem r Int)
-  get n _ = return $ \_ -> sampleRVar (integralUniform 0 (n - 1))
+  get :: Member RandomFu r => Env -> Sem r Int
+  get Env { envNodeCount = n } = sampleRVar (integralUniform 0 (n - 1))
 
 
 lorenz :: Distribution Lorenz a => a -> RVar a
@@ -76,10 +79,10 @@ pareto :: forall r . Member RandomFu r => RequestsParameter r
 pareto = RequestsParameter
   { requestsId = "pareto"
   , requestsDescription = "80-20 Pareto distribution (alpha = log 5 / log 4)"
-  , requestsGet = \n _ -> do
+  , requestsGet = \Env { envNodeCount = n } -> do
       -- Generate a random node order such that in graphs whose node indices indicate the graph structure this distribution is truly random
       order <- listArray @UArray (0, n - 1) <$> sampleRVar (shuffle [0 .. n - 1])
-      return $ \_ -> do
+      return $ do
         v <- sampleRVar (lorenz a)
         return $ order ! floor (v * fromIntegral n)
   } where
@@ -91,7 +94,8 @@ interactive :: Member (Lift IO) r => RequestsParameter r
 interactive = RequestsParameter
   { requestsId = "interactive"
   , requestsDescription = "Interactive"
-  , requestsGet = \_ _ -> return $ \tree -> do
+  , requestsGet = \Env { envTree = tree' } -> return $ do
+      tree <- sendM $ freeze tree'
       -- TODO: Use haskeline, add haskeline effect to polysemy
       sendM $ putStrLn $ T.drawTree $ show <$> treeStructure tree
       read <$> sendM getLine

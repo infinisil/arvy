@@ -32,6 +32,11 @@ import Polysemy.RandomFu
 import Polysemy.Trace
 import System.Directory
 import System.FilePath
+import qualified Polysemy.Async as PA
+import Control.Monad
+import Data.Maybe
+import Control.Concurrent.Async
+import Control.DeepSeq
 
 type Series = [(Double, Double)]
 
@@ -51,14 +56,15 @@ evalsConduit evals env = sequenceConduits $ fmap (\eval -> evalFun eval env .| C
 
 runEvals
   :: forall r
-   . Members '[Lift IO, Trace] r
+   . Members '[Lift IO, Trace, PA.Async] r
   => String
   -> Parameters (RandomFu ': r)
   -> [AlgorithmParameter (RandomFu ': r)]
   -> [Eval (Sem (RandomFu ': r))]
   -> Sem r ()
 runEvals key params@Parameters { .. } algs evals = do
-  series <- transpose <$> mapM runit algs
+  asyncs <- mapM runit algs
+  series <- transpose <$> forM asyncs PA.await
   let layouts = zipWith toLayout (map evalPlotDefaults evals) series
       layouts' = layouts
         & ix 0.layout_title .~ paramDescr params
@@ -76,8 +82,8 @@ runEvals key params@Parameters { .. } algs evals = do
   liftIO $ createDirectoryIfMissing True (takeDirectory path)
   void $ sendM $ renderableToFile (FileOptions (width, height) PNG) path (toRenderable stacked)
   where
-    runit :: AlgorithmParameter (RandomFu ': r) -> Sem r [Series]
-    runit alg = runParams params alg (evalsConduit evals)
+    runit :: AlgorithmParameter (RandomFu ': r) -> Sem r (Async [Series])
+    runit alg = fmap fromJust <$> runParams params alg (evalsConduit evals)
 
     lineColors :: [AlphaColour Double] = opaque <$>
       -- TODO: Automatically select colors, e.g. using palette library

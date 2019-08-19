@@ -44,7 +44,7 @@ traceRequests = do
     Just event@(RequestMade _) -> do
       let k' = k + 1
       time <- lift $ sendM getCurrentTime
-      if time `diffUTCTime` prev > 0.1
+      if time `diffUTCTime` prev > 1
         then do
           lift $ trace $ "[" ++ show k' ++ "]"
           yield event

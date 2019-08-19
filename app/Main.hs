@@ -16,9 +16,13 @@ import Prelude
 import System.Directory
 import System.FilePath
 import Conduit
+import qualified Polysemy.Async as PA
 
 main :: IO ()
-main = runM $ runTraceIO converges
+main = runM
+  . runTraceIO
+  .@ PA.runAsyncInIO
+  $ genArrow
 
 createHandle :: FilePath -> IO Handle
 createHandle path = do
@@ -26,7 +30,33 @@ createHandle path = do
   liftIO $ putStrLn $ "Opening handle to " ++ path
   openFile path WriteMode
 
-converges :: Members '[Lift IO, Trace] r => Sem r ()
+genArrow :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
+genArrow = forM_ [ Parameters
+    { randomSeed = 0
+    , nodeCount = 500
+    , requestCount = 100000
+    , weights = w
+    , requests = r
+    }
+  | w <-
+    [ Weights.erdosRenyi (Weights.ErdosProbEpsilon 0)
+    , Weights.unitEuclidian 2
+    , Weights.unitEuclidian 3
+    ]
+  , r <-
+    [ Requests.random
+    ]
+  ] $ \par -> runEvals "genArrow" par
+    [ Alg.arrow Tree.random
+    , Alg.arrow Tree.random
+    , Alg.arrow Tree.random
+    , Alg.arrow Tree.random
+    , Alg.arrow Tree.random
+    , Alg.arrow Tree.random
+    ]
+    [ stretch, ratio, treeWeight ]
+
+converges :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
 converges = forM_ [ Parameters
     { randomSeed = 0
     , nodeCount = 100
@@ -51,7 +81,7 @@ converges = forM_ [ Parameters
     [ ratio ]
 
 
-testing :: Members '[Lift IO, Trace] r => Sem r ()
+testing :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
 testing = runEvals "testing " params algs evals
   where
     params = Parameters

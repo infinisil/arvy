@@ -64,6 +64,7 @@ let
     nativeBuildInputs = [
       pkgs.haskellPackages.cabal-install
       pkgs.haskellPackages.ghcid
+      pkgs.haskellPackages.ghc-events
       pkgs.gnuplot
       pkgs.ghostscript
     ];

@@ -27,19 +27,16 @@ type RootedTree = UArray Node Node
 
 {-# INLINABLE runRequests #-}
 runRequests
-  :: forall m r arr
-  . ( Member (Lift m) r
-    , MArray arr Node m )
-  => arr Node Node
-  -> (RootedTree -> Sem r Int)
+  :: forall m
+   . Monad m
+  => m Int
   -> Int
-  -> ConduitT () Node (Sem r) ()
-runRequests tree getRequest requestCount = go requestCount where
-  go :: Int -> ConduitT () Node (Sem r) ()
+  -> ConduitT () Node m ()
+runRequests getRequest requestCount = go requestCount where
+  go :: Int -> ConduitT () Node m ()
   go 0 = return ()
   go k = do
-    immutableTree <- lift $ sendM $ freeze tree
-    req <- lift $ getRequest immutableTree
+    req <- lift getRequest
     yield req
     go (k - 1)
 
