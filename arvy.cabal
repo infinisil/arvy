@@ -89,6 +89,7 @@ library arvy-eval
                      , data-default-class
                      , Chart-cairo
                      , mono-traversable
+                     , lens
 
 executable arvy
   import:              defaults

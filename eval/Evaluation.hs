@@ -33,6 +33,8 @@ import Polysemy.RandomFu
 import Polysemy.Trace
 import System.Directory
 import System.FilePath
+import Graphics.Rendering.Chart.Axis.Floating
+import Control.Lens
 
 type Series = [(Double, Double)]
 
@@ -59,13 +61,15 @@ runEvals
   -> Sem r ()
 runEvals params algs evals = do
   series <- transpose <$> mapM runit algs
-  let layouts = zipWith toLayout (map evalPlotDefaults evals) series
-      stacked = def { _slayouts_layouts = map StackedLayout layouts }
-      path = "weights:" ++ weightsId (weights params)
+  let layouts@(l:ls) = zipWith toLayout (map evalPlotDefaults evals) series
+      stacked = def { _slayouts_layouts = map StackedLayout
+                      (l { _layout_legend = Nothing } : ls) }
+      path = "evals/weights:" ++ weightsId (weights params)
         ++ "/requests:" ++ requestsId (requests params)
         ++ ".png"
-      width = 1000
+      width = 2000
       height = width `div` 2 * length layouts
+
 
   liftIO $ createDirectoryIfMissing True (takeDirectory path)
   void $ sendM $ renderableToFile (FileOptions (width, height) PNG) path (toRenderable stacked)
@@ -77,40 +81,45 @@ runEvals params algs evals = do
       -- TODO: Automatically select colors, e.g. using palette library
       [purple, red, green, orange, pink, error "Not enough different colors defined"]
 
+    axisStyle :: AxisStyle = def
+      & axis_label_style.font_size .~ 20
+
     toLayout :: PlotDefaults -> [Series] -> Layout Double Double
-    toLayout PlotDefaults { .. } series = plotDefaultLayout { _layout_plots = zipWith3 mkPlot algs lineColors series }
-      where mkPlot alg color serie = toPlot plotDefaultPlot
-              { _plot_lines_title = algorithmId alg
-              , _plot_lines_values = [serie]
-              , _plot_lines_style = (_plot_lines_style plotDefaultPlot)
-                { _line_color = color
-                , _line_width = 3
-                }
-              }
+    toLayout PlotDefaults { .. } series = plotDefaultLayout
+      & layout_plots .~ zipWith3 mkPlot algs lineColors series
+      & layout_title_style.font_size .~ 30
+      & layout_title_style.font_weight .~ FontWeightNormal
+      & layout_x_axis.laxis_generate .~ autoScaledLogAxis (def & loga_labelf .~ map (show . floor))
+      & layout_x_axis.laxis_title .~ "Requests"
+      & layout_x_axis.laxis_title_style.font_size .~ 30
+      & layout_x_axis.laxis_style .~ axisStyle
+      & layout_y_axis.laxis_title_style.font_size .~ 40
+      & layout_y_axis.laxis_style .~ axisStyle
+      & layout_legend._Just.legend_label_style.font_size .~ 30
 
-paramFile :: Parameters r -> FilePath
-paramFile params = "evals/weights:" ++ weightsId (weights params) ++ "/requests:" ++ requestsId (requests params)
+      where
 
-renderLayouts :: Members '[Trace, Lift IO] r => [Layout Double Double] -> Sem r ()
-renderLayouts layouts = do
-  let stacked = def
-        { _slayouts_layouts = map StackedLayout layouts
-        , _slayouts_compress_legend = False
-        }
-  _ <- sendM $ renderableToFile (FileOptions (1000, 1000) PNG) "plot.png" (toRenderable stacked)
-  return ()
+        mkPlot alg color serie = toPlot $ plotDefaultPlot
+          & plot_lines_title .~ algorithmId alg
+          & plot_lines_values .~ [serie]
+          & plot_lines_style.line_color .~ color
+          & plot_lines_style.line_width .~ 3
+
+
 
 stretch :: Member (Lift IO) r => Eval (Sem r)
 stretch = Eval
   { evalPlotDefaults = PlotDefaults
     { plotDefaultLayout = def
-      { _layout_title = "Average tree stretch"
+      { _layout_y_axis = def
+        { _laxis_title = "Average tree stretch"
+        }
       }
     , plotDefaultPlot = def
     }
   , evalFun = \env -> collectRequests (const ())
       .| enumerate
-      .| decayingFilter 1
+      .| logFilter env 100
       .| asConduit avgTreeStretchDiameter env
       .| C.map (\((i, _), (str, _)) -> (fromIntegral i, str))
   }
@@ -120,11 +129,14 @@ ratio :: Member (Lift IO) r => Eval (Sem r)
 ratio = Eval
   { evalPlotDefaults = PlotDefaults
     { plotDefaultLayout = def
+      { _layout_y_axis = def
+        { _laxis_title = "Request ratio"
+        }
+      }
     , plotDefaultPlot = def
     }
   , evalFun = \env -> requestRatio env
-      .| movingAverage True 100
       .| enumerate
-      .| decayingFilter 1
+      .| logFilter env 100
       .| C.map (\(i, rat) -> (fromIntegral i, rat))
   }
