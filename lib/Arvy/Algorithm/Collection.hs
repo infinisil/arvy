@@ -1,15 +1,22 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE StandaloneDeriving #-}
 module Arvy.Algorithm.Collection
-  ( arrow, ivy, half, constantRing, inbetween, random, genArrow, inbetweenWeighted
+  ( arrow
+  , ivy
+  , half
+  , constantRing
+  , inbetween
+  , random
+  , genArrow
+  , inbetweenWeighted
+  , utilityFun
   , RingNodeState(..)
   ) where
 
 import Arvy.Algorithm
 import Data.Sequences
-import Data.NonNull
+import Data.NonNull hiding (minimumBy)
 import Data.Ratio
 import qualified Data.Sequence as S
 import Data.Sequence (Seq, (|>), ViewL(..))
@@ -20,9 +27,10 @@ import Data.MonoTraversable
 import Data.Ord (comparing)
 import Prelude hiding (head)
 import Data.Bifunctor
+import Data.List (minimumBy)
 
 genArrow :: forall s r . Show s => Arvy s r
-genArrow = simpleArvy \xs -> do
+genArrow = simpleArvy $ \xs -> do
   weights <- traverse (\i -> (i,) <$> weightTo i) (otoList xs)
   return $ fst $ minimumByEx (comparing snd) weights
 
@@ -74,7 +82,7 @@ inbetween ratio = arvy @InbetweenMessage @s ArvyInst
   , arvyReceive = \(InbetweenMessage _ f _) _ -> return f
   }
 
-data WeightedInbetweenMessage i = WeightedInbetweenMessage (NonNull [(i, Double)]) deriving Show
+newtype WeightedInbetweenMessage i = WeightedInbetweenMessage (NonNull [(i, Double)]) deriving Show
 
 -- | @'inbetweenWeighted' ratio@ Chooses the node that lies at @ratio@ inbetween the root node and the last node by weight,
 -- where 0.0 means always choose the root node, 1.0 means always choose the last node
@@ -165,3 +173,27 @@ constantRing = arvy @RingMessage @RingNodeState ArvyInst
         return root
       AfterCrossing { sender } -> return sender
   }
+
+newtype UtilityFunMessage i = UtilityFunMessage (NonNull [(Int, i)]) deriving Show
+
+utilityFun :: forall s r a . (Show s, Ord a) => (Int -> Double -> a) -> Arvy s r
+utilityFun f = arvy @UtilityFunMessage ArvyInst
+  { arvyInitiate = \i _ -> return $ UtilityFunMessage (opoint (0, i))
+  , arvyTransmit = \(UtilityFunMessage xs) i _ -> do
+      best <- select xs
+      let newElem = (fst (head xs) + 1, i)
+      return (best, UtilityFunMessage $ newElem <| mapNonNull (second forward) xs)
+  , arvyReceive = \(UtilityFunMessage xs) _ -> select xs
+  } where
+  select
+    :: forall r' i
+     . ( NodeIndex i
+       , Member (LocalWeights (Succ i)) r' )
+    => NonNull [(Int, Pred i)]
+    -> Sem r' (Pred i)
+  select xs = do
+    let (indices, ids) = unzip (otoList xs)
+    weights <- traverse weightTo ids
+    let values = zipWith3 (\p d w -> (p, f d w)) ids indices weights
+        best = fst $ minimumBy (comparing snd) values
+    return best

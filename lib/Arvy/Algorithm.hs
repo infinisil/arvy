@@ -62,6 +62,7 @@ class ( Show (Pred i), Show i, Show (Succ i)
       , Forwardable (Pred i) i -- Can forward from predecessor index to current index
       , Forwardable (Pred i) (Succ i)
       , Forwardable i (Succ i) -- Can forward from current index to successor index
+      , Forwardable i i
       , Succ (Pred i) ~ i -- successor of the predecessor is a noop
       , Pred (Succ i) ~ i -- predecessor of the successor is a noop
       ) => NodeIndex i where

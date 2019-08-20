@@ -36,7 +36,6 @@ import qualified Polysemy.Async as PA
 import Control.Monad
 import Data.Maybe
 import Control.Concurrent.Async
-import Control.DeepSeq
 
 type Series = [(Double, Double)]
 

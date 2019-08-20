@@ -13,22 +13,51 @@ import Polysemy.Trace
 import Control.Monad
 import System.IO
 import Prelude
-import System.Directory
-import System.FilePath
-import Conduit
 import qualified Polysemy.Async as PA
 
 main :: IO ()
 main = runM
   . runTraceIO
   .@ PA.runAsyncInIO
-  $ genArrow
+  $ utilFuns
 
-createHandle :: FilePath -> IO Handle
-createHandle path = do
-  createDirectoryIfMissing True (takeDirectory path)
-  liftIO $ putStrLn $ "Opening handle to " ++ path
-  openFile path WriteMode
+{-# INLINE utilFuns #-}
+utilFuns :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
+utilFuns = forM_ [ Parameters
+    { randomSeed = 0
+    , nodeCount = 100
+    , requestCount = 100000
+    , weights = w
+    , requests = r
+    }
+  | w <-
+    [ Weights.unitEuclidian 2
+    ]
+  , r <-
+    [ Requests.random
+    ]
+  ] $ \par -> runEvals "utilFuns" par
+    (baseAlgs ++
+     [ Alg.utilityFun desc fun Tree.random
+     | (desc, fun) <-
+       [ ("weight", \_ w -> w)
+       , alpha 0.5 0.1
+       , alpha 0.25 0.1
+       , alpha 0.125 0.1
+       , alpha 0.5 0.05
+       , alpha 0.25 0.05
+       , alpha 0.125 0.05
+       ]
+     ])
+    [ ratio, treeWeight ]
+  where
+    baseAlgs = [ Alg.arrow Tree.mst
+               , Alg.arrow Tree.shortPairs
+               ]
+    {-# INLINE alpha #-}
+    alpha :: Double -> Double -> (String, Int -> Double -> Double)
+    alpha a m = ( "alpha" ++ show a ++ "," ++ show m
+                , \i w -> w * (1 + m * (1 - exp (a * fromIntegral i))))
 
 genArrow :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
 genArrow = forM_ [ Parameters

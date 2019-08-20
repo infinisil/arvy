@@ -39,12 +39,13 @@ totalPairWeight env = do
   tw <- shortestTreePaths env
   return $! sum (elems tw) / 2
 
+-- TODO: This function makes productivity really bad because it probably generates a whole lot of data
 -- | Calculates the average tree stretch given the complete graph weights and a tree. The stretch for a pair of nodes (u, v) is the ratio of the shortest path in the tree over the shortest path in the complete graph (which is assumed to be euclidian, so the shortest path is always directly the edge (u, v)). The average tree stretch is the average stretch over all node pairs (u, v) with u != v. Complexity /O(n^2)/
 avgTreeStretchDiameter :: Env -> IO (Double, Double)
 avgTreeStretchDiameter Env { envNodeCount = n, envWeights = weights, envTree = tree' } = do
   -- TODO: Trace adjacency map with successor changes, which should be faster than rebuilding it all the time
   graph <- IntMap.unionsWith IntSet.union . map bidirEdge <$> getAssocs tree'
-  return $ go graph
+  return $!! go graph
   where
     bidirEdge :: (Node, Node) -> IntMap IntSet
     bidirEdge (a, b)

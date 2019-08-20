@@ -50,8 +50,6 @@ genWeights Parameters { randomSeed = seed, nodeCount, weights = WeightsParameter
   !result <- cache (CacheKey ("weights-" ++ weightsId ++ "-" ++ show nodeCount ++ "-" ++ show seed)) (runRandomSeed seed $ weightsGet nodeCount)
   return result
 
-
-
 -- | Generate the final parameter values, caching the weights during that
 genParams :: forall r s . Members '[Trace, Lift IO] r => Parameters (RandomFu ': r) -> GraphWeights -> InitialTreeParameter s (RandomFu ': r) -> Sem r (Env, IOArray Node s)
 genParams Parameters { randomSeed = seed, nodeCount, requestCount } weights InitialTreeParameter { initialTreeGet } = do
