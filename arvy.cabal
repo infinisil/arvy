@@ -90,6 +90,7 @@ library arvy-eval
                      , Chart-cairo
                      , mono-traversable
                      , lens
+                     , palette
 
 executable arvy
   import:              defaults

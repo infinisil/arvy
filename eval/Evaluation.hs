@@ -36,6 +36,7 @@ import qualified Polysemy.Async as PA
 import Control.Monad
 import Data.Maybe
 import Control.Concurrent.Async
+import Data.Colour.Palette.ColorSet
 
 type Series = [(Double, Double)]
 
@@ -67,12 +68,13 @@ runEvals key params@Parameters { .. } algs evals = do
   let layouts = zipWith toLayout (map evalPlotDefaults evals) series
       layouts' = layouts
         & ix 0.layout_title .~ paramDescr params
-        & _init.traverse.layout_legend .~ Nothing
+        -- & _init.traverse.layout_legend .~ Nothing
       stacked = def
         & slayouts_layouts .~ map StackedLayout layouts'
         & slayouts_compress_legend .~ False
       path = "evals/" ++ key ++ "/" ++ weightsId weights
         ++ "-" ++ requestsId requests
+        ++ "-" ++ show nodeCount
         ++ ".png"
       width = 2000
       height = width `div` 2 * length layouts
@@ -84,9 +86,7 @@ runEvals key params@Parameters { .. } algs evals = do
     runit :: AlgorithmParameter (RandomFu ': r) -> Sem r (Async [Series])
     runit alg = fmap fromJust <$> runParams params alg (evalsConduit evals)
 
-    lineColors :: [AlphaColour Double] = opaque <$>
-      -- TODO: Automatically select colors, e.g. using palette library
-      [purple, red, green, orange, pink, blue, error "Not enough different colors defined"]
+    lineColors :: [AlphaColour Double] = opaque <$> infiniteWebColors
 
     axisStyle :: AxisStyle = def
       & axis_label_style.font_size .~ 20
