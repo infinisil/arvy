@@ -51,8 +51,9 @@ genWeights Parameters { randomSeed = seed, nodeCount, weights = WeightsParameter
   return result
 
 -- | Generate the final parameter values, caching the weights during that
-genParams :: forall r s . Members '[Trace, Lift IO] r => Parameters (RandomFu ': r) -> GraphWeights -> InitialTreeParameter s (RandomFu ': r) -> Sem r (Env, IOArray Node s)
-genParams Parameters { randomSeed = seed, nodeCount, requestCount } weights InitialTreeParameter { initialTreeGet } = do
+genParams :: forall r s . Members '[Trace, Lift IO] r => Parameters (RandomFu ': r) -> InitialTreeParameter s (RandomFu ': r) -> Sem r (Env, IOArray Node s)
+genParams params@Parameters { randomSeed = seed, nodeCount, requestCount } InitialTreeParameter { initialTreeGet } = do
+  weights <- genWeights params
 
   trace "Generating initial tree.."
   (tree, states) <- runRandomSeed seed $ initialTreeGet nodeCount weights
@@ -80,10 +81,8 @@ runParams params@Parameters
   trace $ show params
   trace $ show alg
 
-  weights <- genWeights params
-
   PA.async $ do
-    (env@Env { .. }, states) <- genParams params weights algorithmInitialTree
+    (env@Env { .. }, states) <- genParams params algorithmInitialTree
 
     reqs <- runRandomSeed seed $ requestsGet env
 

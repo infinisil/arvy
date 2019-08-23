@@ -12,10 +12,13 @@ import           Control.DeepSeq
 import           Control.Exception
 import           Data.Array.Unboxed
 import qualified Data.Tree          as T
+import           Evaluation
 import           Evaluation.Tree
+import           Parameters
 import qualified Parameters.Tree    as Tree
 import qualified Parameters.Weights as Weights
 import           Polysemy
+import           Polysemy.Trace
 import           Test.Hspec
 import           Utils
 
@@ -77,13 +80,27 @@ main = hspec $ do
 
   describe "Evaluation.Tree.avgTreeStretchDiameter" $ do
     it "works on a 3-node ring tree and graph" $ do
-      let (stretch, diam) = avgTreeStretchDiameter 3 (run $ Weights.weightsGet Weights.ring 3) (fst $ run $ Tree.initialTreeGet Tree.ring 3 undefined)
-      stretch `shouldBeAbout` (1 + 1 / 3)
+      (env, _) <- runM $ runTraceIO $ genParams Parameters
+        { randomSeed = 0
+        , nodeCount = 3
+        , weights = Weights.ring
+        , requests = undefined
+        , requestCount = undefined
+        } Tree.ring
+      (str, diam) <- avgTreeStretchDiameter env
+      str `shouldBeAbout` (1 + 1 / 3)
       diam `shouldBe` 2
 
     it "works on a 5-node ring tree and graph" $ do
-      let (stretch, diam) = avgTreeStretchDiameter 5 (run $ Weights.weightsGet Weights.ring 5) (fst $ run $ Tree.initialTreeGet Tree.ring 5 undefined)
-      stretch `shouldBeAbout` 1.4
+      (env, _) <- runM $ runTraceIO $ genParams Parameters
+        { randomSeed = 0
+        , nodeCount = 5
+        , weights = Weights.ring
+        , requests = undefined
+        , requestCount = undefined
+        } Tree.ring
+      (str, diam) <- avgTreeStretchDiameter env
+      str `shouldBeAbout` 1.4
       diam `shouldBe` 4
 
 shouldSatisfyReturn :: (HasCallStack, Show a, Eq a) => IO a -> (a -> Bool) -> Expectation
