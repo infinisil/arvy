@@ -89,7 +89,7 @@ random tree = AlgorithmParameter
 
 utilityFun :: (Show s, Ord a) => String -> (Int -> Double -> a) -> Tree.InitialTreeParameter s r -> AlgorithmParameter r
 utilityFun desc f tree = AlgorithmParameter
-  { algorithmId = "utilityFun-" ++ desc ++ "-" ++ Tree.initialTreeId tree
+  { algorithmId = "u-" ++ desc
   , algorithmDescription = "Utility function " ++ desc
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.utilityFun f

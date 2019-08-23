@@ -166,3 +166,21 @@ treeWeight = Eval
       .| asConduit totalTreeWeight env
       .| C.map (\((i, _), rat) -> (fromIntegral i, rat))
   }
+
+{-# INLINE requestHops #-}
+requestHops :: Member (Lift IO) r => Eval (Sem r)
+requestHops = Eval
+  { evalPlotDefaults = PlotDefaults
+    { plotDefaultLayout = def
+      { _layout_y_axis = def
+        { _laxis_title = "Request hops"
+        }
+      }
+    , plotDefaultPlot = def
+    }
+  , evalFun = \env -> hopCount @Double
+      .| movingAverage True 100
+      .| enumerate
+      .| logFilter env 100
+      .| C.map (\(i, hops) -> (fromIntegral i, hops))
+  }
