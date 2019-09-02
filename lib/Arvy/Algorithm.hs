@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {- |
@@ -62,12 +63,16 @@ class ( Show (Pred i), Show i, Show (Succ i)
       , Forwardable (Pred i) i -- Can forward from predecessor index to current index
       , Forwardable (Pred i) (Succ i)
       , Forwardable i (Succ i) -- Can forward from current index to successor index
-      , Forwardable i i
       , Succ (Pred i) ~ i -- successor of the predecessor is a noop
       , Pred (Succ i) ~ i -- predecessor of the successor is a noop
       ) => NodeIndex i where
   type Pred i :: *
   type Succ i :: *
+
+instance Forwardable i i where
+  {-# INLINE forward #-}
+  forward = id
+
 
 instance NodeIndex Int where
   type Pred Int = Int
@@ -85,10 +90,6 @@ arvy = Arvy
 class Forwardable ia ib where
   -- | Forward a node index
   forward :: ia -> ib
-
-instance Forwardable Int Int where
-  {-# INLINE forward #-}
-  forward = id
 
 
 -- | The type to use for edge weights
