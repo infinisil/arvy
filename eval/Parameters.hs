@@ -81,10 +81,12 @@ runParams params@Parameters
   trace $ show params
   trace $ show alg
 
-  PA.async $ do
-    (env@Env { .. }, states) <- genParams params algorithmInitialTree
+  (env@Env { .. }, states) <- genParams params algorithmInitialTree
 
-    reqs <- runRandomSeed seed $ requestsGet env
+
+  reqs <- runRandomSeed seed $ requestsGet env
+
+  PA.async $ do
 
     trace "Running arvy.."
     runRandomSeed seed $ runConduit $
