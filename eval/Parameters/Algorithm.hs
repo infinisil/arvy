@@ -6,6 +6,7 @@ import qualified Parameters.Tree           as Tree
 import Data.Ratio
 import Polysemy
 import Polysemy.RandomFu
+import Polysemy.Trace
 
 data AlgorithmParameter r = forall s . AlgorithmParameter
   { algorithmId        :: String
@@ -93,4 +94,12 @@ utilityFun desc f tree = AlgorithmParameter
   , algorithmDescription = "Utility function " ++ desc
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.utilityFun f
+  }
+
+indexMeanScore :: Member Trace r => Arvy.IndexMeanType -> (Int -> Double) -> Tree.InitialTreeParameter (Arvy.IndexMean, Int) r -> AlgorithmParameter r
+indexMeanScore ty af tree = AlgorithmParameter
+  { algorithmId = "indexmean-wip"
+  , algorithmDescription = "Index mean weighted"
+  , algorithmInitialTree = tree
+  , algorithmGet = Arvy.indexMeanScore ty af
   }

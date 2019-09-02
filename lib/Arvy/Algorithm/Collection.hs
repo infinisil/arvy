@@ -12,6 +12,10 @@ module Arvy.Algorithm.Collection
   , inbetweenWeighted
   , utilityFun
   , RingNodeState(..)
+  , IndexMean(..)
+  , indexMeanScore
+  , initialIndexMeanState
+  , IndexMeanType(..)
   ) where
 
 import Arvy.Algorithm
@@ -28,6 +32,7 @@ import Data.Ord (comparing)
 import Prelude hiding (head)
 import Data.Bifunctor
 import Data.List (minimumBy)
+import Polysemy.Trace
 
 genArrow :: forall s r . Show s => Arvy s r
 genArrow = simpleArvy $ \xs -> do
@@ -197,3 +202,78 @@ utilityFun f = arvy @UtilityFunMessage ArvyInst
     let values = zipWith3 (\p d w -> (p, f d w)) ids indices weights
         best = fst $ minimumBy (comparing snd) values
     return best
+
+-- TODO: Special functions for utility functions `w * (1 + m * (1 - e ^ (-a * i)))` and `w * ln (i * a)`
+
+data IndexMean
+  = NoIndices
+  | IndexMean Double Int
+  deriving Show
+
+type IndexMeanState = (IndexMean, Int)
+
+initialIndexMeanState :: IndexMeanState
+initialIndexMeanState = (NoIndices, 0)
+
+logWeight :: Double -> IndexMean -> IndexMean
+logWeight w NoIndices = IndexMean w 1
+logWeight w (IndexMean x n) = IndexMean (adjustedX * adjustedI) (n + 1) where
+  n' = fromIntegral n
+  adjustedX = x ** (n' / (n' + 1))
+  adjustedI = w ** (1 / (n' + 1))
+
+getIndexScore :: IndexMean -> Maybe Double
+getIndexScore NoIndices = Nothing
+getIndexScore (IndexMean x _) = Just x
+
+data IndexMeanType
+  = HopIndexBased
+  | WeightSumBased
+  deriving Show
+
+data IndexMeanMessage i = IndexMeanMessage Double [(i, Maybe Double)] deriving Show
+
+indexMeanScore :: Member Trace r => IndexMeanType -> (Int -> Double) -> Arvy IndexMeanState r
+indexMeanScore ty af = arvy @IndexMeanMessage ArvyInst
+  { arvyInitiate = \i s -> do
+      (indexMean, _) <- get
+      w <- edgePart s
+      return (IndexMeanMessage w (opoint (i, getIndexScore indexMean)))
+  , arvyTransmit = \msg@(IndexMeanMessage w xs) i s -> do
+      best <- select msg
+      w' <- edgePart s
+      indexMean <- gets fst
+      let newMessage = IndexMeanMessage (w + w') ((i, getIndexScore indexMean) : map (first forward) xs)
+      return (best, newMessage)
+  , arvyReceive = \msg _ -> do
+      best <- select msg
+      modify (second (+1))
+      return best
+  } where
+
+  select
+    :: ( NodeIndex i
+       , Member (LocalWeights (Succ i)) r
+       , Member (State IndexMeanState) r )
+    => IndexMeanMessage (Pred i)
+    -> Sem r (Pred i)
+  select (IndexMeanMessage w xs) = do
+    (oldIndexMean, k) <- get
+    let a = af k
+    let newIndexMean = logWeight w oldIndexMean
+    put (newIndexMean, k)
+    scores <- traverse (\(i, iScore) -> do
+                            weight <- weightTo i
+                            return (i, getScore a iScore weight)
+                        ) xs
+    return $ fst $ minimumBy (comparing snd) scores
+
+
+  getScore :: Double -> Maybe Double -> Double -> Double
+  getScore _ Nothing weight = weight
+  getScore a (Just iScore) weight = weight ** a * iScore ** (1 - a)
+
+  edgePart :: Member (LocalWeights i) r => i -> Sem r Double
+  edgePart = case ty of
+    HopIndexBased -> \_ -> return 1
+    WeightSumBased -> weightTo
