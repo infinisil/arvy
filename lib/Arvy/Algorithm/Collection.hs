@@ -95,28 +95,30 @@ newtype WeightedInbetweenMessage i = WeightedInbetweenMessage (NonNull [(i, Doub
 inbetweenWeighted :: forall s r . Show s => Double -> Arvy s r
 inbetweenWeighted ratio = arvy @WeightedInbetweenMessage @s ArvyInst
   { arvyInitiate = \i _ -> return (WeightedInbetweenMessage (opoint (i, 0)))
-  , arvyTransmit = \(WeightedInbetweenMessage ps@(head -> (comingFrom, total))) i _ -> do
-      -- Find the first node that's less than ratio * total away, starting from the most recent node
-      -- Nothing can't happen because desired is always >= 0, and ps will always contain the 0 element at the end
-      let Just (newSucc, _) = find ((<= total * ratio) . snd) ps
+  , arvyTransmit = \msg@(WeightedInbetweenMessage ps@(head -> (comingFrom, total))) i _ -> do
+      newSucc <- select msg
       -- The newTotal is the previous total plus the weight to the node we're coming from
       newTotal <- (total+) <$> weightTo comingFrom
       return (newSucc, WeightedInbetweenMessage ((i, newTotal) <| mapNonNull (first forward) ps))
-  , arvyReceive = \(WeightedInbetweenMessage ps@(head -> (_, total))) _ -> do
-      let Just (newSucc, _) = find ((<= total * ratio) . snd) ps
-      return newSucc
-  }
+  , arvyReceive = \msg _ -> select msg
+  } where
+  select :: ArvySelector WeightedInbetweenMessage s r
+  select (WeightedInbetweenMessage ps@(head -> (_, total))) = return newSucc where
+    -- Find the first node that's less than ratio * total away, starting from the most recent node
+    -- Nothing can't happen because desired is always >= 0, and ps will always contain the 0 element at the end
+    Just (newSucc, _) = find ((<= total * ratio) . snd) ps
 
 
 random :: forall s r . (Member RandomFu r, Show s) => Arvy s r
 random = arvy @Seq @s ArvyInst
   { arvyInitiate = \i _ -> return (S.singleton i)
   , arvyTransmit = \s i _ -> do
-      suc <- sampleRVar (randomSeq s)
+      suc <- select s
       return (suc, fmap forward s |> i)
-  , arvyReceive = \s _ ->
-      sampleRVar (randomSeq s)
-  }
+  , arvyReceive = \s _ -> select s
+  } where
+  select :: ArvySelector Seq s r
+  select s = sampleRVar (randomSeq s)
 
 -- | Selects a random element from a 'Seq' in /O(log n)/
 randomSeq :: Seq a -> RVar a
@@ -184,19 +186,14 @@ newtype UtilityFunMessage i = UtilityFunMessage (NonNull [(Int, i)]) deriving Sh
 utilityFun :: forall s r a . (Show s, Ord a) => (Int -> Double -> a) -> Arvy s r
 utilityFun f = arvy @UtilityFunMessage ArvyInst
   { arvyInitiate = \i _ -> return $ UtilityFunMessage (opoint (0, i))
-  , arvyTransmit = \(UtilityFunMessage xs) i _ -> do
-      best <- select xs
+  , arvyTransmit = \msg@(UtilityFunMessage xs) i _ -> do
+      best <- select msg
       let newElem = (fst (head xs) + 1, i)
       return (best, UtilityFunMessage $ newElem <| mapNonNull (second forward) xs)
-  , arvyReceive = \(UtilityFunMessage xs) _ -> select xs
+  , arvyReceive = \msg _ -> select msg
   } where
-  select
-    :: forall r' i
-     . ( NodeIndex i
-       , Member (LocalWeights (Succ i)) r' )
-    => NonNull [(Int, Pred i)]
-    -> Sem r' (Pred i)
-  select xs = do
+  select :: ArvySelector UtilityFunMessage s r
+  select (UtilityFunMessage xs) = do
     let (indices, ids) = unzip (otoList xs)
     weights <- traverse weightTo ids
     let values = zipWith3 (\p d w -> (p, f d w)) ids indices weights
@@ -233,6 +230,9 @@ data IndexMeanType
 
 data IndexMeanMessage i = IndexMeanMessage Double [(i, Maybe Double)] deriving Show
 
+{- |
+Algorithm that logs indices of request paths at nodes, aggregating them with the geometric mean which then influences which nodes get selected.
+-}
 indexMeanScore :: Member Trace r => IndexMeanType -> (Int -> Double) -> Arvy IndexMeanState r
 indexMeanScore ty af = arvy @IndexMeanMessage ArvyInst
   { arvyInitiate = \i s -> do
@@ -251,12 +251,7 @@ indexMeanScore ty af = arvy @IndexMeanMessage ArvyInst
       return best
   } where
 
-  select
-    :: ( NodeIndex i
-       , Member (LocalWeights (Succ i)) r
-       , Member (State IndexMeanState) r )
-    => IndexMeanMessage (Pred i)
-    -> Sem r (Pred i)
+  select :: ArvySelector IndexMeanMessage IndexMeanState r
   select (IndexMeanMessage w xs) = do
     (oldIndexMean, k) <- get
     let a = af k

@@ -15,6 +15,7 @@ module Arvy.Algorithm
   ( -- General things
     ArvyInst(..)
   , Arvy(..)
+  , ArvySelector
   , arvy
   , NodeIndex(..)
   , Forwardable(..)
@@ -58,6 +59,9 @@ data ArvyInst msg s r = (forall i . NodeIndex i => Show (msg i), Show s) => Arvy
   -- ^ What to do when a message arrives at the node holding the token, what new successor to choose.
   -- @ir@ stands for the node index type you received and need to select, which can be forwarded (with 'forward') to @i@ which is the node index type of the current node and the message to send
   }
+
+-- | A convenience type for a function representing a selection of a node from the received message
+type ArvySelector msg s r = forall i . NodeIndex i => msg (Pred i) -> Sem (LocalWeights (Succ i) ': State s ': r) (Pred i)
 
 class ( Show (Pred i), Show i, Show (Succ i)
       , Forwardable (Pred i) i -- Can forward from predecessor index to current index
