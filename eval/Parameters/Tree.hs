@@ -65,13 +65,16 @@ semiCircles = InitialTreeParameter
         h = n `div` 2
 
 random :: Member RandomFu r => InitialTreeParameter () r
-random = InitialTreeParameter
+random = random' ()
+
+random' :: (Member RandomFu r, Show a) => a -> InitialTreeParameter a r
+random' value = InitialTreeParameter
   { initialTreeId = "random"
   , initialTreeDescription = "Random spanning tree"
   , initialTreeGet = \n _ -> do
       tree <- randomSpanningTree n
       return ( tree
-             , listArray (0, n - 1) (replicate n ()) )
+             , listArray (0, n - 1) (replicate n value) )
   }
 
 -- | Generates a uniform random spanning tree in a complete graph. Complexity /O(n * log(n))/
@@ -95,12 +98,15 @@ randomSpanningTree n = do
         ((e, i):) <$> go (Set.insert e included) (Set.delete e excluded)
 
 shortPairs :: InitialTreeParameter () r
-shortPairs = InitialTreeParameter
+shortPairs = shortPairs' ()
+
+shortPairs' :: Show a => a -> InitialTreeParameter a r
+shortPairs' value = InitialTreeParameter
   { initialTreeId = "shortpairs"
   , initialTreeDescription = "a tree that tries to get a short total distance between all pairs"
   , initialTreeGet = \n w -> do
       return ( shortPairDistances n w 0
-             , listArray (0, n - 1) (replicate n ()) )
+             , listArray (0, n - 1) (replicate n value) )
   }
 
 shortPairDistances :: NodeCount -> GraphWeights -> Node -> RootedTree
@@ -161,12 +167,15 @@ shortPairDistances n weights root = runST $ do
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
 mst :: InitialTreeParameter () r
-mst = InitialTreeParameter
+mst = mst' ()
+
+mst' :: Show a => a -> InitialTreeParameter a r
+mst' value = InitialTreeParameter
   { initialTreeId = "mst"
   , initialTreeDescription = "Minimum spanning tree"
   , initialTreeGet = \n weights ->
       return ( array (0, n - 1) ((0, 0) : fmap swap (mstEdges n weights))
-             , listArray (0, n - 1) (replicate n ()) )
+             , listArray (0, n - 1) (replicate n value) )
   }
 
 type MSTEntry = H.Entry Double Edge
