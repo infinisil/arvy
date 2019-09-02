@@ -62,5 +62,4 @@ hopCount = collectRequests (\_ -> Sum 1) .| C.map (getSum . path)
 
 requestRatio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
 requestRatio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
-  .| C.filter (\(Request a b _) -> a /= b) -- Only look at requests where start node != end node
-  .| C.map (\(Request a b (Sum path)) -> path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length
+  .| C.map (\(Request a b (Sum path)) -> if a == b then 1 else path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length
