@@ -5,6 +5,7 @@ import qualified Parameters.Weights as Weights
 import qualified Parameters.Tree as Tree
 import qualified Parameters.Requests as Requests
 import qualified Parameters.Algorithm as Alg
+import Arvy.Algorithm.Collection
 
 import Evaluation
 
@@ -19,9 +20,34 @@ main :: IO ()
 main = runM
   . runTraceIO
   .@ PA.runAsyncInIO
-  $ inbetw
+  $ testing
 
-{-# INLINE utilFuns #-}
+
+best :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
+best = forM_ [ Parameters
+    { randomSeed = 1
+    , nodeCount = 1000
+    , requestCount = 100000
+    , weights = w
+    , requests = r
+    }
+  | w <-
+    [ Weights.unitEuclidian 3
+    ]
+  , r <-
+    [ Requests.random
+    ]
+  ] $ \par -> runEvals "best" par
+    [ Alg.ivy Tree.mst
+    , Alg.arrow Tree.mst
+    , Alg.arrow Tree.shortPairs
+    , Alg.indexMeanScore HopIndexBased undefined (Tree.random' (NoIndices, 0))
+    , Alg.utilityFun "ln" (\i w -> w * log (fromIntegral i)) Tree.random
+    , Alg.utilityFun "w" (\i w -> w) Tree.random
+    --, Alg.utilityFun "ln0.5" (\i w -> w * log (fromIntegral i * 0.5)) Tree.random
+    --, Alg.utilityFun "ln2" (\i w -> w * log (fromIntegral i * 2)) Tree.random
+    ] [ ratio, stretch, treeWeight, requestHops]
+
 utilFuns :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
 utilFuns = forM_ [ Parameters
     { randomSeed = 1
@@ -126,15 +152,25 @@ testing = runEvals "testing " params algs evals
   where
     params = Parameters
       { randomSeed = 0
-      , nodeCount = 1000
-      , requestCount = 100
-      , weights = Weights.unitEuclidian 2
+      , nodeCount = 3
+      , requestCount = 100000
+      , weights = Weights.ring
       , requests = Requests.random
       }
-    algs = [ Alg.arrow Tree.mst
-           , Alg.ivy Tree.mst
-           , Alg.inbetweenWeighted 0.5 Tree.mst]
-    evals = [stretch, ratio, treeWeight]
+    algs = --[ Alg.indexMeanScore HopIndexBased (af 0.0) (Tree.mst' initialIndexMeanState)
+           ----, Alg.indexMeanScore HopIndexBased (af 0.5) (Tree.mst' initialIndexMeanState)
+           --, Alg.indexMeanScore WeightSumBased (af 0.0) (Tree.mst' initialIndexMeanState)
+           --, Alg.indexMeanScore WeightSumBased (const 0.5) (Tree.mst' initialIndexMeanState)
+           --, Alg.indexMeanScore WeightSumBased (af 0.5) (Tree.mst' initialIndexMeanState)
+           [ Alg.arrow Tree.shortPairs
+
+           , Alg.ivy Tree.shortPairs
+           --, Alg.constantRing
+           --, Alg.arrow Tree.mst ]
+           ]
+    evals = [ ratio ]
+
+    af m k = exp (fromIntegral k * (-0.2)) * (1 - m) + m
 
 ivyBad :: Members '[Lift IO, Trace, PA.Async] r => Sem r ()
 ivyBad = forM_ [ Parameters
