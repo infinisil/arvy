@@ -46,13 +46,17 @@ data PlotDefaults = PlotDefaults
   }
 
 data Eval m = Eval
-  { evalPlotDefaults :: PlotDefaults
+  { evalName :: String
   , evalFun :: Env -> ConduitT ArvyEvent (Double, Double) m ()
   }
 
-evalsConduit :: (Traversable f, Monad m) => f (Eval m) -> Env -> ConduitT ArvyEvent Void m (f Series)
-evalsConduit evals env = sequenceConduits $ fmap (\eval -> evalFun eval env .| C.sinkList) evals
-
+evalsConduit :: (Traversable f, Member Trace r) => String -> f (Eval (Sem r)) -> Env -> ConduitT ArvyEvent Void (Sem r) (f Series)
+evalsConduit prefix evals env = --C.iterM (trace . show) .|
+  sequenceConduits (fmap (\eval -> do
+                             vals <- evalFun eval env .| C.sinkList
+                             lift $ trace $ prefix ++ ", " ++ evalName eval ++ ": " ++ show (last vals)
+                             return vals
+                         ) evals)
 
 runEvals
   :: forall r
@@ -65,7 +69,7 @@ runEvals
 runEvals key params@Parameters { .. } algs evals = do
   asyncs <- mapM runit algs
   series <- transpose <$> forM asyncs PA.await
-  let layouts = zipWith toLayout (map evalPlotDefaults evals) series
+  let layouts = zipWith toLayout (map evalName evals) series
       layouts' = layouts
         & ix 0.layout_title .~ paramDescr params
         -- & _init.traverse.layout_legend .~ Nothing
@@ -84,15 +88,16 @@ runEvals key params@Parameters { .. } algs evals = do
   void $ sendM $ renderableToFile (FileOptions (width, height) PNG) path (toRenderable stacked)
   where
     runit :: AlgorithmParameter (RandomFu ': r) -> Sem r (Async [Series])
-    runit alg = fmap fromJust <$> runParams params alg (evalsConduit evals)
+    runit alg = fmap fromJust <$> runParams params alg (evalsConduit (algorithmId alg) evals)
 
     lineColors :: [AlphaColour Double] = opaque <$> infiniteWebColors
 
     axisStyle :: AxisStyle = def
       & axis_label_style.font_size .~ 20
 
-    toLayout :: PlotDefaults -> [Series] -> Layout Double Double
-    toLayout PlotDefaults { .. } series = plotDefaultLayout
+    toLayout :: String -> [Series] -> Layout Double Double
+    toLayout title series = def
+      & layout_y_axis.laxis_title .~ title
       & layout_plots .~ zipWith3 mkPlot algs lineColors series
       & layout_title_style.font_size .~ 50
       & layout_title_style.font_weight .~ FontWeightNormal
@@ -107,7 +112,7 @@ runEvals key params@Parameters { .. } algs evals = do
 
       where
 
-        mkPlot alg color serie = toPlot $ plotDefaultPlot
+        mkPlot alg color serie = toPlot $ def
           & plot_lines_title .~ algorithmId alg
           & plot_lines_values .~ [serie]
           & plot_lines_style.line_color .~ color
@@ -117,14 +122,7 @@ runEvals key params@Parameters { .. } algs evals = do
 
 stretch :: Member (Lift IO) r => Eval (Sem r)
 stretch = Eval
-  { evalPlotDefaults = PlotDefaults
-    { plotDefaultLayout = def
-      { _layout_y_axis = def
-        { _laxis_title = "Average tree stretch"
-        }
-      }
-    , plotDefaultPlot = def
-    }
+  { evalName = "Average tree stretch"
   , evalFun = \env -> collectRequests (const ())
       .| enumerate
       .| logFilter env 100
@@ -132,34 +130,28 @@ stretch = Eval
       .| C.map (\((i, _), (str, _)) -> (fromIntegral i, str))
   }
 
+  --{ evalPlotDefaults = PlotDefaults
+  --  { plotDefaultLayout = def
+  --    { _layout_y_axis = def
+  --      { _laxis_title = "Request ratio"
+  --      }
+  --    }
+  --  , plotDefaultPlot = def
+  --  }
 
 ratio :: Member (Lift IO) r => Eval (Sem r)
 ratio = Eval
-  { evalPlotDefaults = PlotDefaults
-    { plotDefaultLayout = def
-      { _layout_y_axis = def
-        { _laxis_title = "Request ratio"
-        }
-      }
-    , plotDefaultPlot = def
-    }
+  { evalName = "Request ratio"
   , evalFun = \env -> requestRatio env
-      .| movingAverage True 150
+      .| meanStddev
       .| enumerate
       .| logFilter env 100
-      .| C.map (\(i, rat) -> (fromIntegral i, rat))
+      .| C.map (\(i, (rat, _)) -> (fromIntegral i, rat))
   }
 
 treeWeight :: Member (Lift IO) r => Eval (Sem r)
 treeWeight = Eval
-  { evalPlotDefaults = PlotDefaults
-    { plotDefaultLayout = def
-      { _layout_y_axis = def
-        { _laxis_title = "Tree weight"
-        }
-      }
-    , plotDefaultPlot = def
-    }
+  { evalName = "treeWeight"
   , evalFun = \env -> collectRequests (const ())
       .| enumerate
       .| logFilter env 100
@@ -170,14 +162,7 @@ treeWeight = Eval
 {-# INLINE requestHops #-}
 requestHops :: Member (Lift IO) r => Eval (Sem r)
 requestHops = Eval
-  { evalPlotDefaults = PlotDefaults
-    { plotDefaultLayout = def
-      { _layout_y_axis = def
-        { _laxis_title = "Request hops"
-        }
-      }
-    , plotDefaultPlot = def
-    }
+  { evalName = "Request hops"
   , evalFun = \env -> hopCount @Double
       .| movingAverage True 100
       .| enumerate
