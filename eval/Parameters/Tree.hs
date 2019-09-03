@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Parameters.Tree where
 
@@ -18,6 +18,12 @@ import Data.Random.Distribution.Uniform
 import Utils
 import Data.Tuple (swap)
 import Control.Monad
+import Data.Sequence (Seq, Seq(..))
+import qualified Data.Sequence as Seq
+import Data.Foldable (foldr')
+import Data.STRef
+import Data.MonoTraversable
+import Polysemy.Trace
 
 -- | A representation of how an initial spanning tree and node states @s@ is generated
 data InitialTreeParameter s r = InitialTreeParameter
@@ -204,3 +210,90 @@ mstEdges n weights = go initialHeap where
     | newWeight < weight = H.Entry newWeight (new, dst)
     | otherwise = entry
     where newWeight = weights ! (new, dst)
+
+-- | A Prufer code is a sequence of n - 2 numbers from [0..n - 1], all of which can be mapped one-to-one to spanning trees in a complete graph with n nodes
+newtype PruferCode = PruferCode [Int] deriving Show
+
+-- | Generates all Prufer codes for a specific n
+allPruferCodes :: NodeCount -> [PruferCode]
+allPruferCodes n
+  | n < 2 = error "Prufer codes don't exist for n < 2"
+  | otherwise = go n
+  where
+  go :: Int -> [PruferCode]
+  go 2 = [ PruferCode [] ]
+  go k = [ PruferCode (h : t) | h <- [0 .. n - 1], PruferCode t <- go (k - 1) ]
+
+-- | Turns a Prufer code into the spanning tree it represents as a list of edges
+pruferToTree :: NodeCount -> PruferCode -> [Edge]
+pruferToTree n (PruferCode ps) = edges ps (frequencies ps) where
+  frequencies :: [Int] -> Seq Int
+  frequencies = foldr' (Seq.adjust' (+1)) (Seq.replicate n 1)
+
+  edges :: [Int] -> Seq Int -> [Edge]
+  edges (x:xs) s@(Seq.elemIndexL 1 -> Just y) = (x, y) : edges xs s' where
+    s' = Seq.adjust' (subtract 1) x . Seq.adjust' (subtract 1) y $ s
+  edges [] (Seq.elemIndicesL 1 -> [u, v]) = [(u, v)]
+  edges _ _ = error "This case will never happen"
+
+
+-- | Computes half the total pair distances in a tree for a given Prufer code and certain weights. Bails out early if the result would be bigger than the given @maxScore@
+pruferHalfPairDistances :: NodeCount -> PruferCode -> GraphWeights -> Double -> Maybe Double
+pruferHalfPairDistances n p weights maxScore = runST $ do
+  distArr <- newArray ((0, 0), (n - 1, n - 1)) 0
+  resultRef <- newSTRef 0
+
+  underMax <- go resultRef distArr
+  if underMax then Just <$> readSTRef resultRef
+  else return Nothing
+
+  where
+    edges@((root,_):_) = reverse $ pruferToTree n p
+
+    go :: forall s . STRef s Double -> STUArray s Edge Double -> ST s Bool
+    go result dists = go' edges (IntSet.singleton root) where
+      go' :: [Edge] -> IntSet -> ST s Bool
+      go' [] _ = return True
+      go' ((old, new):es) included = do
+        let weight = weights ! (old, new)
+        oforM_ included $ \i -> do
+          dist <- readArray dists (i, old)
+          let newDist = dist + weight
+          writeArray dists (i, new) newDist
+          writeArray dists (new, i) newDist
+          modifySTRef' result (+newDist)
+
+        score <- readSTRef result
+        if score > maxScore then return False
+        else go' es (IntSet.insert new included)
+
+
+-- | Returns the edges of a spanning tree with minimum total pair distance. Complexity /O(n^n)/
+bestPairDistanceTree :: forall r . Member Trace r => NodeCount -> GraphWeights -> Sem r [Edge]
+bestPairDistanceTree n weights = do
+  cands <- candidatesForMaxScore infinity (allPruferCodes n) 0
+  return $ pruferToTree n (last cands)
+  where
+  count = n ^ (n - 2)
+  candidatesForMaxScore :: Double -> [PruferCode] -> Int -> Sem r [PruferCode]
+  candidatesForMaxScore _ [] _ = return []
+  candidatesForMaxScore maxScore (x:xs) k = case pruferHalfPairDistances n x weights maxScore of
+    Just score -> do
+      trace $ percent ++ "New half score: " ++ show score ++ " with " ++ show (reverse $ pruferToTree n x)
+      rest <- candidatesForMaxScore score xs (k + 1)
+      return (x : rest)
+    Nothing -> do
+      when (k `mod` 500000 == 0) $
+        trace $ percent ++ "No better score yet"
+      candidatesForMaxScore maxScore xs (k + 1)
+    where percent = "[" ++ show (round $ (100 :: Double) / fromIntegral count * fromIntegral k :: Int) ++ "] "
+
+shortestPairs' :: (Member Trace r, Show a) => a -> InitialTreeParameter a r
+shortestPairs' value = InitialTreeParameter
+  { initialTreeId = "shortestpairs"
+  , initialTreeDescription = "A tree with the shortest pair distances"
+  , initialTreeGet = \n w -> reverse <$> bestPairDistanceTree n w >>= \case
+      edges@((root, _):_) -> return ( array (0, n - 1) ((root, root) : edges)
+                                    , listArray (0, n - 1) (replicate n value) )
+      _ -> error "No root! Shouldn't occur"
+  }
