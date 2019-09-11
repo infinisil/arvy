@@ -16,6 +16,7 @@ module Arvy.Algorithm.Collection
   , indexMeanScore
   , initialIndexMeanState
   , IndexMeanType(..)
+  , localMinPairs
   ) where
 
 import Arvy.Algorithm
@@ -33,6 +34,7 @@ import Prelude hiding (head)
 import Data.Bifunctor
 import Data.List (minimumBy)
 import Polysemy.Trace
+import Data.Array.Unboxed
 
 genArrow :: forall s r . Show s => Arvy s r
 genArrow = simpleArvy $ \xs -> do
@@ -272,3 +274,44 @@ indexMeanScore ty af = arvy @IndexMeanMessage ArvyInst
   edgePart = case ty of
     HopIndexBased -> \_ -> return 1
     WeightSumBased -> weightTo
+
+data LocalMinPairsMessage i = LocalMinPairsMessage [(i, Double)] [UArray Int Double] deriving Show
+
+localMinPairs :: (Member Trace r, Show s) => Arvy s r
+localMinPairs = arvy @LocalMinPairsMessage ArvyInst
+  { arvyInitiate = \i _ -> return (LocalMinPairsMessage [(i, 0)] [listArray (0, 0) [0]])
+  , arvyTransmit = \(LocalMinPairsMessage nodes dists) i _ -> do
+      let count = length nodes
+      --trace $ "We are at count " ++ show count
+      weights <- zipWith3 (\k (j, score) weight -> (k, j, score, weight * fromIntegral count + score)) [0 :: Int ..] nodes <$> traverse (weightTo.fst) nodes
+      --trace $ "Scores determined to be " ++ show weights
+      let (bestIndex, best, bestScore, _) = minimumBy (comparing (\(_, _, _, d) -> d)) weights
+      bestWeight <- weightTo best
+      --trace $ "Selected node at index " ++ show bestIndex ++ " with node score " ++ show bestScore ++ " and weight " ++ show bestWeight
+
+      let getDist u v
+            | u == v = 0
+            | u > v = getDist v u
+            | otherwise = dists !! v ! u
+
+      let newWeights = listArray (0, count - 1) (map (\j -> getDist j bestIndex + bestWeight) [0 :: Int ..])
+      --trace $ "New weights are " ++ show newWeights
+      let newDists = dists ++ [newWeights]
+
+      let newNodes = map (\(j, (n, s)) -> (forward n, s + newWeights ! j)) (zip [0 :: Int ..] nodes)
+      --trace $ "Updated old node scores to " ++ show newNodes
+      let newNodeScore = bestScore + fromIntegral count * bestWeight
+      let newNodes' = newNodes ++ [(i, newNodeScore)]
+      --trace $ "Added new node score " ++ show newNodeScore
+
+      --let newNodes' =
+      --let newArray = array ((0, 0), (count, count)) []
+
+      return (best, LocalMinPairsMessage newNodes' newDists)
+  , arvyReceive = \(LocalMinPairsMessage nodes _) _ -> do
+      let count = length nodes
+      --trace $ "We are at the final count " ++ show count
+      weights <- zipWith (\(j, score) weight -> (j, weight * fromIntegral count + score)) nodes <$> traverse (weightTo.fst) nodes
+      let best = fst $ minimumBy (comparing snd) weights
+      return best
+  }

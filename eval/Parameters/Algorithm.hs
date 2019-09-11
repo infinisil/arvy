@@ -103,3 +103,12 @@ indexMeanScore ty af tree = AlgorithmParameter
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.indexMeanScore ty af
   }
+
+
+localMinPairs :: (Member Trace r, Show s) => Tree.InitialTreeParameter s r -> AlgorithmParameter r
+localMinPairs tree = AlgorithmParameter
+  { algorithmId = "localminpairs-" ++ Tree.initialTreeId tree
+  , algorithmDescription = "Local minimum pair distances"
+  , algorithmInitialTree = tree
+  , algorithmGet = Arvy.localMinPairs
+  }
