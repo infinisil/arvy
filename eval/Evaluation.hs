@@ -37,6 +37,8 @@ import Control.Monad
 import Data.Maybe
 import Control.Concurrent.Async
 import Data.Colour.Palette.ColorSet
+import Data.Monoid
+import Data.Array.IArray
 
 type Series = [(Double, Double)]
 
@@ -147,6 +149,17 @@ ratio = Eval
       .| enumerate
       .| logFilter env 100
       .| C.map (\(i, (rat, _)) -> (fromIntegral i, rat))
+  }
+
+requestWeight :: Member (Lift IO) r => Eval (Sem r)
+requestWeight = Eval
+  { evalName = "Request weight"
+  , evalFun = \env@Env { envWeights } -> collectRequests (\edge -> Sum (envWeights ! edge))
+      .| C.map (\(Request _ _ (Sum path)) -> path)
+      .| meanStddev
+      .| enumerate
+      .| logFilter env 100
+      .| C.map (\(i, (w, _)) -> (fromIntegral i, w))
   }
 
 treeWeight :: Member (Lift IO) r => Eval (Sem r)
