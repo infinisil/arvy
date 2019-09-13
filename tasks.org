@@ -1,5 +1,10 @@
 * List of tasks to work on
 
+New:
+- Implement best shortest-path node tree from paper, is it better than arrow with shortpairs?
+- Implement the fractal triangle cluster tree and algorithm
+- Get a nice plot with instances of all algorithms for random requests
+
 ** Program structure
 - Handle open handles better
 - Better parallelism, only start as many params as cores
@@ -22,3 +27,4 @@
 * Future
 - Graph shortest path distributions for weights
   Actually this might be very indicative of how well algorithms perform on weights. E.g. it might turn out that arrow is good for a specific weight shape.
+- Visualize algorithms by focusing on a single path
