@@ -120,65 +120,69 @@ runEvals key params@Parameters { .. } algs evals = do
           & plot_lines_style.line_color .~ color
           & plot_lines_style.line_width .~ 3
 
+dataPoints :: Int
+dataPoints = 100
 
+allEvals :: Member (Lift IO) r => [ Eval (Sem r) ]
+allEvals = [ evalTreeDist, evalTreeRatio, evalTreeEdgeDist, evalRequestDist, evalRequestRatio, evalRequestHops ]
 
-stretch :: Member (Lift IO) r => Eval (Sem r)
-stretch = Eval
-  { evalName = "Average tree stretch"
+evalTreeDist :: Member (Lift IO) r => Eval (Sem r)
+evalTreeDist = Eval
+  { evalName = "Average tree distance"
+  , evalFun = \env@Env { envNodeCount } -> collectRequests (const ())
+      .| enumerate
+      .| logFilter env dataPoints
+      .| asConduit totalPairWeight env
+      .| C.map (\((i, _), w) -> (fromIntegral i, w / fromIntegral (envNodeCount * (envNodeCount - 1) `div` 2)))
+  }
+
+evalTreeRatio :: Member (Lift IO) r => Eval (Sem r)
+evalTreeRatio = Eval
+  { evalName = "Average tree ratio"
   , evalFun = \env -> collectRequests (const ())
       .| enumerate
-      .| logFilter env 100
+      .| logFilter env dataPoints
       .| asConduit avgTreeStretchDiameter env
       .| C.map (\((i, _), (str, _)) -> (fromIntegral i, str))
   }
 
-  --{ evalPlotDefaults = PlotDefaults
-  --  { plotDefaultLayout = def
-  --    { _layout_y_axis = def
-  --      { _laxis_title = "Request ratio"
-  --      }
-  --    }
-  --  , plotDefaultPlot = def
-  --  }
-
-ratio :: Member (Lift IO) r => Eval (Sem r)
-ratio = Eval
-  { evalName = "Request ratio"
-  , evalFun = \env -> requestRatio env
-      .| meanStddev
+evalTreeEdgeDist :: Member (Lift IO) r => Eval (Sem r)
+evalTreeEdgeDist = Eval
+  { evalName = "Average tree edge distance"
+  , evalFun = \env@Env { envNodeCount } -> collectRequests (const ())
       .| enumerate
-      .| logFilter env 100
-      .| C.map (\(i, (rat, _)) -> (fromIntegral i, rat))
+      .| logFilter env dataPoints
+      .| asConduit totalTreeWeight env
+      .| C.map (\((i, _), rat) -> (fromIntegral i, rat / fromIntegral (envNodeCount - 1)))
   }
 
-requestWeight :: Member (Lift IO) r => Eval (Sem r)
-requestWeight = Eval
-  { evalName = "Request weight"
+evalRequestRatio :: Member (Lift IO) r => Eval (Sem r)
+evalRequestRatio = Eval
+  { evalName = "Average request ratio"
+  , evalFun = \env -> requestRatio env
+      .| movingAverage True 100
+      .| enumerate
+      .| logFilter env dataPoints
+      .| C.map (\(i, rat) -> (fromIntegral i, rat))
+  }
+
+evalRequestDist :: Member (Lift IO) r => Eval (Sem r)
+evalRequestDist = Eval
+  { evalName = "Average request distance"
   , evalFun = \env@Env { envWeights } -> collectRequests (\edge -> Sum (envWeights ! edge))
       .| C.map (\(Request _ _ (Sum path)) -> path)
-      .| meanStddev
+      .| movingAverage True 100
       .| enumerate
-      .| logFilter env 100
-      .| C.map (\(i, (w, _)) -> (fromIntegral i, w))
+      .| logFilter env dataPoints
+      .| C.map (\(i, w) -> (fromIntegral i, w))
   }
 
-treeWeight :: Member (Lift IO) r => Eval (Sem r)
-treeWeight = Eval
-  { evalName = "treeWeight"
-  , evalFun = \env -> collectRequests (const ())
-      .| enumerate
-      .| logFilter env 100
-      .| asConduit totalTreeWeight env
-      .| C.map (\((i, _), rat) -> (fromIntegral i, rat))
-  }
-
-{-# INLINE requestHops #-}
-requestHops :: Member (Lift IO) r => Eval (Sem r)
-requestHops = Eval
-  { evalName = "Request hops"
+evalRequestHops :: Member (Lift IO) r => Eval (Sem r)
+evalRequestHops = Eval
+  { evalName = "Average request hop count"
   , evalFun = \env -> hopCount @Double
       .| movingAverage True 100
       .| enumerate
-      .| logFilter env 100
+      .| logFilter env dataPoints
       .| C.map (\(i, hops) -> (fromIntegral i, hops))
   }
