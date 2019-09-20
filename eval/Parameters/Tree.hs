@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Parameters.Tree where
@@ -24,6 +25,7 @@ import Data.Foldable (foldr')
 import Data.STRef
 import Data.MonoTraversable
 import Polysemy.Trace
+import Data.Ord
 
 -- | A representation of how an initial spanning tree and node states @s@ is generated
 data InitialTreeParameter s r = InitialTreeParameter
@@ -297,3 +299,22 @@ shortestPairs' value = InitialTreeParameter
                                     , listArray (0, n - 1) (replicate n value) )
       _ -> error "No root! Shouldn't occur"
   }
+
+bestStar' :: Show a => a -> InitialTreeParameter a r
+bestStar' value = InitialTreeParameter
+  { initialTreeId = "star"
+  , initialTreeDescription = "Best possible star tree"
+  , initialTreeGet = \n w -> do
+      let center = bestStarCenter n w
+      return ( array (0, n - 1) ((center, center) : map (,center) ([ 0 .. center - 1 ] ++ [ center + 1 .. n - 1 ] ))
+             , listArray (0, n - 1) (replicate n value)
+             )
+  } where
+  bestStarCenter :: NodeCount -> GraphWeights -> Node
+  bestStarCenter n weights = fst $ minimumByEx (comparing snd) (map (\i -> (i, starScore n weights i)) [0 .. n - 1])
+
+  starScore :: NodeCount -> GraphWeights -> Node -> Double
+  starScore n weights center = sum [ weights ! (center, i) | i <- [0 .. n - 1] ]
+
+bestStar :: InitialTreeParameter () r
+bestStar = bestStar' ()
