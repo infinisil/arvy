@@ -300,6 +300,9 @@ shortestPairs' value = InitialTreeParameter
       _ -> error "No root! Shouldn't occur"
   }
 
+shortestPairs :: Member Trace r => InitialTreeParameter () r
+shortestPairs = shortestPairs' ()
+
 bestStar' :: Show a => a -> InitialTreeParameter a r
 bestStar' value = InitialTreeParameter
   { initialTreeId = "star"
@@ -318,3 +321,46 @@ bestStar' value = InitialTreeParameter
 
 bestStar :: InitialTreeParameter () r
 bestStar = bestStar' ()
+
+
+-- | Configuration for a recursive clique
+data RecliqueConf = RecliqueConf
+  { recliqueFactor :: Double
+  -- ^ How much the distance increases with an additional level, should be > 1
+  , recliqueLevels :: Int
+  -- ^ How many levels there should be
+  , recliqueBase :: Int
+  -- ^ How many more nodes each level has
+  } deriving (Show)
+
+-- | How many nodes a reclique has
+recliqueNodeCount :: RecliqueConf -> NodeCount
+recliqueNodeCount RecliqueConf { .. } = recliqueBase ^ recliqueLevels
+
+recliqueLayers :: RecliqueConf -> Node -> [Int]
+recliqueLayers RecliqueConf { .. } = reverse . go recliqueLevels where
+  go :: Int -> Int -> [Int]
+  go 0 _ = []
+  go k x = b : go (k - 1) a where
+    (a, b) = divMod x recliqueBase
+
+-- | A recursive clique graph. This is a clique of `recliqueBase` nodes, where each node contains a clique of `recliqueBase` nodes itself, and so on, `recliqueLevels` deep. Different nodes that are in the same lowest layer have distance 1 between them. Nodes in a different lowest layer but the same second-lowest layer have distance `recliqueFactor` between them, one layer up distance `recliqueFactor ^^ 2`, and so on.
+recliqueWeights :: RecliqueConf -> GraphWeights
+recliqueWeights rc@RecliqueConf { .. } = listArray ((0, 0), (n - 1, n - 1))
+  [ if u == v then 0
+    else recliqueFactor ^^ (dist u v - 1)
+  | u <- nodes, v <- nodes ]
+  where
+    n = recliqueNodeCount rc
+    nodes = [0 .. n - 1]
+    dist :: Int -> Int -> Int
+    dist a b
+      | a == b = 0
+      | otherwise = 1 + dist (div a recliqueBase) (div b recliqueBase)
+
+--reclique :: RecliqueConf -> InitialTreeParameter [Int] r
+--reclique rc@RecliqueConf { .. } v = InitialTreeParameter
+--  { initialTreeId = "reclique(" ++ show rc ++ ")"
+--  , initialTreeDescription = "Recursive clique"
+--  , initialTreeGet = \n w -> undefined
+--  }
