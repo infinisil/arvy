@@ -20,9 +20,12 @@ module Arvy.Algorithm
   , ArvyData(..)
   , ArvyNodeData(..)
   , ArvyAlgorithm(..)
+  , Node
+  , NodeCount
   ) where
 
 import Polysemy
+import Polysemy.State
 
 {- |
 An Arvy behavior for a static Arvy algorithm. This is not much of a heuristic because there's only one possible static Arvy algorithm. However, this allows additional code to be ran on events and custom messages to be passed.
@@ -44,7 +47,7 @@ data StaticArvyBehavior i (msg :: * -> *) r = StaticArvyBehavior
 data StaticArvySpec a r = forall msg r' . StaticArvySpec
   { staticArvyBehavior :: forall i . NodeIndex i => StaticArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
-  , staticArvyRunner :: forall x . Node -> a -> Sem r' x -> Sem r x
+  , staticArvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x
   -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
   }
 
@@ -68,7 +71,7 @@ data DynamicArvyBehavior i msg r = DynamicArvyHeuristic
 data DynamicArvySpec a r = forall msg r' . DynamicArvySpec
   { dynamicArvyBehavior :: forall i . NodeIndex i => DynamicArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
-  , dynamicArvyRunner :: forall x . Node -> a -> Sem r' x -> Sem r x
+  , dynamicArvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x
   -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
   }
 
