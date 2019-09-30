@@ -15,6 +15,7 @@ module Arvy.Algorithm
   , StaticArvySpec(..)
   , ArvyBehavior(..)
   , ArvySpec(..)
+  , behaviorType
   , Forwardable(..)
   , NodeIndex(..)
   , ArvyData(..)
@@ -43,11 +44,12 @@ data StaticArvyBehavior i (msg :: * -> *) r = StaticArvyBehavior
   -- ^ @'staticArvyReceiveRequest' msg cur@ determines what the receiving node should do with the received message, if anything.
   }
 
+
 -- | A specification for how to execute a static arvy algorithm. @a@ is the type of data a node needs in order to run.
-data StaticArvySpec a r = forall msg r' . Show (msg Node) => StaticArvySpec
-  { staticArvyBehavior :: forall i . NodeIndex i => StaticArvyBehavior i msg r'
+data StaticArvySpec a i r = forall msg r' . Show (msg Node) => StaticArvySpec
+  { staticArvyBehavior :: StaticArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
-  , staticArvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x
+  , staticArvyRunner :: forall x . i ~ Node => Node -> Sem r' x -> Sem (State a ': r) x
   -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
   }
 
@@ -68,13 +70,15 @@ data ArvyBehavior i msg r = ArvyBehavior
   }
 
 -- | A specification for how to execute a dynamic arvy algorithm. @a@ is the type of data a node needs in order to run.
-data ArvySpec a r = forall msg r' . Show (msg Node) => ArvySpec
-  { arvyBehavior :: forall i . NodeIndex i => ArvyBehavior i msg r'
+data ArvySpec a i r = forall msg r' . Show (msg Node) => ArvySpec
+  { arvyBehavior :: ArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
-  , arvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x
+  , arvyRunner :: forall x . i ~ Node => Node -> Sem r' x -> Sem (State a ': r) x
   -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
   }
 
+behaviorType :: forall (r :: [(* -> *) -> * -> *]) (msg :: * -> *) i x . x i msg r -> x i msg r
+behaviorType = id
 
 -- | A class for node indices that can be forwarded in one direction. Having this class as a constraint on types @ia@ and @ib@ is equivalent to passing a function @ia -> ib@.
 class Forwardable ia ib where
@@ -124,14 +128,14 @@ A fully specified Arvy algorithm including how to generate initalization data fo
 data ArvyAlgorithm :: * -> * -> [(* -> *) -> * -> *] -> * where
   -- | An arrow algorithm, which never changes the tree.
   Arrow
-    :: StaticArvySpec a r
+    :: (forall i . NodeIndex i => StaticArvySpec a i r)
     -> ArvyAlgorithm (ArvyData a) a r
   -- | A general dynamic Arvy algorithm which works on any graphs/trees.
   GeneralArvy
-    :: ArvySpec a r
+    :: (forall i . NodeIndex i => ArvySpec a i r)
     -> ArvyAlgorithm (ArvyData a) a r
   -- | A specialized dynamic Arvy algorithm that only works on certain graphs/trees parametrized by @p@.
   SpecializedArvy
     :: (p -> Sem r (ArvyData a))
-    -> ArvySpec a r
+    -> (forall i . NodeIndex i => ArvySpec a i r)
     -> ArvyAlgorithm p a r
