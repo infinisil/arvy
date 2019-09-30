@@ -13,8 +13,8 @@ This module contains an abstract definition of an Arvy algorithm (Pankaj Khancha
 module Arvy.Algorithm
   ( StaticArvyBehavior(..)
   , StaticArvySpec(..)
-  , DynamicArvyBehavior(..)
-  , DynamicArvySpec(..)
+  , ArvyBehavior(..)
+  , ArvySpec(..)
   , Forwardable(..)
   , NodeIndex(..)
   , ArvyData(..)
@@ -58,20 +58,20 @@ An Arvy heuristic for a dynamic algorithm.
 - @msg :: * -> *@ is the type of request messages passed between nodes, parametrized by the node index type.
 - @r@ is the effects the algorithm runs in, which can include effects parametrized by @i@.
 -}
-data DynamicArvyBehavior i msg r = DynamicArvyHeuristic
-  { dynamicArvyMakeRequest :: i -> Succ i -> Sem r (msg i)
+data ArvyBehavior i msg r = ArvyBehavior
+  { arvyMakeRequest :: i -> Succ i -> Sem r (msg i)
   -- ^ 'dynamicArvyMakeRequest cur succ' determines what message should be sent to the successor node @succ@ when some node @cur@ makes a request for the token.
-  , dynamicArvyForwardRequest :: msg (Pred i) -> i -> Succ i -> Sem r (Pred i, msg i)
+  , arvyForwardRequest :: msg (Pred i) -> i -> Succ i -> Sem r (Pred i, msg i)
   -- ^ @'dynamicArvyForwardRequest' msg cur succ@ determines both what message should be forwarded to the successor node @succ@ when some node @cur@ received a token request message @msg@ and what @cur@'s new successor should be. For correctness guarantees, only previously traversed nodes can be selected. This is enforced by @i@ only allowing node indices to be forwarded one way, from @'Pred' i@ to @i@ to @'Succ' i@ (which can be done with the 'forward' function).
-  , dynamicArvyReceiveRequest :: msg (Pred i) -> i -> Sem r (Pred i)
+  , arvyReceiveRequest :: msg (Pred i) -> i -> Sem r (Pred i)
   -- ^ @'dynamicArvyReceiveRequest' msg cur@ determines what the current node @cur@'s new successor should be when a token request message @msg@ was received and @cur@ holds the token. For correctness guarantees, only previously traversed nodes can be selected. This is enforced by @i@ only allowing node indices to be forwarded one way, from @'Pred' i@ to @i@ to @'Succ' i@ (which can be done with the 'forward' function).
   }
 
 -- | A specification for how to execute a dynamic arvy algorithm. @a@ is the type of data a node needs in order to run.
-data DynamicArvySpec a r = forall msg r' . DynamicArvySpec
-  { dynamicArvyBehavior :: forall i . NodeIndex i => DynamicArvyBehavior i msg r'
+data ArvySpec a r = forall msg r' . ArvySpec
+  { arvyBehavior :: forall i . NodeIndex i => ArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
-  , dynamicArvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x
+  , arvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x
   -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
   }
 
@@ -128,10 +128,10 @@ data ArvyAlgorithm :: * -> * -> [(* -> *) -> * -> *] -> * where
     -> ArvyAlgorithm (ArvyData a) a r
   -- | A general dynamic Arvy algorithm which works on any graphs/trees.
   GeneralArvy
-    :: DynamicArvySpec a r
+    :: ArvySpec a r
     -> ArvyAlgorithm (ArvyData a) a r
   -- | A specialized dynamic Arvy algorithm that only works on certain graphs/trees parametrized by @p@.
   SpecializedArvy
     :: (p -> Sem r (ArvyData a))
-    -> DynamicArvySpec a r
+    -> ArvySpec a r
     -> ArvyAlgorithm p a r

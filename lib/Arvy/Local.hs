@@ -29,8 +29,8 @@ runArvyLocal
      , SemiSequence seq )
   => p -> ArvyAlgorithm p a r -> ConduitT Node (NonNull seq) (Sem r) ()
 runArvyLocal param (Arrow (StaticArvySpec behavior runner)) = runStaticArvySpecLocal param behavior runner
-runArvyLocal param (GeneralArvy (DynamicArvySpec behavior runner)) = undefined
-runArvyLocal param (SpecializedArvy generator (DynamicArvySpec behavior runner)) = undefined
+runArvyLocal param (GeneralArvy (ArvySpec behavior runner)) = undefined
+runArvyLocal param (SpecializedArvy generator (ArvySpec behavior runner)) = undefined
 
 type RequestPath = [Node]
 
