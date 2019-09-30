@@ -15,6 +15,7 @@ module Arvy.Algorithm
   , StaticArvySpec(..)
   , ArvyBehavior(..)
   , ArvySpec(..)
+  , fromStatic
   , behaviorType
   , Forwardable(..)
   , NodeIndex(..)
@@ -51,6 +52,21 @@ data StaticArvySpec a i r = forall msg r' . Show (msg Node) => StaticArvySpec
   -- ^ How the algorithm should behave for certain events occuring.
   , staticArvyRunner :: forall x . i ~ Node => Node -> Sem r' x -> Sem (State a ': r) x
   -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
+  }
+
+data Dynamic msg i = Dynamic i (msg i) deriving Show
+
+fromStatic :: StaticArvyBehavior i msg r -> ArvyBehavior i (Dynamic msg) r
+fromStatic StaticArvyBehavior { .. } = ArvyBehavior
+  { arvyMakeRequest = \cur suc -> do
+      msg <- staticArvyMakeRequest cur suc
+      return (Dynamic cur msg)
+  , arvyForwardRequest = \(Dynamic sender msg) cur suc -> do
+      newMsg <- staticArvyForwardRequest msg cur suc
+      return (sender, Dynamic cur newMsg)
+  , arvyReceiveRequest = \(Dynamic sender msg) cur -> do
+      staticArvyReceiveRequest msg cur
+      return sender
   }
 
 {- |
