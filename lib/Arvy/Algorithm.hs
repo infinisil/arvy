@@ -44,7 +44,7 @@ data StaticArvyBehavior i (msg :: * -> *) r = StaticArvyBehavior
   }
 
 -- | A specification for how to execute a static arvy algorithm. @a@ is the type of data a node needs in order to run.
-data StaticArvySpec a r = forall msg r' . StaticArvySpec
+data StaticArvySpec a r = forall msg r' . Show (msg Node) => StaticArvySpec
   { staticArvyBehavior :: forall i . NodeIndex i => StaticArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
   , staticArvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x
@@ -68,7 +68,7 @@ data ArvyBehavior i msg r = ArvyBehavior
   }
 
 -- | A specification for how to execute a dynamic arvy algorithm. @a@ is the type of data a node needs in order to run.
-data ArvySpec a r = forall msg r' . ArvySpec
+data ArvySpec a r = forall msg r' . Show (msg Node) => ArvySpec
   { arvyBehavior :: forall i . NodeIndex i => ArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
   , arvyRunner :: forall x . Node -> Sem r' x -> Sem (State a ': r) x

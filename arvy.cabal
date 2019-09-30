@@ -40,12 +40,16 @@ library
                        Arvy.Algorithm.Collection
                        Arvy.Local
                        Arvy.Pure
+                       Arvy.Log
   build-depends:       array
                      , mono-traversable
                      , containers
                      , conduit
                      , polysemy-RandomFu
                      , random-fu
+                     , co-log-core
+                     , co-log
+                     , text
 
 library arvy-eval
   import:              defaults

@@ -54,6 +54,9 @@ let
         first-class-families = self.first-class-families_0_5_0_0;
       };
 
+      co-log = hlib.unmarkBroken super.co-log;
+      typerep-map = hlib.dontCheck (hlib.unmarkBroken super.typerep-map);
+
     });
   });
 
