@@ -41,6 +41,7 @@ library
                        Arvy.Local
                        Arvy.Pure
                        Arvy.Log
+                       Arvy.Weight
   build-depends:       array
                      , mono-traversable
                      , containers
