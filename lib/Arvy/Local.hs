@@ -2,6 +2,8 @@
 
 module Arvy.Local
   ( runArvyLocal
+  , runArvyLocal'
+  , LocalRunState
   ) where
 
 import Arvy.Algorithm
@@ -14,8 +16,9 @@ import Data.MonoTraversable
 import Data.Sequences
 import qualified Data.Conduit.Combinators as C
 
+type LocalRunState a = (IOUArray Node Node, IOArray Node a)
 
-extractArvyDataArrays :: ArvyData a -> IO (IOUArray Node Node, IOArray Node a)
+extractArvyDataArrays :: ArvyData a -> IO (LocalRunState a)
 extractArvyDataArrays ArvyData { .. } = do
   let nodeRange = (0, arvyDataNodeCount - 1)
       (successors, additionals) = unzip
@@ -35,9 +38,22 @@ runArvyLocal
      , Monoid seq
      , SemiSequence seq )
   => p -> ArvyAlgorithm p a r -> ConduitT Node seq (Sem r) ()
-runArvyLocal param (GeneralArvy (ArvySpec behavior runner)) = runArvySpecLocal param behavior runner
-runArvyLocal param (SpecializedArvy generator (ArvySpec behavior runner)) = do
-  arvyData <- lift $ generator param
+runArvyLocal param alg = do
+  (_, conduit) <- lift $ runArvyLocal' param alg
+  conduit
+
+-- | Run an algorithm, accepting a sequence of requests, outputting the path it took
+runArvyLocal'
+  :: forall seq p a r
+   . ( Member (Lift IO) r
+     , LogMember r
+     , Element seq ~ Node
+     , Monoid seq
+     , SemiSequence seq )
+  => p -> ArvyAlgorithm p a r -> Sem r (LocalRunState a, ConduitT Node seq (Sem r) ())
+runArvyLocal' param (GeneralArvy (ArvySpec behavior runner)) = runArvySpecLocal param behavior runner
+runArvyLocal' param (SpecializedArvy generator (ArvySpec behavior runner)) = do
+  arvyData <- generator param
   runArvySpecLocal arvyData behavior runner
 
 runArvySpecLocal
@@ -51,9 +67,9 @@ runArvySpecLocal
   => ArvyData a
   -> ArvyBehavior Node msg r'
   -> (forall x . Node -> Sem r' x -> Sem (State a ': r) x)
-  -> ConduitT Node seq (Sem r) ()
+  -> Sem r (LocalRunState a, ConduitT Node seq (Sem r) ())
 runArvySpecLocal dat ArvyBehavior { .. } runner = do
-  (tree, states) <- lift $ sendM $ extractArvyDataArrays dat
+  (tree, states) <- sendM $ extractArvyDataArrays dat
 
   let request :: Node -> Sem r seq
       request node = do
@@ -98,4 +114,4 @@ runArvySpecLocal dat ArvyBehavior { .. } runner = do
       getSuccessor :: Node -> Sem r Node
       getSuccessor node = sendM $ readArray tree node
 
-  C.mapM request
+  return ((tree, states), C.mapM request)
