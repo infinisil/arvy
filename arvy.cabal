@@ -16,7 +16,6 @@ common defaults
   build-depends:       base ^>= 4.12.0.0
                      , polysemy
                      , polysemy-plugin
-                     , polysemy-plugin
   default-extensions:  DataKinds
                      , FlexibleContexts
                      , GADTs
@@ -122,6 +121,19 @@ executable arvy
                      , bytestring
                      , directory
                      , filepath
+
+test-suite arvy-lib-tests
+  import:              defaults
+  other-modules:       RunArvySpec
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  hs-source-dirs:      lib-tests
+  build-depends:       arvy
+                     , hspec
+                     , conduit
+                     , mono-traversable
+                     , polysemy-RandomFu
+                     , random-fu
 
 test-suite arvy-tests
   import:              defaults
