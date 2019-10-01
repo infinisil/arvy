@@ -38,7 +38,6 @@ library
   exposed-modules:     Arvy.Algorithm
                        Arvy.Algorithm.Collection
                        Arvy.Local
-                       Arvy.Pure
                        Arvy.Log
                        Arvy.Weight
   build-depends:       array
