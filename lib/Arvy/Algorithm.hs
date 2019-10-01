@@ -11,11 +11,8 @@ This module contains an abstract definition of an Arvy algorithm (Pankaj Khancha
 -}
 
 module Arvy.Algorithm
-  ( StaticArvyBehavior(..)
-  , StaticArvySpec(..)
-  , ArvyBehavior(..)
+  ( ArvyBehavior(..)
   , ArvySpec(..)
-  , fromStatic
   , behaviorType
   , Forwardable(..)
   , NodeIndex(..)
@@ -28,46 +25,6 @@ module Arvy.Algorithm
 
 import Polysemy
 import Polysemy.State
-
-{- |
-An Arvy behavior for a static Arvy algorithm. This is not much of a heuristic because there's only one possible static Arvy algorithm. However, this allows additional code to be ran on events and custom messages to be passed.
-
-- @i@ is the node index type, this should stay polymorphic.
-- @msg :: * -> *@ is the type of request messages passed between nodes, parametrized by the node index type.
-- @r@ is the effects the algorithm runs in, which can include effects parametrized by @i@.
--}
-data StaticArvyBehavior i (msg :: * -> *) r = StaticArvyBehavior
-  { staticArvyMakeRequest :: i -> i -> Sem r (msg i)
-  -- ^ @'staticArvyMakeRequest' cur succ@ determines what message should be sent to the successor node @succ@ when some node @cur@ makes a request for the token.
-  , staticArvyForwardRequest :: msg i -> i -> i -> Sem r (msg i)
-  -- ^ @'staticArvyForwardRequest' msg cur succ@ determines what message should be forwarded to the successor node @succ@ when some node @cur@ received a token request message @msg@.
-  , staticArvyReceiveRequest :: msg i -> i -> Sem r ()
-  -- ^ @'staticArvyReceiveRequest' msg cur@ determines what the receiving node should do with the received message, if anything.
-  }
-
-
--- | A specification for how to execute a static arvy algorithm. @a@ is the type of data a node needs in order to run.
-data StaticArvySpec a i r = forall msg r' . Show (msg Node) => StaticArvySpec
-  { staticArvyBehavior :: StaticArvyBehavior i msg r'
-  -- ^ How the algorithm should behave for certain events occuring.
-  , staticArvyRunner :: forall x . i ~ Node => Node -> Sem r' x -> Sem (State a ': r) x
-  -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
-  }
-
-data Dynamic msg i = Dynamic i (msg i) deriving Show
-
-fromStatic :: StaticArvyBehavior i msg r -> ArvyBehavior i (Dynamic msg) r
-fromStatic StaticArvyBehavior { .. } = ArvyBehavior
-  { arvyMakeRequest = \cur suc -> do
-      msg <- staticArvyMakeRequest cur suc
-      return (Dynamic cur msg)
-  , arvyForwardRequest = \(Dynamic sender msg) cur suc -> do
-      newMsg <- staticArvyForwardRequest msg cur suc
-      return (sender, Dynamic cur newMsg)
-  , arvyReceiveRequest = \(Dynamic sender msg) cur -> do
-      staticArvyReceiveRequest msg cur
-      return sender
-  }
 
 {- |
 An Arvy heuristic for a dynamic algorithm.
@@ -142,10 +99,6 @@ A fully specified Arvy algorithm including how to generate initalization data fo
 - @r@ stands for the effects this algorithm runs in.
 -}
 data ArvyAlgorithm :: * -> * -> [(* -> *) -> * -> *] -> * where
-  -- | An arrow algorithm, which never changes the tree.
-  Arrow
-    :: (forall i . NodeIndex i => StaticArvySpec a i r)
-    -> ArvyAlgorithm (ArvyData a) a r
   -- | A general dynamic Arvy algorithm which works on any graphs/trees.
   GeneralArvy
     :: (forall i . NodeIndex i => ArvySpec a i r)

@@ -10,7 +10,6 @@ import Polysemy
 import Polysemy.State
 import Data.Array.IO
 import Conduit
-import Data.NonNull
 import Data.MonoTraversable
 import Data.Sequences
 import qualified Data.Conduit.Combinators as C
@@ -33,10 +32,9 @@ runArvyLocal
    . ( Member (Lift IO) r
      , LogMember r
      , Element seq ~ Node
-     , MonoPointed seq
+     , Monoid seq
      , SemiSequence seq )
-  => p -> ArvyAlgorithm p a r -> ConduitT Node (NonNull seq) (Sem r) ()
-runArvyLocal param (Arrow (StaticArvySpec behavior runner)) = runArvySpecLocal param (fromStatic behavior) runner
+  => p -> ArvyAlgorithm p a r -> ConduitT Node seq (Sem r) ()
 runArvyLocal param (GeneralArvy (ArvySpec behavior runner)) = runArvySpecLocal param behavior runner
 runArvyLocal param (SpecializedArvy generator (ArvySpec behavior runner)) = do
   arvyData <- lift $ generator param
@@ -49,27 +47,28 @@ runArvySpecLocal
      , LogMember r
      , Element seq ~ Node
      , SemiSequence seq
-     , MonoPointed seq )
+     , Monoid seq )
   => ArvyData a
   -> ArvyBehavior Node msg r'
   -> (forall x . Node -> Sem r' x -> Sem (State a ': r) x)
-  -> ConduitT Node (NonNull seq) (Sem r) ()
+  -> ConduitT Node seq (Sem r) ()
 runArvySpecLocal dat ArvyBehavior { .. } runner = do
   (tree, states) <- lift $ sendM $ extractArvyDataArrays dat
 
-  let request :: Node -> Sem r (NonNull seq)
+  let request :: Node -> Sem r seq
       request node = do
         lgDebug $ "Request made by " <> tshow node
         successor <- getSuccessor node
         if successor == node
-        then rootFound node
+        then do
+          lgDebug $ "Root was here all along" <> tshow node
+          return mempty
         else do
           setSuccessor node node
           msg <- runNode node $ arvyMakeRequest node successor
-          res <- send msg successor
-          return $ cons node res
+          send msg successor
 
-      send :: msg Node -> Node -> Sem r (NonNull seq)
+      send :: msg Node -> Node -> Sem r seq
       send msg node = do
         lgDebug $ "Node " <> tshow node <> " received message " <> tshow msg
         successor <- getSuccessor node
@@ -77,17 +76,13 @@ runArvySpecLocal dat ArvyBehavior { .. } runner = do
         then do
           newSucc <- runNode node $ arvyReceiveRequest msg node
           setSuccessor node newSucc
-          rootFound node
+          lgDebug $ "Root found at " <> tshow node
+          return (cons node mempty)
         else do
           (newSucc, newMsg) <- runNode node $ arvyForwardRequest msg node successor
           setSuccessor node newSucc
           res <- send newMsg successor
           return $ cons node res
-
-      rootFound :: Node -> Sem r (NonNull seq)
-      rootFound node = do
-        lgDebug $ "Root found at " <> tshow node
-        return (opoint node)
 
       runNode :: forall x . Node -> Sem r' x -> Sem r x
       runNode node sem = interpret (\case

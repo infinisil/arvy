@@ -7,21 +7,22 @@ module Arvy.Algorithm.Collection
 
 import           Arvy.Algorithm
 import           Arvy.Weight
-import           Data.Functor.Const
 import           Polysemy
 import           Polysemy.State
 import Data.Array.Unboxed
 import Data.Foldable
 import Data.Ord (comparing)
 
+newtype ArrowMessage i = ArrowMessage i deriving Show
+
 arrow :: forall r a . ArvyAlgorithm (ArvyData a) a r
-arrow = Arrow StaticArvySpec
-  { staticArvyBehavior = behaviorType @r StaticArvyBehavior
-    { staticArvyMakeRequest = \_ _ -> return (Const ())
-    , staticArvyForwardRequest = \_ _ _ -> return (Const ())
-    , staticArvyReceiveRequest = \_ _ -> return ()
+arrow = GeneralArvy ArvySpec
+  { arvyBehavior = behaviorType @r ArvyBehavior
+    { arvyMakeRequest = \i _ -> return (ArrowMessage i)
+    , arvyForwardRequest = \(ArrowMessage sender) i _ -> return (sender, ArrowMessage i)
+    , arvyReceiveRequest = \(ArrowMessage sender) _ -> return sender
     }
-  , staticArvyRunner = const raise
+  , arvyRunner = const raise
   }
 
 minWeight
