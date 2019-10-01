@@ -12,6 +12,7 @@ module Arvy.Log
   , tshow
   , defaultLogAction
   , LogMember
+  , runIgnoringLog
   ) where
 
 import           Colog.Core.Severity
@@ -92,6 +93,13 @@ runLogBySeverity'' sev (LogAction action) = interpret $ \case
     info msg = when (Info >= sev) $ action msg
     warning msg = when (Warning >= sev) $ action msg
     err msg = when (Error >= sev) $ action msg
+
+runIgnoringLog :: Sem (Log ': r) x -> Sem r x
+runIgnoringLog = interpret $ \case
+  LogDebug _ _ -> return ()
+  LogInfo _ _ -> return ()
+  LogWarning _ _ -> return ()
+  LogError _ _ -> return ()
 
 tshow :: Show a => a -> Text
 tshow = pack . show
