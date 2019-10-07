@@ -3,6 +3,7 @@
 module Arvy.Local
   ( LocalRunState
   , runArvySpecLocal
+  , runArvySpecLocal'
   ) where
 
 import Arvy.Algorithm
@@ -38,19 +39,34 @@ runArvySpecLocal
      , Monoid seq )
   => ArvyData a
   -> ArvySpec a Node r
+  -> ConduitT Node seq (Sem r) ()
+runArvySpecLocal dat spec = do
+  (_, conduit) <- lift $ runArvySpecLocal' dat spec
+  conduit
+
+runArvySpecLocal'
+  :: forall seq a r
+   . ( Member (Lift IO) r
+     , HasSuccessor a
+     , LogMember r
+     , Element seq ~ Node
+     , SemiSequence seq
+     , Monoid seq )
+  => ArvyData a
+  -> ArvySpec a Node r
   -> Sem r (IOUArray Node Node, ConduitT Node seq (Sem r) ())
-runArvySpecLocal dat ArvySpec { .. } = do
+runArvySpecLocal' dat ArvySpec { .. } = do
   mutableData@(tree, _) <- sendM $ extractArvyDataArrays dat
-  return (tree, runArvySpecLocal' mutableData arvyBehavior arvyRunner)
+  return (tree, go mutableData arvyBehavior arvyRunner)
   where
-  runArvySpecLocal'
+  go
     :: forall msg s r'
      . Show (msg Node)
     => LocalRunState s
     -> ArvyBehavior Node msg r'
     -> (forall x . Node -> a -> Sem r' x -> Sem (State s ': r) x)
     -> ConduitT Node seq (Sem r) ()
-  runArvySpecLocal' (tree, states) ArvyBehavior { .. } runner = C.mapM request where
+  go (tree, states) ArvyBehavior { .. } runner = C.mapM request where
     request :: Node -> Sem r seq
     request node = do
       lgDebug $ "Request made by " <> tshow node
