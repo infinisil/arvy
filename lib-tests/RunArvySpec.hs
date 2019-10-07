@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module RunArvySpec where
 import           Arvy.Algorithm
 import           Arvy.Local
@@ -56,14 +57,14 @@ randomRequests (lower, upper) count = runM . runRandomIO $ replicateM count go w
   go :: Member RandomFu r => Sem r Node
   go = sampleRVar (uniform lower upper)
 
-undefinedArvy :: forall r a . ArvyAlgorithm (ArvyData a) a r
+undefinedArvy :: forall r a . HasState a () => GeneralArvy a r
 undefinedArvy = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r @[] ArvyBehavior
     { arvyMakeRequest = undefined
     , arvyForwardRequest = undefined
     , arvyReceiveRequest = undefined
     }
-  , arvyRunner = const raise
+  , arvyRunner = \_ _ -> raise
   }
 
 randomWalk :: (Node, Node) -> Int -> Node -> IO [Node]
@@ -83,7 +84,7 @@ randomWalk (lower, upper) c = runM . runRandomIO . go c where
         b <- sampleRVar stdUniform
         return $ if b then start - 1 else start + 1
 
-randomArvy :: forall r a . Member RandomFu r => ArvyAlgorithm (ArvyData a) a r
+randomArvy :: forall r a . (HasState a (), Member RandomFu r) => GeneralArvy a r
 randomArvy = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return [i]
@@ -92,10 +93,10 @@ randomArvy = GeneralArvy ArvySpec
         return (newSucc, i : prev)
     , arvyReceiveRequest = \prev _ -> sampleRVar (randomElement prev)
     }
-  , arvyRunner = const raise
+  , arvyRunner = \_ _ -> raise
   }
 
-randomCounterArvy :: forall r . Members '[RandomFu, Output ()] r => ArvyAlgorithm (ArvyData Int) Int r
+randomCounterArvy :: forall r a . (Members '[RandomFu, Output ()] r, HasState a Int) => GeneralArvy a r
 randomCounterArvy = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @(State Int ': r) ArvyBehavior
     { arvyMakeRequest = \i _ -> return [i]
@@ -107,22 +108,33 @@ randomCounterArvy = GeneralArvy ArvySpec
         modify (+1)
         sampleRVar (randomElement prev)
     }
-  , arvyRunner = const $ reinterpret $ \case
+  , arvyRunner = const . const $ reinterpret $ \case
       Get -> get
       Put v -> output () *> put v
   }
 
-rootArvy :: forall r a . ArvyAlgorithm (ArvyData a) a r
+rootArvy :: forall r a . HasState a () => GeneralArvy a r
 rootArvy = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return (Identity i)
     , arvyForwardRequest = \msg@(Identity root) _ _ -> return (root, msg)
     , arvyReceiveRequest = \(Identity root) _ -> return root
     }
-  , arvyRunner = const raise
+  , arvyRunner = \_ _ -> raise
   }
 
-ringTree :: NodeCount -> a -> ArvyData a
+data ArvyNodeData a = ArvyNodeData
+  { arvyNodeDataSuccessor :: Node
+  , arvyNodeDataAdditional :: a
+  }
+
+instance HasSuccessor (ArvyNodeData a) where
+  getSuccessor = arvyNodeDataSuccessor
+
+instance HasState (ArvyNodeData a) a where
+  getState = arvyNodeDataAdditional
+
+ringTree :: NodeCount -> a -> ArvyData (ArvyNodeData a)
 ringTree n value = ArvyData
   { arvyDataNodeCount = n
   , arvyDataNodeData = \node -> ArvyNodeData
@@ -131,7 +143,7 @@ ringTree n value = ArvyData
     }
   }
 
-zeroRoot :: NodeCount -> ArvyData ()
+zeroRoot :: NodeCount -> ArvyData (ArvyNodeData ())
 zeroRoot n = ArvyData
   { arvyDataNodeCount = n
   , arvyDataNodeData = const ArvyNodeData
@@ -140,6 +152,6 @@ zeroRoot n = ArvyData
     }
   }
 
-runArvy :: forall p a r . Member (Lift IO) r => p -> ArvyAlgorithm p a (RandomFu ': Log ': r) -> [Node] -> Sem r [[Node]]
-runArvy param alg requests = runIgnoringLog . runRandomIO . runConduit
-  $ yieldMany requests .| runArvyLocal @[Node] param alg .| C.sinkList
+runArvy :: forall a r . (Member (Lift IO) r, HasSuccessor a) => ArvyData a -> GeneralArvy a (RandomFu ': Log ': r) -> [Node] -> Sem r [[Node]]
+runArvy param (GeneralArvy spec) requests = runIgnoringLog . runRandomIO . runConduit
+  $ yieldMany requests .| runArvySpecLocal param spec .| C.sinkList
