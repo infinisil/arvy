@@ -3,6 +3,8 @@
 
 module Parameters.Tree where
 
+import Arvy.Algorithm
+import Evaluation.Types
 import           Arvy.Algorithm.Collection
 import           Arvy.Local
 import           Data.Array.Unboxed
@@ -55,22 +57,6 @@ ring = InitialTreeParameter
              , listArray (0, n - 1) (replicate n ()))
   }
 
--- | Constructs a ring-like tree where the root is in the middle
-semiCircles :: InitialTreeParameter RingNodeState r
-semiCircles = InitialTreeParameter
-  { initialTreeId = "semi"
-  , initialTreeDescription = "Semi circles"
-  , initialTreeGet = \n _ -> return ( tree n
-                                    , listArray (0, n - 1) (replicate n SemiNode) // [ (n `div` 2 - 1, BridgeNode) ] )
-  }
-  where
-    tree :: NodeCount -> RootedTree
-    tree n = array (0, n - 1)
-        ( [ (i, i + 1) | i <- [0 .. h - 1] ]
-        ++ [ (h, h) ]
-        ++ [ (i, i - 1) | i <- [h + 1 .. n - 1] ] )
-      where
-        h = n `div` 2
 
 random :: Member RandomFu r => InitialTreeParameter () r
 random = random' ()

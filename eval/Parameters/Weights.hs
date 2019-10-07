@@ -13,6 +13,8 @@ module Parameters.Weights
   ) where
 
 import Arvy.Local
+import Arvy.Algorithm
+import Evaluation.Types
 import Utils
 
 import Polysemy

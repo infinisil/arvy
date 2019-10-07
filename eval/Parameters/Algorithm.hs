@@ -2,75 +2,36 @@ module Parameters.Algorithm where
 
 import           Arvy.Algorithm
 import qualified Arvy.Algorithm.Collection as Arvy
-import qualified Parameters.Tree           as Tree
-import Data.Ratio
-import Polysemy
-import Polysemy.RandomFu
-import Polysemy.Trace
+import           Data.Ratio
+import Arvy.Weight
 
-data AlgorithmParameter r = forall s . AlgorithmParameter
-  { algorithmId        :: String
-  , algorithmDescription :: String
-  , algorithmInitialTree :: Tree.InitialTreeParameter s r
-  , algorithmGet         :: Arvy s r
+data GenAlgParam a r = GenAlgParam
+  { genAlgName :: String
+  , genAlg :: GeneralArvy a r
   }
 
-instance Eq (AlgorithmParameter r) where
-  AlgorithmParameter { algorithmId = id1 } == AlgorithmParameter { algorithmId = id2 } = id1 == id2
-
-instance Ord (AlgorithmParameter r) where
-  AlgorithmParameter { algorithmId = id1 } `compare` AlgorithmParameter { algorithmId = id2 } = id1 `compare` id2
-
-instance Show (AlgorithmParameter r) where
-  show AlgorithmParameter { algorithmDescription = desc } = desc
-
-genArrow :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
-genArrow tree = AlgorithmParameter
-  { algorithmId = "genArrow-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Generalized Arrow, always choosing the node with lowest weight"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.genArrow
+data SpecAlgParam p a r = SpecAlgParam
+  { specAlgName :: String
+  , specAlg :: SpecializedArvy p a r
   }
 
-arrow :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
-arrow tree = AlgorithmParameter
-  { algorithmId = "arrow-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Arrow"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.arrow
-  }
+arrow :: HasState a () => GenAlgParam a r
+arrow = GenAlgParam "arrow" Arvy.arrow
 
-ivy :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
-ivy tree = AlgorithmParameter
-  { algorithmId = "ivy-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Ivy"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.ivy
-  }
+minWeight :: (HasWeights a, HasState a ()) => GenAlgParam a r
+minWeight = GenAlgParam "minWeight" Arvy.minWeight
 
-constantRing :: AlgorithmParameter r
-constantRing = AlgorithmParameter
-  { algorithmId = "ring"
-  , algorithmDescription = "Constant ring"
-  , algorithmInitialTree = Tree.semiCircles
-  , algorithmGet = Arvy.constantRing
-  }
+ivy :: HasState a () => GenAlgParam a r
+ivy = GenAlgParam "ivy" Arvy.ivy
 
-half :: Show s => Tree.InitialTreeParameter s r -> AlgorithmParameter r
-half tree = AlgorithmParameter
-  { algorithmId = "half-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Half node"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.half
-  }
 
-inbetween :: Show s => Ratio Int -> Tree.InitialTreeParameter s r -> AlgorithmParameter r
-inbetween ratio tree = AlgorithmParameter
-  { algorithmId = "inbetween" ++ show (numerator ratio) ++ "%" ++ show (denominator ratio) ++ "-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Inbetween"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.inbetween ratio
-  }
+ring :: SpecAlgParam NodeCount Arvy.RingArvyData r
+ring = SpecAlgParam "ring" Arvy.ring
+
+inbetween :: HasState a () => Ratio Int -> GenAlgParam a r
+inbetween ratio = GenAlgParam ("inbetween-" ++ show ratio) (Arvy.inbetween ratio)
+
+{-
 
 inbetweenWeighted :: Show s => Double -> Tree.InitialTreeParameter s r -> AlgorithmParameter r
 inbetweenWeighted ratio tree = AlgorithmParameter
@@ -112,3 +73,4 @@ localMinPairs tree = AlgorithmParameter
   , algorithmInitialTree = tree
   , algorithmGet = Arvy.localMinPairs
   }
+-}

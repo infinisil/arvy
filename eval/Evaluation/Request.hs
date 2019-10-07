@@ -15,6 +15,10 @@ import Evaluation.Types
 import Polysemy
 import Polysemy.Trace
 import Data.Time
+import Data.MonoTraversable
+import Data.NonNull
+import Arvy.Algorithm
+import Data.Sequences
 
 data Request a = Request
   { requestFrom :: Int
@@ -22,26 +26,14 @@ data Request a = Request
   , path :: a
   } deriving (Functor, Show)
 
-collectRequests :: forall a m . (Monoid a, Monad m) => (Edge -> a) -> ConduitT ArvyEvent (Request a) m ()
-collectRequests f = go 0 mempty where
-  go :: Int -> a -> ConduitT ArvyEvent (Request a) m ()
-  go requestFrom as = await >>= \case
-    Just (RequestMade requestFrom') -> go requestFrom' mempty
-    Just (RequestGranted _ root _) -> do
-      yield (Request requestFrom root as)
-      go 0 mempty
-    Just (RequestTravel x y _) -> go requestFrom (f (x, y) <> as)
-    Just _ -> go requestFrom as
-    Nothing -> return ()
-
-traceRequests :: forall r . Members '[Lift IO, Trace] r => ConduitT ArvyEvent ArvyEvent (Sem r) ()
+traceRequests :: forall r x . Members '[Lift IO, Trace] r => ConduitT x x (Sem r) ()
 traceRequests = do
   time <- lift $ sendM getCurrentTime
   go 0 time where
-  go :: Int -> UTCTime -> ConduitT ArvyEvent ArvyEvent (Sem r) ()
+  go :: Int -> UTCTime -> ConduitT x x (Sem r) ()
   go k prev = await >>= \case
     Nothing -> lift $ trace "Done"
-    Just event@(RequestMade _) -> do
+    Just event -> do
       let k' = k + 1
       time <- lift $ sendM getCurrentTime
       if time `diffUTCTime` prev > 1
@@ -52,14 +44,28 @@ traceRequests = do
         else do
           yield event
           go k' prev
-    Just event -> do
-      yield event
-      go k prev
 
 
-hopCount :: (Num n, Monad m) => ConduitT ArvyEvent n m ()
-hopCount = collectRequests (\_ -> Sum 1) .| C.map (getSum . path)
+hopCount :: (Monad m, MonoFoldable seq) => ConduitT seq Int m ()
+hopCount = C.map olength
 
-requestRatio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
-requestRatio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
-  .| C.map (\(Request a b (Sum path)) -> if a == b then 1 else path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length
+
+requestDists :: (Monad m, Element seq ~ Node, IsSequence seq) => Env -> ConduitT (NonNull seq) Double m ()
+requestDists Env { envWeights = weights } = C.map (\seq ->
+                                                     sum $ zipWith (\from to ->
+                                                                      weights ! (from, to))
+                                                     (otoList (Data.NonNull.init seq))
+                                                     (otoList (Data.NonNull.tail seq)))
+
+requestRatios :: (Monad m, Element seq ~ Node, IsSequence seq) => Env -> ConduitT (NonNull seq) Double m ()
+requestRatios Env { envWeights = weights } = C.map (\seq ->
+                                                     (/ weights ! ( Data.NonNull.head seq
+                                                                  , Data.NonNull.last seq))
+                                                     $ sum $ zipWith (\from to ->
+                                                                      weights ! (from, to))
+                                                     (otoList (Data.NonNull.init seq))
+                                                     (otoList (Data.NonNull.tail seq)))
+
+--requestRatio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
+--requestRatio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
+--  .| C.map (\(Request a b (Sum path)) -> if a == b then 1 else path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length

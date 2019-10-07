@@ -26,6 +26,10 @@ import Data.Random
 import Data.Word
 import qualified Data.Vector as V
 import System.Random.MWC
+import Arvy.Weight
+import Evaluation.Types
+
+type RootedTree = UArray Node Node
 
 -- | Convenience value for infinity for floating point types
 infinity :: (Floating a, Read a) => a
@@ -146,7 +150,7 @@ treeStructure tree = T.unfoldTree predecessors root where
 {-# INLINE floydWarshall #-}
 -- TODO: Split a lot of these things out of this Arvy module into the arvy-eval component
 -- | Does the main operation in the floyd-warshall algorithm. Computes the shortest path between all nodes by iteratively modifying given weights. Complexity /O(n^3)/
-floydWarshall :: MArray arr Weight m => NodeCount -> GraphWeightsArr arr -> m ()
+floydWarshall :: MArray arr Weight m => NodeCount -> arr Edge Weight -> m ()
 floydWarshall n weights =
   forM_ [0..n - 1] $ \k ->
     forM_ [0..n - 1] $ \i ->

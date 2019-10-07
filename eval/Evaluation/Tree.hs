@@ -1,6 +1,7 @@
 module Evaluation.Tree where
 
 import           Arvy.Local
+import Arvy.Algorithm
 
 import           Data.Array.IO
 import           Data.Array.Unboxed
