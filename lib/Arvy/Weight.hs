@@ -4,7 +4,6 @@ module Arvy.Weight where
 
 import           Arvy.Algorithm
 import           Polysemy
-import           Polysemy.State
 
 type Weight = Double
 
@@ -15,10 +14,10 @@ makeSem ''Weights
 
 {-# INLINE weightHandler #-}
 weightHandler
-  :: Member (State a) r
-  => (a -> i -> Weight)
+  :: (i -> Weight)
   -> Weights i m x -> Sem r x
 weightHandler f = \case
-  WeightTo i -> do
-    a <- get
-    return $ f a (forward i)
+  WeightTo i -> return $ f (forward i)
+
+class HasWeights a where
+  getWeights :: a -> Node -> Weight

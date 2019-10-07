@@ -1,3 +1,5 @@
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DeriveFunctor #-}
 module Arvy.Algorithm.Collection
   ( arrow
   , ivy
@@ -9,26 +11,29 @@ import           Arvy.Algorithm
 import           Arvy.Weight
 import           Polysemy
 import           Polysemy.State
-import Data.Array.Unboxed
 import Data.Foldable
 import Data.Ord (comparing)
+import qualified Data.Sequence as S
+import Data.Ratio
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
-arrow :: forall r a . ArvyAlgorithm (ArvyData a) a r
+arrow :: forall r a . HasState a () => GeneralArvy a r
 arrow = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return (ArrowMessage i)
     , arvyForwardRequest = \(ArrowMessage sender) i _ -> return (sender, ArrowMessage i)
     , arvyReceiveRequest = \(ArrowMessage sender) _ -> return sender
     }
-  , arvyRunner = const raise
+  , arvyRunner = \_ _ -> raise
   }
+
 
 minWeight
   :: forall r a
-   . a ~ UArray Node Double
-  => ArvyAlgorithm (ArvyData a) a r
+   . ( HasWeights a
+     , HasState a () )
+  => GeneralArvy a r
 minWeight = GeneralArvy spec where
   spec :: forall i . ArvySpec a i r
   spec = ArvySpec
@@ -42,20 +47,20 @@ minWeight = GeneralArvy spec where
           weights <- traverse weightTo prevs
           return $ fst $ minimumBy (comparing snd) (zip prevs weights)
       }
-    , arvyRunner = const $ reinterpret (weightHandler (!))
+    , arvyRunner = \_ a -> reinterpret (weightHandler (getWeights a))
     }
 
 newtype IvyMessage i = IvyMessage i deriving Show
 
 -- | The Ivy Arvy algorithm, which always points all nodes back to the root node where the request originated from.
-ivy :: forall r . ArvyAlgorithm (ArvyData ()) () r
+ivy :: forall r a . HasState a () => GeneralArvy a r
 ivy = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return (IvyMessage i)
     , arvyForwardRequest = \msg@(IvyMessage root) _ _ -> return (root, msg)
     , arvyReceiveRequest = \(IvyMessage root) _ -> return root
     }
-  , arvyRunner = const raise
+  , arvyRunner = \_ _ -> raise
   }
 
 
@@ -77,22 +82,27 @@ data RingNodeState
   | BridgeNode
   deriving Show
 
-ring :: forall r . ArvyAlgorithm NodeCount RingNodeState r
+data RingArvyData = RingArvyData !Node !RingNodeState
+
+instance HasState RingArvyData RingNodeState where
+  getState (RingArvyData _ s) = s
+
+ring :: forall r . SpecializedArvy NodeCount RingArvyData r
 ring = SpecializedArvy generator spec where
-  generator :: NodeCount -> Sem r (ArvyData RingNodeState)
+  generator :: NodeCount -> Sem r (ArvyData RingArvyData)
   generator n = return ArvyData
     { arvyDataNodeCount = n
-    , arvyDataNodeData = \node -> ArvyNodeData
-      { arvyNodeDataSuccessor = case node `compare` root of
+    , arvyDataNodeData = \node -> RingArvyData
+      ( case node `compare` root of
           LT -> node + 1
           EQ -> node
           GT -> node - 1
-      , arvyNodeDataAdditional = if node == root - 1
+      ) (if node == root - 1
         then BridgeNode
         else SemiNode
-      }
+      )
     } where root = n `div` 2
-  spec :: ArvySpec RingNodeState i r
+  spec :: ArvySpec RingArvyData i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(State RingNodeState ': r) ArvyBehavior
       { arvyMakeRequest = \i _ -> get >>= \case
@@ -126,45 +136,30 @@ ring = SpecializedArvy generator spec where
             return root
           AfterCrossing { sender } -> return sender
       }
-    , arvyRunner = const id
+    , arvyRunner = \_ _ -> id
     }
 
---newtype ArrowMessage i = ArrowMessage i deriving Show
---
----- | The Arrow Arvy algorithm, which always inverts all edges requests travel through. The shape of the tree therefore always stays the same
---arrow :: forall s r . Show s => Arvy s r
---arrow = arvy @ArrowMessage @s ArvyInst
---  { arvyInitiate = \i _ -> return (ArrowMessage i)
---  , arvyTransmit = \(ArrowMessage sender) i _ ->
---      return (sender, ArrowMessage i)
---  , arvyReceive = \(ArrowMessage sender) _ ->
---      return sender
---  }
---
---
----- | An Arvy algorithm that always chooses the node in the middle of the traveled through path as the new successor.
---half :: Show s => Arvy s r
---half = simpleArvy middle where
---  middle xs = return $ xs' `unsafeIndex` (lengthIndex xs' `div` 2) where
---    xs' = toNullable xs
---
---data InbetweenMessage i = InbetweenMessage Int i (Seq i) deriving (Functor, Show)
---
---inbetween :: forall s r . Show s => Ratio Int -> Arvy s r
---inbetween ratio = arvy @InbetweenMessage @s ArvyInst
---  { arvyInitiate = \i _ -> return (InbetweenMessage 1 i S.empty)
---  , arvyTransmit = \(InbetweenMessage k f (fmap forward -> seq')) i _ ->
---      let s = S.length seq' + 1
---          newK = k + 1
---          (newF, newSeq) = if (newK - s) % newK < ratio
---            then case S.viewl seq' of
---              EmptyL -> (i, S.empty)
---              fir :< rest -> (fir, rest |> i)
---            else (forward f, seq' |> i)
---      in return (f, InbetweenMessage newK newF newSeq)
---  , arvyReceive = \(InbetweenMessage _ f _) _ -> return f
---  }
---
+data InbetweenMessage i = InbetweenMessage Int i (S.Seq i) deriving (Functor, Show)
+
+
+inbetween :: forall r a . HasState a () => Ratio Int -> GeneralArvy a r
+inbetween ratio = GeneralArvy ArvySpec
+  { arvyBehavior = behaviorType @r ArvyBehavior
+    { arvyMakeRequest = \i _ -> return (InbetweenMessage 1 i S.empty)
+    , arvyForwardRequest = \(InbetweenMessage k f (fmap forward -> seq')) i _ ->
+      let s = S.length seq' + 1
+          newK = k + 1
+          (newF, newSeq) = if (newK - s) % newK < ratio
+            then case S.viewl seq' of
+              S.EmptyL -> (i, S.empty)
+              fir S.:< rest -> (fir, rest S.|> i)
+            else (forward f, seq' S.|> i)
+      in return (f, InbetweenMessage newK newF newSeq)
+    , arvyReceiveRequest = \(InbetweenMessage _ f _) _ -> return f
+    }
+  , arvyRunner = \_ _ -> raise
+  }
+
 --newtype WeightedInbetweenMessage i = WeightedInbetweenMessage (NonNull [(i, Double)]) deriving Show
 --
 ---- | @'inbetweenWeighted' ratio@ Chooses the node that lies at @ratio@ inbetween the root node and the last node by weight,

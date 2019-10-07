@@ -1,9 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Arvy.Local
-  ( runArvyLocal
-  , runArvyLocal'
-  , LocalRunState
+  ( LocalRunState
+  , runArvySpecLocal
   ) where
 
 import Arvy.Algorithm
@@ -16,102 +15,81 @@ import Data.MonoTraversable
 import Data.Sequences
 import qualified Data.Conduit.Combinators as C
 
-type LocalRunState a = (IOUArray Node Node, IOArray Node a)
+type LocalRunState s = (IOUArray Node Node, IOArray Node s)
 
-extractArvyDataArrays :: ArvyData a -> IO (LocalRunState a)
+extractArvyDataArrays :: ( HasSuccessor a, HasState a s ) => ArvyData a -> IO (LocalRunState s)
 extractArvyDataArrays ArvyData { .. } = do
   let nodeRange = (0, arvyDataNodeCount - 1)
       (successors, additionals) = unzip
-        [ (s, a)
+        [ (getSuccessor a, getState a)
         | node <- range nodeRange
-        , let ArvyNodeData s a = arvyDataNodeData node ]
+        , let a = arvyDataNodeData node ]
   tree <- newListArray nodeRange successors
   states <- newListArray nodeRange additionals
   return (tree, states)
 
--- | Run an algorithm, accepting a sequence of requests, outputting the path it took
-runArvyLocal
-  :: forall seq p a r
-   . ( Member (Lift IO) r
-     , LogMember r
-     , Element seq ~ Node
-     , Monoid seq
-     , SemiSequence seq )
-  => p -> ArvyAlgorithm p a r -> ConduitT Node seq (Sem r) ()
-runArvyLocal param alg = do
-  (_, conduit) <- lift $ runArvyLocal' param alg
-  conduit
-
--- | Run an algorithm, accepting a sequence of requests, outputting the path it took
-runArvyLocal'
-  :: forall seq p a r
-   . ( Member (Lift IO) r
-     , LogMember r
-     , Element seq ~ Node
-     , Monoid seq
-     , SemiSequence seq )
-  => p -> ArvyAlgorithm p a r -> Sem r (LocalRunState a, ConduitT Node seq (Sem r) ())
-runArvyLocal' param (GeneralArvy (ArvySpec behavior runner)) = runArvySpecLocal param behavior runner
-runArvyLocal' param (SpecializedArvy generator (ArvySpec behavior runner)) = do
-  arvyData <- generator param
-  runArvySpecLocal arvyData behavior runner
-
 runArvySpecLocal
-  :: forall seq a msg r r'
+  :: forall seq a r
    . ( Member (Lift IO) r
-     , Show (msg Node)
+     , HasSuccessor a
      , LogMember r
      , Element seq ~ Node
      , SemiSequence seq
      , Monoid seq )
   => ArvyData a
-  -> ArvyBehavior Node msg r'
-  -> (forall x . Node -> Sem r' x -> Sem (State a ': r) x)
-  -> Sem r (LocalRunState a, ConduitT Node seq (Sem r) ())
-runArvySpecLocal dat ArvyBehavior { .. } runner = do
-  (tree, states) <- sendM $ extractArvyDataArrays dat
+  -> ArvySpec a Node r
+  -> Sem r (IOUArray Node Node, ConduitT Node seq (Sem r) ())
+runArvySpecLocal dat ArvySpec { .. } = do
+  mutableData@(tree, _) <- sendM $ extractArvyDataArrays dat
+  return (tree, runArvySpecLocal' mutableData arvyBehavior arvyRunner)
+  where
+  runArvySpecLocal'
+    :: forall msg s r'
+     . Show (msg Node)
+    => LocalRunState s
+    -> ArvyBehavior Node msg r'
+    -> (forall x . Node -> a -> Sem r' x -> Sem (State s ': r) x)
+    -> ConduitT Node seq (Sem r) ()
+  runArvySpecLocal' (tree, states) ArvyBehavior { .. } runner = C.mapM request where
+    request :: Node -> Sem r seq
+    request node = do
+      lgDebug $ "Request made by " <> tshow node
+      successor <- getSucc node
+      if successor == node
+      then do
+        lgDebug $ "Root was here all along" <> tshow node
+        return mempty
+      else do
+        setSucc node node
+        msg <- runNode node $ arvyMakeRequest node successor
+        send msg successor
 
-  let request :: Node -> Sem r seq
-      request node = do
-        lgDebug $ "Request made by " <> tshow node
-        successor <- getSuccessor node
-        if successor == node
-        then do
-          lgDebug $ "Root was here all along" <> tshow node
-          return mempty
-        else do
-          setSuccessor node node
-          msg <- runNode node $ arvyMakeRequest node successor
-          send msg successor
+    send :: msg Node -> Node -> Sem r seq
+    send msg node = do
+      lgDebug $ "Node " <> tshow node <> " received message " <> tshow msg
+      successor <- getSucc node
+      if successor == node
+      then do
+        newSucc <- runNode node $ arvyReceiveRequest msg node
+        setSucc node newSucc
+        lgDebug $ "Root found at " <> tshow node
+        return (cons node mempty)
+      else do
+        (newSucc, newMsg) <- runNode node $ arvyForwardRequest msg node successor
+        setSucc node newSucc
+        res <- send newMsg successor
+        return $ cons node res
 
-      send :: msg Node -> Node -> Sem r seq
-      send msg node = do
-        lgDebug $ "Node " <> tshow node <> " received message " <> tshow msg
-        successor <- getSuccessor node
-        if successor == node
-        then do
-          newSucc <- runNode node $ arvyReceiveRequest msg node
-          setSuccessor node newSucc
-          lgDebug $ "Root found at " <> tshow node
-          return (cons node mempty)
-        else do
-          (newSucc, newMsg) <- runNode node $ arvyForwardRequest msg node successor
-          setSuccessor node newSucc
-          res <- send newMsg successor
-          return $ cons node res
+    runNode :: forall x . Node -> Sem r' x -> Sem r x
+    runNode node sem = interpret (\case
+        Get -> sendM $ readArray states node
+        Put v -> sendM $ writeArray states node v
+      ) (runner node undefined sem)
 
-      runNode :: forall x . Node -> Sem r' x -> Sem r x
-      runNode node sem = interpret (\case
-          Get -> sendM $ readArray states node
-          Put v -> sendM $ writeArray states node v
-        ) (runner node sem)
+    setSucc :: Node -> Node -> Sem r ()
+    setSucc node newSucc = do
+      lgDebug $ "Succ change: " <> tshow node <> " -> " <> tshow newSucc
+      sendM $ writeArray tree node newSucc
 
-      setSuccessor :: Node -> Node -> Sem r ()
-      setSuccessor node newSucc = do
-        lgDebug $ "Succ change: " <> tshow node <> " -> " <> tshow newSucc
-        sendM $ writeArray tree node newSucc
-
-      getSuccessor :: Node -> Sem r Node
-      getSuccessor node = sendM $ readArray tree node
-
-  return ((tree, states), C.mapM request)
+    getSucc :: Node -> Sem r Node
+    getSucc node = sendM $ readArray tree node
