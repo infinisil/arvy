@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Arvy.Local
-  ( LocalRunState
-  , runArvySpecLocal
+  ( runArvySpecLocal
   , runArvySpecLocal'
   ) where
 
@@ -11,10 +10,8 @@ import Arvy.Log
 import Polysemy
 import Polysemy.State
 import Data.Array.IO
-import Conduit
 import Data.MonoTraversable
 import Data.Sequences
-import qualified Data.Conduit.Combinators as C
 
 type LocalRunState s = (IOUArray Node Node, IOArray Node s)
 
@@ -39,10 +36,10 @@ runArvySpecLocal
      , Monoid seq )
   => ArvyData a
   -> ArvySpec a Node r
-  -> ConduitT Node seq (Sem r) ()
+  -> Sem r (Node -> Sem r seq)
 runArvySpecLocal dat spec = do
-  (_, conduit) <- lift $ runArvySpecLocal' dat spec
-  conduit
+  (_, conduit) <- runArvySpecLocal' dat spec
+  return conduit
 
 runArvySpecLocal'
   :: forall seq a r
@@ -54,7 +51,7 @@ runArvySpecLocal'
      , Monoid seq )
   => ArvyData a
   -> ArvySpec a Node r
-  -> Sem r (IOUArray Node Node, ConduitT Node seq (Sem r) ())
+  -> Sem r (IOUArray Node Node, Node -> Sem r seq)
 runArvySpecLocal' dat ArvySpec { .. } = do
   mutableData@(tree, _) <- sendM $ extractArvyDataArrays dat
   return (tree, go mutableData arvyBehavior arvyRunner)
@@ -65,8 +62,8 @@ runArvySpecLocal' dat ArvySpec { .. } = do
     => LocalRunState s
     -> ArvyBehavior Node msg r'
     -> (forall x . Node -> a -> Sem r' x -> Sem (State s ': r) x)
-    -> ConduitT Node seq (Sem r) ()
-  go (tree, states) ArvyBehavior { .. } runner = C.mapM request where
+    -> (Node -> Sem r seq)
+  go (tree, states) ArvyBehavior { .. } runner = request where
     request :: Node -> Sem r seq
     request node = do
       lgDebug $ "Request made by " <> tshow node

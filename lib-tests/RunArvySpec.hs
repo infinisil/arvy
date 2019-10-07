@@ -153,5 +153,6 @@ zeroRoot n = ArvyData
   }
 
 runArvy :: forall a r . (Member (Lift IO) r, HasSuccessor a) => ArvyData a -> GeneralArvy a (RandomFu ': Log ': r) -> [Node] -> Sem r [[Node]]
-runArvy param (GeneralArvy spec) requests = runIgnoringLog . runRandomIO . runConduit
-  $ yieldMany requests .| runArvySpecLocal param spec .| C.sinkList
+runArvy param (GeneralArvy spec) requests = runIgnoringLog $ runRandomIO $ do
+  request <- runArvySpecLocal param spec
+  runConduit $ yieldMany requests .| C.mapM request .| C.sinkList

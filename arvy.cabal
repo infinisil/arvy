@@ -40,15 +40,12 @@ library
                        Arvy.Local
                        Arvy.Log
                        Arvy.Weight
-  build-depends:       array
+  build-depends:       text
+                     , array
                      , mono-traversable
                      , containers
-                     , conduit
-                     , polysemy-RandomFu
-                     , random-fu
                      , co-log-core
                      , co-log
-                     , text
 
 library arvy-eval
   import:              defaults

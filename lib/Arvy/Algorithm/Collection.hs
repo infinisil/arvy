@@ -4,7 +4,10 @@ module Arvy.Algorithm.Collection
   ( arrow
   , ivy
   , ring
+  , RingArvyData(..)
   , minWeight
+  , inbetween
+  , module Data.Ratio
   ) where
 
 import           Arvy.Algorithm
