@@ -2,13 +2,9 @@
 {-# LANGUAGE DeriveFunctor #-}
 module Evaluation.Request where
 
-import Arvy.Local
-
-import Data.Monoid
 import Data.Functor
 import Data.Array.Unboxed
 import Prelude hiding ((.))
-import Control.Category
 import Conduit
 import qualified Data.Conduit.Combinators as C
 import Evaluation.Types
@@ -51,20 +47,20 @@ hopCount = C.map olength
 
 
 requestDists :: (Monad m, Element seq ~ Node, IsSequence seq) => Env -> ConduitT (NonNull seq) Double m ()
-requestDists Env { envWeights = weights } = C.map (\seq ->
+requestDists Env { envWeights = weights } = C.map (\s ->
                                                      sum $ zipWith (\from to ->
                                                                       weights ! (from, to))
-                                                     (otoList (Data.NonNull.init seq))
-                                                     (otoList (Data.NonNull.tail seq)))
+                                                     (otoList (Data.NonNull.init s))
+                                                     (otoList (Data.NonNull.tail s)))
 
 requestRatios :: (Monad m, Element seq ~ Node, IsSequence seq) => Env -> ConduitT (NonNull seq) Double m ()
-requestRatios Env { envWeights = weights } = C.map (\seq ->
-                                                     (/ weights ! ( Data.NonNull.head seq
-                                                                  , Data.NonNull.last seq))
+requestRatios Env { envWeights = weights } = C.map (\s ->
+                                                     (/ weights ! ( Data.NonNull.head s
+                                                                  , Data.NonNull.last s))
                                                      $ sum $ zipWith (\from to ->
                                                                       weights ! (from, to))
-                                                     (otoList (Data.NonNull.init seq))
-                                                     (otoList (Data.NonNull.tail seq)))
+                                                     (otoList (Data.NonNull.init s))
+                                                     (otoList (Data.NonNull.tail s)))
 
 --requestRatio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
 --requestRatio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take

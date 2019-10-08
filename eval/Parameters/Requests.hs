@@ -12,7 +12,6 @@ import qualified Data.Tree as T
 import Polysemy
 import Data.Array.Unboxed
 import Polysemy.RandomFu
-import Arvy.Local
 import Utils
 import Data.Ord
 import Data.List

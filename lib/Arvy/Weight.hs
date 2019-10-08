@@ -7,15 +7,15 @@ import           Polysemy
 
 type Weight = Double
 
-data Weights ib (m :: * -> *) a where
-  WeightTo :: Forwardable ia ib => ia -> Weights ib m Weight
+data LocalWeights ib (m :: * -> *) a where
+  WeightTo :: Forwardable ia ib => ia -> LocalWeights ib m Weight
 
-makeSem ''Weights
+makeSem ''LocalWeights
 
 {-# INLINE weightHandler #-}
 weightHandler
   :: (i -> Weight)
-  -> Weights i m x -> Sem r x
+  -> LocalWeights i m x -> Sem r x
 weightHandler f = \case
   WeightTo i -> return $ f (forward i)
 

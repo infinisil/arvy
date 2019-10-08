@@ -40,7 +40,7 @@ minWeight
 minWeight = GeneralArvy spec where
   spec :: forall i . ArvySpec a i r
   spec = ArvySpec
-    { arvyBehavior = behaviorType @(Weights i ': r) ArvyBehavior
+    { arvyBehavior = behaviorType @(LocalWeights i ': r) ArvyBehavior
       { arvyMakeRequest = \i _ -> return [i]
       , arvyForwardRequest = \prevs i _ -> do
           weights <- traverse weightTo prevs

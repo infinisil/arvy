@@ -9,7 +9,6 @@ import qualified Data.Random                   as R
 import qualified Data.Random.Internal.Source   as R
 import Polysemy.RandomFu
 import Data.Array.IArray
-import Arvy.Local
 import qualified Data.Tree as T
 import Data.Maybe
 import Arvy.Algorithm

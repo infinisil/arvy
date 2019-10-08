@@ -2,7 +2,7 @@
 {-# LANGUAGE BlockArguments #-}
 
 module Parameters.Weights
-  ( WeightsParameter(..)
+  ( WeightsParam(..)
   , ring
   , clique
   , unitEuclidian
@@ -12,7 +12,6 @@ module Parameters.Weights
   , shortestPathWeights
   ) where
 
-import Arvy.Local
 import Arvy.Algorithm
 import Evaluation.Types
 import Utils
@@ -35,26 +34,10 @@ import Data.Array.ST
 import Data.Array.Unboxed
 import qualified Data.Array as A
 
--- TODO: Differentiate between graphs that have an underlying graph and ones that don't
--- | A type for generating certain complete graph weights with access to effects in @r@
-data WeightsParameter r = WeightsParameter
-  { weightsId :: String
-  -- ^ The identifying string for this type of weights
-  , weightsDescription :: String
-  -- ^ The description of how these weights are generated
-  , weightsGet  :: NodeCount -> Sem r GraphWeights
-  -- ^ Generate weights for a certain number of nodes
+data WeightsParam r = WeightsParam
+  { weightsName :: String
+  , weightsGen :: NodeCount -> Sem r GraphWeights
   }
-
-instance Eq (WeightsParameter r) where
-  WeightsParameter { weightsId = id1 } == WeightsParameter { weightsId = id2 } = id1 == id2
-
-instance Ord (WeightsParameter r) where
-  WeightsParameter { weightsId = id1 } `compare` WeightsParameter { weightsId = id2 } = id1 `compare` id2
-
-instance Show (WeightsParameter r) where
-  show WeightsParameter { weightsDescription = desc } = desc
-
 
 -- TODO: Does this really not use any additional storage?
 -- | Generate weights for all vertex pairs from an underlying incomplete graph by calculating the shortest path between them. The Floyd-Warshall algorithm is used to compute this, so complexity is /O(m + n^3)/ with n being the number of vertices and m being the number of edges, no additional space except the resulting weights itself is used. Edge weights in the underlying graph are always assumed to be 1. Use 'symmetricClosure' on the argument to force an undirected graph.
@@ -83,19 +66,17 @@ shortestPathWeights n graph = runSTUArray $ do
 
   return weights
 
-ring :: WeightsParameter r
-ring = WeightsParameter
-  { weightsId = "ring"
-  , weightsDescription = "All nodes are connected in a circle with weight 1"
-  , weightsGet = \n ->
+ring :: WeightsParam r
+ring = WeightsParam
+  { weightsName = "ring"
+  , weightsGen = \n ->
       return $ shortestPathWeights n $ GA.symmetricClosure $ GA.circuit [0..n-1]
   }
 
-clique :: WeightsParameter r
-clique = WeightsParameter
-  { weightsId = "clique"
-  , weightsDescription = "Clique, all nodes are connected with weight 1 to all other nodes"
-  , weightsGet = \n ->
+clique :: WeightsParam r
+clique = WeightsParam
+  { weightsName = "clique"
+  , weightsGen = \n ->
       return $ array ((0, 0), (n - 1, n - 1))
         [ ((i, j), weight)
         | i <- [0 .. n - 1]
@@ -104,11 +85,11 @@ clique = WeightsParameter
         ]
   }
 
-unitEuclidian :: Member RandomFu r => Int -> WeightsParameter r
-unitEuclidian dim = WeightsParameter
-  { weightsId = "uniform" ++ show dim
-  , weightsDescription = "Euclidian distances for uniformly random points in a " ++ show dim ++ "-dimensional unit-hypercube"
-  , weightsGet = \n -> do
+-- | Should contain the N-dimensional point for each node, distance between them can be calculated on the fly, tree can be anything
+unitEuclidian :: Member RandomFu r => Int -> WeightsParam r
+unitEuclidian dim = WeightsParam
+  { weightsName = "uniform" ++ show dim
+  , weightsGen = \n -> do
       points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
       return $ array ((0, 0), (n - 1, n - 1))
         [ ((u, v), distance (points ! u) (points ! v))
@@ -135,11 +116,11 @@ newtype ErdosProb
 erdosProb :: ErdosProb -> Int -> Double
 erdosProb (ErdosProbEpsilon e) n = (1 + e) * log (fromIntegral n) / fromIntegral n
 
-erdosRenyi :: Members '[RandomFu, Trace] r => ErdosProb -> WeightsParameter r
-erdosRenyi prob@(ErdosProbEpsilon e) = WeightsParameter
-  { weightsId = "erdos" ++ show e
-  , weightsDescription = "Erdos Renyi G(n, p) graph, where every edge has probability p = (1 + " ++ show e ++ ") * ln n / n of existing"
-  , weightsGet = \n -> generate (erdosProb prob n) n
+-- | Stores underlying graph
+erdosRenyi :: Members '[RandomFu, Trace] r => ErdosProb -> WeightsParam r
+erdosRenyi prob@(ErdosProbEpsilon e) = WeightsParam
+  { weightsName = "erdos" ++ show e
+  , weightsGen = \n -> generate (erdosProb prob n) n
   } where
 
   generate :: Members '[RandomFu, Trace] r => Double -> Int -> Sem r GraphWeights
@@ -161,12 +142,11 @@ erdosRenyi prob@(ErdosProbEpsilon e) = WeightsParameter
         trace $ "Erdos Renyi graph wasn't connected with edge probability p=" ++ show p ++ " and node count n=" ++ show n ++ " retrying.."
         generate p n
 
-
-barabasiAlbert :: Member RandomFu r => Int -> WeightsParameter r
-barabasiAlbert m = WeightsParameter
-  { weightsId = "barabasi" ++ show m
-  , weightsDescription = "Barabasi Albert scale-free network random graph with m = " ++ show m
-  , weightsGet = \n -> do
+-- | Stores underlying graph
+barabasiAlbert :: Member RandomFu r => Int -> WeightsParam r
+barabasiAlbert m = WeightsParam
+  { weightsName = "barabasi" ++ show m
+  , weightsGen = \n -> do
       graph <- barabasiAlbertGen n m
       return $ shortestPathWeights n $ GA.symmetricClosure graph
   }

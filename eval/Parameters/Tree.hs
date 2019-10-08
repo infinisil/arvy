@@ -5,8 +5,6 @@ module Parameters.Tree where
 
 import Arvy.Algorithm
 import Evaluation.Types
-import           Arvy.Algorithm.Collection
-import           Arvy.Local
 import           Data.Array.Unboxed
 import           Data.Array.ST
 import Control.Monad.ST
@@ -29,46 +27,23 @@ import Data.MonoTraversable
 import Polysemy.Trace
 import Data.Ord
 
--- | A representation of how an initial spanning tree and node states @s@ is generated
-data InitialTreeParameter s r = InitialTreeParameter
-  { initialTreeId :: String
-  -- ^ The identifying string for this type of initial trees
-  , initialTreeDescription :: String
-  -- ^ The description of how this tree is generetade
-  , initialTreeGet  :: NodeCount -> GraphWeights -> Sem r (RootedTree, Array Node s)
-  -- ^ How to generate the tree and node states from a given number of nodes and their edge weights
+data TreeParam r = TreeParam
+  { treeName :: String
+  , treeGen :: NodeCount -> GraphWeights -> Sem r RootedTree
   }
 
-instance Eq (InitialTreeParameter s r) where
-  InitialTreeParameter { initialTreeId = id1 } == InitialTreeParameter { initialTreeId = id2 } = id1 == id2
-
-instance Ord (InitialTreeParameter s r) where
-  InitialTreeParameter { initialTreeId = id1 } `compare` InitialTreeParameter { initialTreeId = id2 } = id1 `compare` id2
-
-instance Show (InitialTreeParameter s r) where
-  show InitialTreeParameter { initialTreeDescription = desc } = desc
-
-ring :: InitialTreeParameter () r
-ring = InitialTreeParameter
-  { initialTreeId = "ring"
-  , initialTreeDescription = "Ring tree"
-  , initialTreeGet = \n _ ->
-      return ( listArray (0, n - 1) (0 : [0..])
-             , listArray (0, n - 1) (replicate n ()))
+ring :: TreeParam r
+ring = TreeParam
+  { treeName = "ring"
+  , treeGen = \n _ ->
+      return ( listArray (0, n - 1) (0 : [0..]) )
   }
 
 
-random :: Member RandomFu r => InitialTreeParameter () r
-random = random' ()
-
-random' :: (Member RandomFu r, Show a) => a -> InitialTreeParameter a r
-random' value = InitialTreeParameter
-  { initialTreeId = "random"
-  , initialTreeDescription = "Random spanning tree"
-  , initialTreeGet = \n _ -> do
-      tree <- randomSpanningTree n
-      return ( tree
-             , listArray (0, n - 1) (replicate n value) )
+random :: Member RandomFu r => TreeParam r
+random = TreeParam
+  { treeName = "random"
+  , treeGen = \n _ -> randomSpanningTree n
   }
 
 -- | Generates a uniform random spanning tree in a complete graph. Complexity /O(n * log(n))/
@@ -91,16 +66,11 @@ randomSpanningTree n = do
         -- Recurse while inserting the previously-excluded node to the included ones and deleting it from the excluded ones
         ((e, i):) <$> go (Set.insert e included) (Set.delete e excluded)
 
-shortPairs :: InitialTreeParameter () r
-shortPairs = shortPairs' ()
-
-shortPairs' :: Show a => a -> InitialTreeParameter a r
-shortPairs' value = InitialTreeParameter
-  { initialTreeId = "shortpairs"
-  , initialTreeDescription = "a tree that tries to get a short total distance between all pairs"
-  , initialTreeGet = \n w -> do
-      return ( shortPairDistances n w 0
-             , listArray (0, n - 1) (replicate n value) )
+shortPairs :: TreeParam r
+shortPairs = TreeParam
+  { treeName = "shortpairs"
+  , treeGen = \n w ->
+      return ( shortPairDistances n w 0 )
   }
 
 shortPairDistances :: NodeCount -> GraphWeights -> Node -> RootedTree
@@ -160,16 +130,11 @@ shortPairDistances n weights root = runST $ do
         writeArray nodes i new
 
 -- | Calculates a minimum spanning tree for a complete graph with the given weights using a modified Prim's algorithm. 0 is always the root node. Complexity /O(n^2)/.
-mst :: InitialTreeParameter () r
-mst = mst' ()
-
-mst' :: Show a => a -> InitialTreeParameter a r
-mst' value = InitialTreeParameter
-  { initialTreeId = "mst"
-  , initialTreeDescription = "Minimum spanning tree"
-  , initialTreeGet = \n weights ->
-      return ( array (0, n - 1) ((0, 0) : fmap swap (mstEdges n weights))
-             , listArray (0, n - 1) (replicate n value) )
+mst :: TreeParam r
+mst = TreeParam
+  { treeName = "mst"
+  , treeGen = \n weights ->
+      return ( array (0, n - 1) ((0, 0) : fmap swap (mstEdges n weights)) )
   }
 
 type MSTEntry = H.Entry Double Edge
@@ -276,37 +241,26 @@ bestPairDistanceTree n weights = do
       candidatesForMaxScore maxScore xs (k + 1)
     where percent = "[" ++ show (round $ (100 :: Double) / fromIntegral count * fromIntegral k :: Int) ++ "] "
 
-shortestPairs' :: (Member Trace r, Show a) => a -> InitialTreeParameter a r
-shortestPairs' value = InitialTreeParameter
-  { initialTreeId = "shortestpairs"
-  , initialTreeDescription = "A tree with the shortest pair distances"
-  , initialTreeGet = \n w -> reverse <$> bestPairDistanceTree n w >>= \case
-      edges@((root, _):_) -> return ( array (0, n - 1) ((root, root) : edges)
-                                    , listArray (0, n - 1) (replicate n value) )
+shortestPairs :: Member Trace r => TreeParam r
+shortestPairs = TreeParam
+  { treeName = "shortestpairs"
+  , treeGen = \n w -> reverse <$> bestPairDistanceTree n w >>= \case
+      edges@((root, _):_) -> return ( array (0, n - 1) ((root, root) : edges) )
       _ -> error "No root! Shouldn't occur"
   }
 
-shortestPairs :: Member Trace r => InitialTreeParameter () r
-shortestPairs = shortestPairs' ()
-
-bestStar' :: Show a => a -> InitialTreeParameter a r
-bestStar' value = InitialTreeParameter
-  { initialTreeId = "star"
-  , initialTreeDescription = "Best possible star tree"
-  , initialTreeGet = \n w -> do
+bestStar :: TreeParam r
+bestStar = TreeParam
+  { treeName = "star"
+  , treeGen = \n w -> do
       let center = bestStarCenter n w
-      return ( array (0, n - 1) ((center, center) : map (,center) ([ 0 .. center - 1 ] ++ [ center + 1 .. n - 1 ] ))
-             , listArray (0, n - 1) (replicate n value)
-             )
+      return ( array (0, n - 1) ((center, center) : map (,center) ([ 0 .. center - 1 ] ++ [ center + 1 .. n - 1 ] )) )
   } where
   bestStarCenter :: NodeCount -> GraphWeights -> Node
   bestStarCenter n weights = fst $ minimumByEx (comparing snd) (map (\i -> (i, starScore n weights i)) [0 .. n - 1])
 
   starScore :: NodeCount -> GraphWeights -> Node -> Double
   starScore n weights center = sum [ weights ! (center, i) | i <- [0 .. n - 1] ]
-
-bestStar :: InitialTreeParameter () r
-bestStar = bestStar' ()
 
 
 -- | Configuration for a recursive clique
@@ -344,9 +298,14 @@ recliqueWeights rc@RecliqueConf { .. } = listArray ((0, 0), (n - 1, n - 1))
       | a == b = 0
       | otherwise = 1 + dist (div a recliqueBase) (div b recliqueBase)
 
---reclique :: RecliqueConf -> InitialTreeParameter [Int] r
---reclique rc@RecliqueConf { .. } v = InitialTreeParameter
---  { initialTreeId = "reclique(" ++ show rc ++ ")"
+data RecliqueNode = RecliqueNode
+  { recliqueNodeIndex :: Node
+  , recliqueNodeConf :: RecliqueConf
+  }
+
+--reclique :: RecliqueConf -> TreeParam [Int] r
+--reclique rc@RecliqueConf { .. } v = TreeParam
+--  { treeName = "reclique(" ++ show rc ++ ")"
 --  , initialTreeDescription = "Recursive clique"
---  , initialTreeGet = \n w -> undefined
+--  , treeGen = \n w -> undefined
 --  }
