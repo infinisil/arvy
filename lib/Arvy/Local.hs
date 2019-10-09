@@ -26,6 +26,7 @@ extractArvyDataArrays ArvyData { .. } = do
   states <- newListArray nodeRange additionals
   return (tree, states)
 
+{-# INLINE runArvyspeclocal #-}
 runArvySpecLocal
   :: forall seq a r
    . ( Member (Lift IO) r
@@ -41,6 +42,7 @@ runArvySpecLocal dat spec = do
   (_, conduit) <- runArvySpecLocal' dat spec
   return conduit
 
+{-# INLINE runArvyspeclocal' #-}
 runArvySpecLocal'
   :: forall seq a r
    . ( Member (Lift IO) r
@@ -56,6 +58,7 @@ runArvySpecLocal' dat ArvySpec { .. } = do
   mutableData@(tree, _) <- sendM $ extractArvyDataArrays dat
   return (tree, go mutableData arvyBehavior arvyRunner)
   where
+  {-# INLINE go #-}
   go
     :: forall msg s r'
      . Show (msg Node)
@@ -64,6 +67,7 @@ runArvySpecLocal' dat ArvySpec { .. } = do
     -> (forall x . Node -> a -> Sem r' x -> Sem (State s ': r) x)
     -> (Node -> Sem r seq)
   go (tree, states) ArvyBehavior { .. } runner = request where
+    {-# INLINE request #-}
     request :: Node -> Sem r seq
     request node = do
       lgDebug $ "Request made by " <> tshow node
@@ -77,6 +81,7 @@ runArvySpecLocal' dat ArvySpec { .. } = do
         msg <- runNode node $ arvyMakeRequest node successor
         send msg successor
 
+    {-# INLINE send #-}
     send :: msg Node -> Node -> Sem r seq
     send msg node = do
       lgDebug $ "Node " <> tshow node <> " received message " <> tshow msg
@@ -93,16 +98,19 @@ runArvySpecLocal' dat ArvySpec { .. } = do
         res <- send newMsg successor
         return $ cons node res
 
+    {-# INLINE runNode #-}
     runNode :: forall x . Node -> Sem r' x -> Sem r x
     runNode node sem = interpret (\case
         Get -> sendM $ readArray states node
         Put v -> sendM $ writeArray states node v
       ) (runner node undefined sem)
 
+    {-# INLINE setSucc #-}
     setSucc :: Node -> Node -> Sem r ()
     setSucc node newSucc = do
       lgDebug $ "Succ change: " <> tshow node <> " -> " <> tshow newSucc
       sendM $ writeArray tree node newSucc
 
+    {-# INLINE getSucc #-}
     getSucc :: Node -> Sem r Node
     getSucc node = sendM $ readArray tree node

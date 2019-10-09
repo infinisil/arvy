@@ -116,6 +116,7 @@ executable arvy
                      , bytestring
                      , directory
                      , filepath
+                     , co-log
 
 test-suite arvy-lib-tests
   import:              defaults

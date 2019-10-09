@@ -9,6 +9,7 @@ import qualified Parameters.Tree           as Tree
 import qualified Parameters.Weights        as Weights
 
 import           Evaluation
+import Colog
 
 import           Arvy.Algorithm
 import           Arvy.Log
@@ -63,18 +64,22 @@ ringTree n = ArvyData
 main :: IO ()
 main = do
   results <- runM
-    $ runRandomSeed 0
     $ runTraceIO
-    $ runIgnoringLog
+    $ runLogBySeverity Debug (cmap fmtMessage logTextStdout)
     $ runGenParams GenParams
     { genParamShared = SharedParams
       { sharedParamRandomSeed = 0
-      , sharedParamRequestCount = 10000
+      , sharedParamRequestCount = 10
       , sharedParamRequests = Requests.random
-      , sharedParamEvals = [evalRequestHops]
+      , sharedParamEvals = [ evalRequestHops
+                           , evalRequestRatio
+                           ]
       }
-    , genParamInit = ringTree 10000
-    , genParamAlgs = [Alg.arrow]
+    , genParamNodeCount = 20
+    , genParamWeights = Weights.unitEuclidian 2
+    , genParamAlgs =
+      [ (Alg.ivy, Tree.random)
+      ]
     }
   plotResults "wip" results
 

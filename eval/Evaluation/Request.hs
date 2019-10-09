@@ -4,7 +4,7 @@ module Evaluation.Request where
 
 import Data.Functor
 import Data.Array.Unboxed
-import Prelude hiding ((.))
+import Prelude
 import Conduit
 import qualified Data.Conduit.Combinators as C
 import Evaluation.Types
@@ -15,12 +15,6 @@ import Data.MonoTraversable
 import Data.NonNull
 import Arvy.Algorithm
 import Data.Sequences
-
-data Request a = Request
-  { requestFrom :: Int
-  , requestRoot :: Int
-  , path :: a
-  } deriving (Functor, Show)
 
 traceRequests :: forall r x . Members '[Lift IO, Trace] r => ConduitT x x (Sem r) ()
 traceRequests = do
@@ -46,6 +40,7 @@ hopCount :: (Monad m, MonoFoldable seq) => ConduitT seq Int m ()
 hopCount = C.map olength
 
 
+
 requestDists :: (Monad m, Element seq ~ Node, IsSequence seq) => Env -> ConduitT (NonNull seq) Double m ()
 requestDists Env { envWeights = weights } = C.map (\s ->
                                                      sum $ zipWith (\from to ->
@@ -54,7 +49,7 @@ requestDists Env { envWeights = weights } = C.map (\s ->
                                                      (otoList (Data.NonNull.tail s)))
 
 requestRatios :: (Monad m, Element seq ~ Node, IsSequence seq) => Env -> ConduitT (NonNull seq) Double m ()
-requestRatios Env { envWeights = weights } = C.map (\s ->
+requestRatios Env { envWeights = weights } = C.filter ((>= 2) . olength) .| C.map (\s ->
                                                      (/ weights ! ( Data.NonNull.head s
                                                                   , Data.NonNull.last s))
                                                      $ sum $ zipWith (\from to ->
