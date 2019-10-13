@@ -13,24 +13,20 @@ import Data.Array.IO
 import Data.MonoTraversable
 import Data.Sequences
 
-type LocalRunState s = (IOUArray Node Node, IOArray Node s)
+type LocalRunState a = (IOUArray Node Node, IOArray Node a)
 
-extractArvyDataArrays :: ( HasSuccessor a, HasState a s ) => ArvyData a -> IO (LocalRunState s)
-extractArvyDataArrays ArvyData { .. } = do
+extractArvyDataArrays :: Member (Lift IO) r => ArvyData a -> (ArvyNodeData a -> Sem r s) -> Sem r (LocalRunState s)
+extractArvyDataArrays ArvyData { .. } initState = do
   let nodeRange = (0, arvyDataNodeCount - 1)
-      (successors, additionals) = unzip
-        [ (getSuccessor a, getState a)
-        | node <- range nodeRange
-        , let a = arvyDataNodeData node ]
-  tree <- newListArray nodeRange successors
-  states <- newListArray nodeRange additionals
-  return (tree, states)
+  treeArr <- sendM $ newListArray nodeRange (map (arvyNodeSuccessor . arvyDataNodeData) (range nodeRange))
+  states <- traverse (initState . arvyDataNodeData) (range nodeRange)
+  statesArr <- sendM $ newListArray nodeRange states
+  return (treeArr, statesArr)
 
-{-# INLINE runArvyspeclocal #-}
+{-# INLINE runArvySpecLocal #-}
 runArvySpecLocal
   :: forall seq a r
    . ( Member (Lift IO) r
-     , HasSuccessor a
      , LogMember r
      , Element seq ~ Node
      , SemiSequence seq
@@ -42,11 +38,10 @@ runArvySpecLocal dat spec = do
   (_, conduit) <- runArvySpecLocal' dat spec
   return conduit
 
-{-# INLINE runArvyspeclocal' #-}
+{-# INLINE runArvySpecLocal' #-}
 runArvySpecLocal'
   :: forall seq a r
    . ( Member (Lift IO) r
-     , HasSuccessor a
      , LogMember r
      , Element seq ~ Node
      , SemiSequence seq
@@ -55,7 +50,7 @@ runArvySpecLocal'
   -> ArvySpec a Node r
   -> Sem r (IOUArray Node Node, Node -> Sem r seq)
 runArvySpecLocal' dat ArvySpec { .. } = do
-  mutableData@(tree, _) <- sendM $ extractArvyDataArrays dat
+  mutableData@(tree, _) <- extractArvyDataArrays dat arvyInitState
   return (tree, go mutableData arvyBehavior arvyRunner)
   where
   {-# INLINE go #-}
@@ -64,7 +59,7 @@ runArvySpecLocal' dat ArvySpec { .. } = do
      . Show (msg Node)
     => LocalRunState s
     -> ArvyBehavior Node msg r'
-    -> (forall x . Node -> a -> Sem r' x -> Sem (State s ': r) x)
+    -> (forall x . (Node -> Weight) -> Sem r' x -> Sem (State s ': r) x)
     -> (Node -> Sem r seq)
   go (tree, states) ArvyBehavior { .. } runner = request where
     {-# INLINE request #-}
@@ -103,7 +98,7 @@ runArvySpecLocal' dat ArvySpec { .. } = do
     runNode node sem = interpret (\case
         Get -> sendM $ readArray states node
         Put v -> sendM $ writeArray states node v
-      ) (runner node undefined sem)
+      ) (runner (arvyNodeWeights $ arvyDataNodeData dat node) sem)
 
     {-# INLINE setSucc #-}
     setSucc :: Node -> Node -> Sem r ()

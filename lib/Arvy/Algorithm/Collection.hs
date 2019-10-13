@@ -4,14 +4,13 @@ module Arvy.Algorithm.Collection
   ( arrow
   , ivy
   , ring
-  , RingArvyData(..)
+  , RingNodeState(..)
   , minWeight
   , inbetween
   , module Data.Ratio
   ) where
 
 import           Arvy.Algorithm
-import           Arvy.Weight
 import           Polysemy
 import           Polysemy.State
 import Data.Foldable
@@ -21,24 +20,22 @@ import Data.Ratio
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
-arrow :: forall r a . HasState a () => GeneralArvy a r
+arrow :: forall r . GeneralArvy r
 arrow = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return (ArrowMessage i)
     , arvyForwardRequest = \(ArrowMessage sender) i _ -> return (sender, ArrowMessage i)
     , arvyReceiveRequest = \(ArrowMessage sender) _ -> return sender
     }
-  , arvyRunner = \_ _ -> raise
+  , arvyInitState = const (return ())
+  , arvyRunner = const raise
   }
 
 
 minWeight
-  :: forall r a
-   . ( HasWeights a
-     , HasState a () )
-  => GeneralArvy a r
+  :: forall r . GeneralArvy r
 minWeight = GeneralArvy spec where
-  spec :: forall i . ArvySpec a i r
+  spec :: forall i . ArvySpec () i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(LocalWeights i ': r) ArvyBehavior
       { arvyMakeRequest = \i _ -> return [i]
@@ -50,20 +47,22 @@ minWeight = GeneralArvy spec where
           weights <- traverse weightTo prevs
           return $ fst $ minimumBy (comparing snd) (zip prevs weights)
       }
-    , arvyRunner = \_ a -> reinterpret (weightHandler (getWeights a))
+    , arvyInitState = const (return ())
+    , arvyRunner = \weights -> reinterpret (weightHandler weights)
     }
 
 newtype IvyMessage i = IvyMessage i deriving Show
 
 -- | The Ivy Arvy algorithm, which always points all nodes back to the root node where the request originated from.
-ivy :: forall r a . HasState a () => GeneralArvy a r
+ivy :: forall r . GeneralArvy r
 ivy = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return (IvyMessage i)
     , arvyForwardRequest = \msg@(IvyMessage root) _ _ -> return (root, msg)
     , arvyReceiveRequest = \(IvyMessage root) _ -> return root
     }
-  , arvyRunner = \_ _ -> raise
+  , arvyInitState = const (return ())
+  , arvyRunner = const raise
   }
 
 
@@ -85,27 +84,29 @@ data RingNodeState
   | BridgeNode
   deriving Show
 
-data RingArvyData = RingArvyData !Node !RingNodeState
-
-instance HasState RingArvyData RingNodeState where
-  getState (RingArvyData _ s) = s
-
-ring :: forall r . SpecializedArvy NodeCount RingArvyData r
+ring :: forall r . SpecializedArvy NodeCount RingNodeState r
 ring = SpecializedArvy generator spec where
-  generator :: NodeCount -> Sem r (ArvyData RingArvyData)
+  generator :: NodeCount -> Sem r (ArvyData RingNodeState)
   generator n = return ArvyData
     { arvyDataNodeCount = n
-    , arvyDataNodeData = \node -> RingArvyData
-      ( case node `compare` root of
+    , arvyDataNodeData = \node -> ArvyNodeData
+      { arvyNodeSuccessor = case node `compare` root of
           LT -> node + 1
           EQ -> node
           GT -> node - 1
-      ) (if node == root - 1
-        then BridgeNode
-        else SemiNode
-      )
+      , arvyNodeAdditional = if node == root - 1
+          then BridgeNode
+          else SemiNode
+      , arvyNodeWeights = \other ->
+          let
+            low = min node other
+            mid = max node other
+            high = low + n
+            dist = min (mid - low) (high - mid)
+          in fromIntegral dist
+      }
     } where root = n `div` 2
-  spec :: ArvySpec RingArvyData i r
+  spec :: ArvySpec RingNodeState i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(State RingNodeState ': r) ArvyBehavior
       { arvyMakeRequest = \i _ -> get >>= \case
@@ -139,13 +140,14 @@ ring = SpecializedArvy generator spec where
             return root
           AfterCrossing { sender } -> return sender
       }
-    , arvyRunner = \_ _ -> id
+    , arvyInitState = \ArvyNodeData { .. } -> return arvyNodeAdditional
+    , arvyRunner = const id
     }
 
 data InbetweenMessage i = InbetweenMessage Int i (S.Seq i) deriving (Functor, Show)
 
 
-inbetween :: forall r a . HasState a () => Ratio Int -> GeneralArvy a r
+inbetween :: forall r . Ratio Int -> GeneralArvy r
 inbetween ratio = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return (InbetweenMessage 1 i S.empty)
@@ -160,7 +162,8 @@ inbetween ratio = GeneralArvy ArvySpec
       in return (f, InbetweenMessage newK newF newSeq)
     , arvyReceiveRequest = \(InbetweenMessage _ f _) _ -> return f
     }
-  , arvyRunner = \_ _ -> raise
+  , arvyInitState = const (return ())
+  , arvyRunner = const raise
   }
 
 --newtype WeightedInbetweenMessage i = WeightedInbetweenMessage (NonNull [(i, Double)]) deriving Show

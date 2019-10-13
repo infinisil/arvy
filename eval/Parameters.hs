@@ -19,9 +19,9 @@ import Polysemy
 import GHC.Word
 import Polysemy.Trace
 import Conduit
+import Evaluation.Request
 import Evaluation.Types
 import qualified Data.Conduit.Combinators as C
-import Arvy.Weight
 import Data.List
 import Data.Array.Unboxed
 import Polysemy.RandomFu
@@ -38,25 +38,12 @@ data GenParams r = GenParams
   { genParamShared :: SharedParams r
   , genParamNodeCount :: NodeCount
   , genParamWeights :: WeightsParam r
-  , genParamAlgs :: [(GenAlgParam StandardNodeData r, TreeParam r)]
+  , genParamAlgs :: [(GenAlgParam r, TreeParam r)]
   }
 
 --instance Show (GenParams r) where
 --  show GenParams { genParamShared = SharedParams { .. }, genParamGraph = GraphParam { .. }, .. } =
 --    graphName
-
-data StandardNodeData = StandardNodeData
-  { standardSucc :: Node
-  , standardWeights :: Node -> Weight
-  }
-
-instance HasState StandardNodeData ()
-
-instance HasSuccessor StandardNodeData where
-  getSuccessor = standardSucc
-
-instance HasWeights StandardNodeData where
-  getWeights = standardWeights
 
 --graphToData :: Member (Lift IO) r => Word32 -> GenParams (RandomFu ': r) -> Sem r (ArvyData StandardNodeData)
 --graphToData seed GenParams { .. } = do
@@ -77,13 +64,14 @@ evalsConduit prefix evals env = --C.iterM (trace . show) .|
                              return vals
                          ) evals)
 
-getWeightsArray :: HasWeights a => ArvyData a -> GraphWeights
+getWeightsArray :: ArvyData a -> GraphWeights
 getWeightsArray ArvyData { .. } = listArray ((0, 0), (arvyDataNodeCount - 1, arvyDataNodeCount - 1)) weights where
-  weights = [ getWeights (arvyDataNodeData u) v
+  weights = [ arvyNodeWeights (arvyDataNodeData u) v
             | u <- [0..arvyDataNodeCount - 1]
             , v <- [0..arvyDataNodeCount - 1]
             ]
 
+{-# INLINE runGenParams #-}
 runGenParams
   :: forall r
    . ( LogMember r
@@ -97,14 +85,16 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
     (map evalName sharedParamEvals)
     (map (zip (map (\(alg, tree) -> genAlgName alg ++ "-" ++ treeName tree) genParamAlgs)) series)
   where
-    runAlg :: GraphWeights -> (GenAlgParam StandardNodeData (RandomFu ': r), TreeParam (RandomFu ': r)) -> Sem r [Series]
+    {-# INLINE runAlg #-}
+    runAlg :: GraphWeights -> (GenAlgParam (RandomFu ': r), TreeParam (RandomFu ': r)) -> Sem r [Series]
     runAlg weights (GenAlgParam name (GeneralArvy spec), TreeParam { .. }) = do
       tree <- runRand $ treeGen genParamNodeCount weights
       let arvyData = ArvyData
             { arvyDataNodeCount = genParamNodeCount
-            , arvyDataNodeData = \node -> StandardNodeData
-              { standardSucc = tree ! node
-              , standardWeights = \other -> weights ! (node, other)
+            , arvyDataNodeData = \node -> ArvyNodeData
+              { arvyNodeSuccessor = tree ! node
+              , arvyNodeWeights = \other -> weights ! (node, other)
+              , arvyNodeAdditional = ()
               }
             }
 
@@ -118,7 +108,9 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
           evals = evalsConduit name sharedParamEvals env
       request <- runRand $ requestsGet sharedParamRequests env
       runRand $ runConduit $ C.replicateM sharedParamRequestCount request
-        .| C.mapM (\node -> (node `ncons`) <$> conduit node) .| evals
+        .| C.mapM (\node -> (node `ncons`) <$> conduit node) .| traceRequests .| evals
+
+    {-# INLINE runRand #-}
     runRand :: Sem (RandomFu ': r) x -> Sem r x
     runRand = runRandomSeed sharedParamRandomSeed
 
@@ -130,5 +122,5 @@ data SpecParams r = forall p a . SpecParams
   { specParamShared :: SharedParams r
   , specParamInit :: p
   , specParamAlg :: SpecAlgParam p a r
-  , specParamGenAlgs :: [GenAlgParam a r]
+  , specParamGenAlgs :: [GenAlgParam r]
   }

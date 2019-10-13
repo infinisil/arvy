@@ -3,32 +3,30 @@ module Parameters.Algorithm where
 import           Arvy.Algorithm
 import qualified Arvy.Algorithm.Collection as Arvy
 import           Data.Ratio
-import Arvy.Weight
 
-data GenAlgParam a r = GenAlgParam
+data GenAlgParam r = GenAlgParam
   { genAlgName :: String
-  , genAlg :: GeneralArvy a r
+  , genAlg     :: GeneralArvy r
   }
 
 data SpecAlgParam p a r = SpecAlgParam
   { specAlgName :: String
-  , specAlg :: SpecializedArvy p a r
+  , specAlg     :: SpecializedArvy p a r
   }
 
-arrow :: HasState a () => GenAlgParam a r
+arrow :: GenAlgParam r
 arrow = GenAlgParam "arrow" Arvy.arrow
 
-minWeight :: (HasWeights a, HasState a ()) => GenAlgParam a r
+minWeight :: GenAlgParam r
 minWeight = GenAlgParam "minWeight" Arvy.minWeight
 
-ivy :: HasState a () => GenAlgParam a r
+ivy :: GenAlgParam r
 ivy = GenAlgParam "ivy" Arvy.ivy
 
-
-ring :: SpecAlgParam NodeCount Arvy.RingArvyData r
+ring :: SpecAlgParam NodeCount Arvy.RingNodeState r
 ring = SpecAlgParam "ring" Arvy.ring
 
-inbetween :: HasState a () => Ratio Int -> GenAlgParam a r
+inbetween :: Ratio Int -> GenAlgParam r
 inbetween ratio = GenAlgParam ("inbetween-" ++ show ratio) (Arvy.inbetween ratio)
 
 {-

@@ -25,7 +25,6 @@ import Data.Random
 import Data.Word
 import qualified Data.Vector as V
 import System.Random.MWC
-import Arvy.Weight
 import Evaluation.Types
 
 type RootedTree = UArray Node Node
@@ -169,6 +168,7 @@ randomSetElement set = do
   return $ Set.elemAt r set
 
 -- | Run a RandomFu effect with a certain initial seed
+{-# INLINE runRandomSeed #-}
 runRandomSeed :: Members '[Lift IO] r => Word32 -> Sem (RandomFu ': r) a -> Sem r a
 runRandomSeed seed sem = do
   gen <- sendM $ initialize (V.singleton seed)

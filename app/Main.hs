@@ -1,57 +1,34 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Main where
 
-import           Arvy.Algorithm.Collection
 import           Parameters
-import qualified Parameters.Algorithm      as Alg
-import qualified Parameters.Requests       as Requests
-import qualified Parameters.Tree           as Tree
-import qualified Parameters.Weights        as Weights
+import qualified Parameters.Algorithm as Alg
+import qualified Parameters.Requests  as Requests
+import qualified Parameters.Tree      as Tree
+import qualified Parameters.Weights   as Weights
 
+import           Colog
 import           Evaluation
-import Colog
 
 import           Arvy.Algorithm
 import           Arvy.Log
-import           Arvy.Weight
-import           Control.Monad
+import           Evaluation.Plot
 import           Polysemy
-import qualified Polysemy.Async            as PA
-import           Polysemy.RandomFu
 import           Polysemy.Trace
 import           Prelude
-import           System.IO
-import           Utils
-import Data.List (intercalate)
-import Evaluation.Plot
 
 data RingNodeData = RingNodeData
   { ringSuccessor :: Node
   , ringWeights   :: Node -> Weight
   }
 
-instance Show (ArvyData RingNodeData) where
-  show (ArvyData { .. }) = concatMap showNode [0..arvyDataNodeCount - 1] where
-    showNode :: Node -> String
-    showNode node = "  " ++ show node ++ " -> " ++ show ringSuccessor
-      ++ ", weights: " ++ intercalate ", " (map (show . ringWeights) [0..arvyDataNodeCount - 1])
-      ++ "\n"
-      where RingNodeData { .. } = arvyDataNodeData node
-
-instance HasSuccessor RingNodeData where
-  getSuccessor = ringSuccessor
-
-instance HasWeights RingNodeData where
-  getWeights = ringWeights
-
-instance HasState RingNodeData ()
-
-ringTree :: NodeCount -> ArvyData RingNodeData
+ringTree :: NodeCount -> ArvyData ()
 ringTree n = ArvyData
   { arvyDataNodeCount = n
-  , arvyDataNodeData = \node -> RingNodeData
-    { ringSuccessor = if node == 0 then 0 else node - 1
-    , ringWeights = \other ->
+  , arvyDataNodeData = \node -> ArvyNodeData
+    { arvyNodeSuccessor = if node == 0 then 0 else node - 1
+    , arvyNodeAdditional = ()
+    , arvyNodeWeights = \other ->
         let
           low = min node other
           mid = max node other
@@ -60,25 +37,25 @@ ringTree n = ArvyData
         in fromIntegral dist
     }
   }
-
 main :: IO ()
 main = do
   results <- runM
     $ runTraceIO
-    $ runLogBySeverity Debug (cmap fmtMessage logTextStdout)
+    -- $ runLogBySeverity Error (cmap fmtMessage logTextStdout)
+    $ runIgnoringLog
     $ runGenParams GenParams
     { genParamShared = SharedParams
       { sharedParamRandomSeed = 0
-      , sharedParamRequestCount = 10
+      , sharedParamRequestCount = 100000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalRequestHops
                            , evalRequestRatio
                            ]
       }
-    , genParamNodeCount = 20
+    , genParamNodeCount = 1000
     , genParamWeights = Weights.unitEuclidian 2
     , genParamAlgs =
-      [ (Alg.ivy, Tree.random)
+      [ (Alg.arrow, Tree.random)
       ]
     }
   plotResults "wip" results

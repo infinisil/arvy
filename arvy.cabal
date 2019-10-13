@@ -39,7 +39,6 @@ library
                        Arvy.Algorithm.Collection
                        Arvy.Local
                        Arvy.Log
-                       Arvy.Weight
   build-depends:       text
                      , array
                      , mono-traversable

@@ -94,6 +94,7 @@ runLogBySeverity'' sev (LogAction action) = interpret $ \case
     warning msg = when (Warning >= sev) $ action msg
     err msg = when (Error >= sev) $ action msg
 
+{-# INLINE runIgnoringLog #-}
 runIgnoringLog :: Sem (Log ': r) x -> Sem r x
 runIgnoringLog = interpret $ \case
   LogDebug _ _ -> return ()

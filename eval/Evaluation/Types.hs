@@ -1,7 +1,6 @@
 module Evaluation.Types where
 
 import           Arvy.Algorithm
-import           Arvy.Weight
 import           Conduit
 import           Data.Array.IO
 import           Data.Array.Unboxed
