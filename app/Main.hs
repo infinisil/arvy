@@ -14,6 +14,7 @@ import           Arvy.Algorithm
 import           Arvy.Log
 import           Evaluation.Plot
 import           Polysemy
+import           Polysemy.Async
 import           Prelude
 
 data RingNodeData = RingNodeData
@@ -38,21 +39,25 @@ ringTree n = ArvyData
   }
 main :: IO ()
 main = do
-  results <- runM
-    $ runLogBySeverity Info (cmap fmtMessage logTextStdout)
-    $ runGenParams GenParams
-    { genParamShared = SharedParams
+  results <- runM .@ runAsyncInIO
+    $ runLogBySeverity Info (cmap messageText logTextStdout)
+    $ runSpecParams SpecParams
+    { specParamShared = SharedParams
       { sharedParamRandomSeed = 0
       , sharedParamRequestCount = 10000
       , sharedParamRequests = Requests.random
-      , sharedParamEvals = [ evalRequestHops
-                           , evalRequestRatio
+      , sharedParamEvals = [ evalRequestDist
+                           , evalRequestHops
                            ]
       }
-    , genParamNodeCount = 1000
-    , genParamWeights = Weights.unitEuclidian 2
-    , genParamAlgs =
+    --, specParamNodeCount = 1000
+    --, specParamWeights = Weights.unitEuclidian 2
+    , specParamAlg = Alg.ring
+    , specParamInit = 1000
+    , specParamGenAlgs =
       [ (Alg.ivy, Tree.random)
+      , (Alg.arrow, Tree.shortPairs)
+      , (Alg.arrow, Tree.bestStar)
       ]
     }
   plotResults "wip" results

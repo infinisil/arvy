@@ -8,15 +8,27 @@ module Arvy.Algorithm.Collection
   , minWeight
   , inbetween
   , module Data.Ratio
+  , random
+  , indexMeanScore
+  , IndexMeanType(..)
+  , localMinPairs
+  , reclique
   ) where
 
 import           Arvy.Algorithm
 import           Polysemy
 import           Polysemy.State
+import           Polysemy.RandomFu
+import Arvy.Log
 import Data.Foldable
 import Data.Ord (comparing)
 import qualified Data.Sequence as S
 import Data.Ratio
+import Data.Array.Unboxed
+import Data.Random.RVar
+import Data.Random.Distribution.Uniform
+import Data.MonoTraversable
+import Data.Bifunctor
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
@@ -31,10 +43,10 @@ arrow = GeneralArvy ArvySpec
   , arvyRunner = const raise
   }
 
-
-minWeight
-  :: forall r . GeneralArvy r
+{-# INLINE minWeight #-}
+minWeight :: forall r . GeneralArvy r
 minWeight = GeneralArvy spec where
+  {-# INLINE spec #-}
   spec :: forall i . ArvySpec () i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(LocalWeights i ': r) ArvyBehavior
@@ -186,27 +198,29 @@ inbetween ratio = GeneralArvy ArvySpec
 --    -- Find the first node that's less than ratio * total away, starting from the most recent node
 --    -- Nothing can't happen because desired is always >= 0, and ps will always contain the 0 element at the end
 --    Just (newSucc, _) = find ((<= total * ratio) . snd) ps
---
---
---random :: forall s r . (Member RandomFu r, Show s) => Arvy s r
---random = arvy @Seq @s ArvyInst
---  { arvyInitiate = \i _ -> return (S.singleton i)
---  , arvyTransmit = \s i _ -> do
---      suc <- select s
---      return (suc, fmap forward s |> i)
---  , arvyReceive = \s _ -> select s
---  } where
---  select :: ArvySelector Seq s r
---  select s = sampleRVar (randomSeq s)
---
----- | Selects a random element from a 'Seq' in /O(log n)/
---randomSeq :: Seq a -> RVar a
---randomSeq s = do
---  i <- uniformT 0 (S.length s - 1)
---  return $ S.index s i
---
---
---
+
+
+random :: forall r . Member RandomFu r => GeneralArvy r
+random = GeneralArvy ArvySpec
+  { arvyBehavior = behaviorType @r ArvyBehavior
+    { arvyMakeRequest = \i _ -> return (S.singleton i)
+    , arvyForwardRequest = \s i _ -> do
+        suc <- sampleRVar (randomSeq s)
+        return (suc, fmap forward s S.|> i)
+    , arvyReceiveRequest = \s _ -> sampleRVar (randomSeq s)
+    }
+  , arvyInitState = const (return ())
+  , arvyRunner = const raise
+  }
+
+-- | Selects a random element from a 'Seq' in /O(log n)/
+randomSeq :: S.Seq a -> RVar a
+randomSeq s = do
+  i <- uniformT 0 (S.length s - 1)
+  return $ S.index s i
+
+
+
 --newtype UtilityFunMessage i = UtilityFunMessage (NonNull [(Int, i)]) deriving Show
 --
 --utilityFun :: forall s r a . (Show s, Ord a) => (Int -> Double -> a) -> Arvy s r
@@ -227,115 +241,180 @@ inbetween ratio = GeneralArvy ArvySpec
 --    return best
 --
 ---- TODO: Special functions for utility functions `w * (1 + m * (1 - e ^ (-a * i)))` and `w * ln (i * a)`
---
---data IndexMean
---  = NoIndices
---  | IndexMean Double Int
---  deriving Show
---
---type IndexMeanState = (IndexMean, Int)
---
---initialIndexMeanState :: IndexMeanState
---initialIndexMeanState = (NoIndices, 0)
---
---logWeight :: Double -> IndexMean -> IndexMean
---logWeight w NoIndices = IndexMean w 1
---logWeight w (IndexMean x n) = IndexMean (adjustedX * adjustedI) (n + 1) where
---  n' = fromIntegral n
---  adjustedX = x ** (n' / (n' + 1))
---  adjustedI = w ** (1 / (n' + 1))
---
---getIndexScore :: IndexMean -> Maybe Double
---getIndexScore NoIndices = Nothing
---getIndexScore (IndexMean x _) = Just x
---
---data IndexMeanType
---  = HopIndexBased
---  | WeightSumBased
---  deriving Show
---
---data IndexMeanMessage i = IndexMeanMessage Double [(i, Maybe Double)] deriving Show
---
---{- |
---Algorithm that logs indices of request paths at nodes, aggregating them with the geometric mean which then influences which nodes get selected.
----}
---indexMeanScore :: Member Trace r => IndexMeanType -> (Int -> Double) -> Arvy IndexMeanState r
---indexMeanScore ty af = arvy @IndexMeanMessage ArvyInst
---  { arvyInitiate = \i s -> do
---      (indexMean, _) <- get
---      w <- edgePart s
---      return (IndexMeanMessage w (opoint (i, getIndexScore indexMean)))
---  , arvyTransmit = \msg@(IndexMeanMessage w xs) i s -> do
---      best <- select msg
---      w' <- edgePart s
---      indexMean <- gets fst
---      let newMessage = IndexMeanMessage (w + w') ((i, getIndexScore indexMean) : map (first forward) xs)
---      return (best, newMessage)
---  , arvyReceive = \msg _ -> do
---      best <- select msg
---      modify (second (+1))
---      return best
---  } where
---
---  select :: ArvySelector IndexMeanMessage IndexMeanState r
---  select (IndexMeanMessage w xs) = do
---    (oldIndexMean, k) <- get
---    let a = af k
---    let newIndexMean = logWeight w oldIndexMean
---    put (newIndexMean, k)
---    scores <- traverse (\(i, iScore) -> do
---                            weight <- weightTo i
---                            return (i, getScore a iScore weight)
---                        ) xs
---    return $ fst $ minimumBy (comparing snd) scores
---
---
---  getScore :: Double -> Maybe Double -> Double -> Double
---  getScore _ Nothing weight = weight
---  getScore a (Just iScore) weight = weight ** a * iScore ** (1 - a)
---
---  edgePart :: Member (LocalWeights i) r => i -> Sem r Double
---  edgePart = case ty of
---    HopIndexBased -> \_ -> return 1
---    WeightSumBased -> weightTo
---
---data LocalMinPairsMessage i = LocalMinPairsMessage [(i, Double)] [UArray Int Double] deriving Show
---
---localMinPairs :: (Member Trace r, Show s) => Arvy s r
---localMinPairs = arvy @LocalMinPairsMessage ArvyInst
---  { arvyInitiate = \i _ -> return (LocalMinPairsMessage [(i, 0)] [listArray (0, 0) [0]])
---  , arvyTransmit = \(LocalMinPairsMessage nodes dists) i _ -> do
---      let count = length nodes
---      --trace $ "We are at count " ++ show count
---      weights <- zipWith3 (\k (j, score) weight -> (k, j, score, weight * fromIntegral count + score)) [0 :: Int ..] nodes <$> traverse (weightTo.fst) nodes
---      --trace $ "Scores determined to be " ++ show weights
---      let (bestIndex, best, bestScore, _) = minimumBy (comparing (\(_, _, _, d) -> d)) weights
---      bestWeight <- weightTo best
---      --trace $ "Selected node at index " ++ show bestIndex ++ " with node score " ++ show bestScore ++ " and weight " ++ show bestWeight
---
---      let getDist u v
---            | u == v = 0
---            | u > v = getDist v u
---            | otherwise = dists !! v ! u
---
---      let newWeights = listArray (0, count - 1) (map (\j -> getDist j bestIndex + bestWeight) [0 :: Int ..])
---      --trace $ "New weights are " ++ show newWeights
---      let newDists = dists ++ [newWeights]
---
---      let newNodes = map (\(j, (n, s)) -> (forward n, s + newWeights ! j)) (zip [0 :: Int ..] nodes)
---      --trace $ "Updated old node scores to " ++ show newNodes
---      let newNodeScore = bestScore + fromIntegral count * bestWeight
---      let newNodes' = newNodes ++ [(i, newNodeScore)]
---      --trace $ "Added new node score " ++ show newNodeScore
---
---      --let newNodes' =
---      --let newArray = array ((0, 0), (count, count)) []
---
---      return (best, LocalMinPairsMessage newNodes' newDists)
---  , arvyReceive = \(LocalMinPairsMessage nodes _) _ -> do
---      let count = length nodes
---      --trace $ "We are at the final count " ++ show count
---      weights <- zipWith (\(j, score) weight -> (j, weight * fromIntegral count + score)) nodes <$> traverse (weightTo.fst) nodes
---      let best = fst $ minimumBy (comparing snd) weights
---      return best
---  }
+
+data IndexMean
+  = NoIndices
+  | IndexMean Double Int
+  deriving Show
+
+type IndexMeanState = (IndexMean, Int)
+
+initialIndexMeanState :: IndexMeanState
+initialIndexMeanState = (NoIndices, 0)
+
+logWeight :: Double -> IndexMean -> IndexMean
+logWeight w NoIndices = IndexMean w 1
+logWeight w (IndexMean x n) = IndexMean (adjustedX * adjustedI) (n + 1) where
+  n' = fromIntegral n
+  adjustedX = x ** (n' / (n' + 1))
+  adjustedI = w ** (1 / (n' + 1))
+
+getIndexScore :: IndexMean -> Maybe Double
+getIndexScore NoIndices = Nothing
+getIndexScore (IndexMean x _) = Just x
+
+data IndexMeanType
+  = HopIndexBased
+  | WeightSumBased
+  deriving Show
+
+data IndexMeanMessage i = IndexMeanMessage Double [(i, Maybe Double)] deriving Show
+
+{- |
+Algorithm that logs indices of request paths at nodes, aggregating them with the geometric mean which then influences which nodes get selected.
+-}
+indexMeanScore :: forall r . LogMember r => IndexMeanType -> (Int -> Double) -> GeneralArvy r
+indexMeanScore ty af = GeneralArvy spec where
+  {-# INLINE spec #-}
+  spec :: forall i . ArvySpec () i r
+  spec = ArvySpec
+    { arvyBehavior = behaviorType @(LocalWeights i ': State IndexMeanState ': r) ArvyBehavior
+      { arvyMakeRequest = \i s -> do
+          (indexMean, _) <- get
+          w <- edgePart s
+          return (IndexMeanMessage w (opoint (i, getIndexScore indexMean)))
+      , arvyForwardRequest = \msg@(IndexMeanMessage w xs) i s -> do
+          best <- select msg
+          w' <- edgePart s
+          indexMean <- gets fst
+          let newMessage = IndexMeanMessage (w + w') ((i, getIndexScore indexMean) : map (first forward) xs)
+          return (best, newMessage)
+      , arvyReceiveRequest = \msg _ -> do
+          best <- select msg
+          modify (second (+1))
+          return best
+      }
+    , arvyInitState = const (return initialIndexMeanState)
+    , arvyRunner = \weights -> interpret (weightHandler weights)
+    }
+
+  {-# INLINE select #-}
+  select :: IndexMeanMessage i -> Sem (LocalWeights i ': State IndexMeanState ': r) i
+  select (IndexMeanMessage w xs) = do
+    (oldIndexMean, k) <- get
+    let a = af k
+    let newIndexMean = logWeight w oldIndexMean
+    put (newIndexMean, k)
+    scores <- traverse (\(i, iScore) -> do
+                            weight <- weightTo i
+                            return (i, getScore a iScore weight)
+                        ) xs
+    return $ fst $ minimumBy (comparing snd) scores
+
+
+  {-# INLINE getScore #-}
+  getScore :: Double -> Maybe Double -> Double -> Double
+  getScore _ Nothing weight = weight
+  getScore a (Just iScore) weight = weight ** a * iScore ** (1 - a)
+
+  {-# INLINE edgePart #-}
+  edgePart :: forall r' i . Member (LocalWeights i) r' => i -> Sem r' Double
+  edgePart = case ty of
+    HopIndexBased -> \_ -> return 1
+    WeightSumBased -> weightTo
+
+
+
+data LocalMinPairsMessage i = LocalMinPairsMessage [(i, Double)] [UArray Int Double] deriving Show
+
+
+localMinPairs :: forall r . LogMember r => GeneralArvy r
+localMinPairs = GeneralArvy spec where
+  spec :: forall i . ArvySpec () i r
+  spec = ArvySpec
+    { arvyBehavior = behaviorType @(LocalWeights i ': r) ArvyBehavior
+      { arvyMakeRequest = \i _ -> return (LocalMinPairsMessage [(i, 0)] [listArray (0, 0) [0]])
+      , arvyForwardRequest = \(LocalMinPairsMessage nodes dists) i _ -> do
+          let count = length nodes
+          --trace $ "We are at count " ++ show count
+          weights <- zipWith3 (\k (j, score) weight -> (k, j, score, weight * fromIntegral count + score)) [0 :: Int ..] nodes <$> traverse (weightTo.fst) nodes
+          --trace $ "Scores determined to be " ++ show weights
+          let (bestIndex, best, bestScore, _) = minimumBy (comparing (\(_, _, _, d) -> d)) weights
+          bestWeight <- weightTo best
+          --trace $ "Selected node at index " ++ show bestIndex ++ " with node score " ++ show bestScore ++ " and weight " ++ show bestWeight
+
+          let getDist u v
+                | u == v = 0
+                | u > v = getDist v u
+                | otherwise = dists !! v ! u
+
+          let newWeights = listArray (0, count - 1) (map (\j -> getDist j bestIndex + bestWeight) [0 :: Int ..])
+          --trace $ "New weights are " ++ show newWeights
+          let newDists = dists ++ [newWeights]
+
+          let newNodes = map (\(j, (n, s)) -> (forward n, s + newWeights ! j)) (zip [0 :: Int ..] nodes)
+          --trace $ "Updated old node scores to " ++ show newNodes
+          let newNodeScore = bestScore + fromIntegral count * bestWeight
+          let newNodes' = newNodes ++ [(i, newNodeScore)]
+          --trace $ "Added new node score " ++ show newNodeScore
+
+          --let newNodes' =
+          --let newArray = array ((0, 0), (count, count)) []
+
+          return (best, LocalMinPairsMessage newNodes' newDists)
+      , arvyReceiveRequest = \(LocalMinPairsMessage nodes _) _ -> do
+          let count = length nodes
+          --trace $ "We are at the final count " ++ show count
+          weights <- zipWith (\(j, score) weight -> (j, weight * fromIntegral count + score)) nodes <$> traverse (weightTo.fst) nodes
+          let best = fst $ minimumBy (comparing snd) weights
+          return best
+      }
+    , arvyInitState = const (return ())
+    , arvyRunner = \weights -> reinterpret (weightHandler weights)
+    }
+
+-- | Configuration for a recursive clique
+data RecliqueConf = RecliqueConf
+  { recliqueFactor :: Double
+  -- ^ How much the distance increases with an additional level, should be > 1
+  , recliqueLevels :: Int
+  -- ^ How many levels there should be
+  , recliqueBase :: Int
+  -- ^ How many more nodes each level has
+  } deriving (Show)
+
+-- | How many nodes a reclique has
+recliqueNodeCount :: RecliqueConf -> NodeCount
+recliqueNodeCount RecliqueConf { .. } = recliqueBase ^ recliqueLevels
+
+recliqueLayers :: RecliqueConf -> Node -> [Int]
+recliqueLayers RecliqueConf { .. } = reverse . go recliqueLevels where
+  go :: Int -> Int -> [Int]
+  go 0 _ = []
+  go k x = b : go (k - 1) a where
+    (a, b) = divMod x recliqueBase
+
+-- | A recursive clique graph. This is a clique of `recliqueBase` nodes, where each node contains a clique of `recliqueBase` nodes itself, and so on, `recliqueLevels` deep. Different nodes that are in the same lowest layer have distance 1 between them. Nodes in a different lowest layer but the same second-lowest layer have distance `recliqueFactor` between them, one layer up distance `recliqueFactor ^^ 2`, and so on.
+recliqueWeights :: RecliqueConf -> Node -> Node -> Weight
+recliqueWeights RecliqueConf { .. } u v
+  | u == v = 0
+  | otherwise = recliqueFactor ^^ (dist u v - 1)
+  where
+    dist :: Int -> Int -> Int
+    dist a b
+      | a == b = 0
+      | otherwise = 1 + dist (div a recliqueBase) (div b recliqueBase)
+
+reclique :: forall r . SpecializedArvy RecliqueConf [Int] r
+reclique = SpecializedArvy gen spec where
+  gen :: RecliqueConf -> Sem r (ArvyData [Int])
+  gen conf = return ArvyData
+    { arvyDataNodeCount = recliqueNodeCount conf
+    , arvyDataNodeData = \node -> ArvyNodeData
+      { arvyNodeSuccessor = undefined
+      , arvyNodeAdditional = recliqueLayers conf node
+      , arvyNodeWeights = recliqueWeights conf node
+      }
+    }
+  spec :: ArvySpec [Int] i r
+  spec = undefined

@@ -42,6 +42,8 @@ library
   build-depends:       text
                      , array
                      , mono-traversable
+                     , polysemy-RandomFu
+                     , random-fu
                      , containers
                      , co-log-core
                      , co-log
