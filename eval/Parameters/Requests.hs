@@ -3,7 +3,8 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Parameters.Requests
   ( RequestsParameter(..)
-  , farthest
+  , farthestDist
+  , farthestRatio
   , random
   , pareto
   , interactive
@@ -21,22 +22,40 @@ import Data.Random
 import Evaluation.Types
 import Data.Array.MArray
 import Data.Text (Text)
+import Data.Maybe (fromJust)
 
 data RequestsParameter r = RequestsParameter
   { requestsName :: Text
   , requestsGet  :: Env -> Sem r (Sem r Int)
   }
 
-farthest :: Member (Lift IO) r => RequestsParameter r
-farthest = RequestsParameter
-  { requestsName = "farthest"
-  , requestsGet = \Env { envWeights = weights, envTree = tree' } -> do
+farthestDist :: Member (Lift IO) r => RequestsParameter r
+farthestDist = RequestsParameter
+  { requestsName = "farthestDist"
+  , requestsGet = \Env { envWeights = weights, envTree = tree' } -> return $ do
       tree <- sendM $ freeze tree'
-      return $ return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
+      return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
   } where
   -- | Computes the distance from all nodes to the root in /O(n)/
   lengthsToRoot :: GraphWeights -> RootedTree -> Array Int Double
   lengthsToRoot weights tree = loeb fs
+    where
+      fs :: Array Int (Array Int Double -> Double)
+      fs = aimap (\i o others -> if i == o then 0
+                   else others ! o + weights ! (i, o))
+                  tree
+
+farthestRatio :: Member (Lift IO) r => RequestsParameter r
+farthestRatio = RequestsParameter
+  { requestsName = "farthestRatio"
+  , requestsGet = \Env { envWeights = weights, envTree = tree' } -> return $ do
+      tree <- sendM $ freeze tree'
+      let root = fst $ fromJust $ find (uncurry (==)) $ assocs tree
+      return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot root weights tree))
+  } where
+  -- | Computes the distance from all nodes to the root in /O(n)/
+  lengthsToRoot :: Int -> GraphWeights -> RootedTree -> Array Int Double
+  lengthsToRoot root weights tree = aimap (\i dist -> if i == root then 0 else dist / weights ! (root, i)) $ loeb fs
     where
       fs :: Array Int (Array Int Double -> Double)
       fs = aimap (\i o others -> if i == o then 0

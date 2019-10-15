@@ -27,6 +27,9 @@ minWeight = GenAlgParam "minWeight" Arvy.minWeight
 ivy :: GenAlgParam r
 ivy = GenAlgParam "ivy" Arvy.ivy
 
+localMinPairs :: LogMember r => GenAlgParam r
+localMinPairs = GenAlgParam "localMinPairs" Arvy.localMinPairs
+
 ring :: SpecAlgParam NodeCount Arvy.RingNodeState r
 ring = SpecAlgParam "ring" Arvy.ring
 
@@ -38,6 +41,12 @@ inbetween ratio = GenAlgParam ("inbetween-" <> tshow ratio) (Arvy.inbetween rati
 
 dynamicStar :: LogMember r => GenAlgParam r
 dynamicStar = GenAlgParam "dynamicStar" Arvy.dynamicStar
+
+indexMeanHop :: LogMember r => GenAlgParam r
+indexMeanHop = GenAlgParam "indexMeanHop" (Arvy.indexMeanScore Arvy.HopIndexBased (const 0.2))
+
+indexMeanWeight :: LogMember r => GenAlgParam r
+indexMeanWeight = GenAlgParam "indexMeanWeight" (Arvy.indexMeanScore Arvy.WeightSumBased (const 0.2))
 
 {-
 

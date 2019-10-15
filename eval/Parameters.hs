@@ -14,7 +14,6 @@ import Arvy.Log
 import qualified Data.Sequence as S
 import Data.NonNull hiding (last)
 import qualified Data.Text as T
-import Data.Text (Text)
 
 import Polysemy
 import GHC.Word
@@ -29,7 +28,6 @@ import Utils
 import Polysemy.Async
 import qualified Control.Concurrent.Async as A
 import Data.Maybe (fromJust)
-import Control.Monad
 
 data SharedParams r = SharedParams
   { sharedParamRandomSeed :: Word32
