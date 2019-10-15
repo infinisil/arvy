@@ -36,8 +36,8 @@ traceRequests = do
           go k' prev
 
 
-hopCount :: (Monad m, MonoFoldable seq) => ConduitT seq Int m ()
-hopCount = C.map olength
+hopCount :: (Monad m, MonoFoldable seq) => ConduitT (NonNull seq) Int m ()
+hopCount = C.map (subtract 1 . olength)
 
 
 
