@@ -140,15 +140,15 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
   specArvyData <- runRand $ generator specParamInit
 
   -- Run the specialized algorithm
-  specAsync <- runAlg' specArvyData specAlg >>= await
+  specAsync <- runAlg' specArvyData specAlg
 
   -- Run the generalized algorithms on the same arvy data (minus the tree)
-  genAsyncs <- mapM (runAlg specArvyData >=> await) specParamGenAlgs
+  genAsyncs <- mapM (runAlg specArvyData) specParamGenAlgs
 
   -- Wait for the results, then transpose from "algorithm -> evaluation -> series"
   -- to "evaluation -> algorithm -> series"
-  --series <- transpose <$> mapM await (specAsync : genAsyncs)
-  let series = transpose (specAsync : genAsyncs)
+  series <- transpose <$> mapM await (specAsync : genAsyncs)
+  --let series = transpose (specAsync : genAsyncs)
   return $ EvalResults "TODO" $ zip
     -- The names of the evals
     (map evalName sharedParamEvals)

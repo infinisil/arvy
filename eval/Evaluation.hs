@@ -72,6 +72,16 @@ evalRequestDist = Eval
       .| C.map (\(i, w) -> (fromIntegral i, w))
   }
 
+evalRequestDist' :: Member (Lift IO) r => Eval r
+evalRequestDist' = Eval
+  { evalName = "Average request distance"
+  , evalFun = \env -> requestDists env
+      .| meanStddev
+      .| enumerate
+      .| logFilter env dataPoints
+      .| C.map (\(i, (w, _)) -> (fromIntegral i, w))
+  }
+
 evalRequestHops :: Member (Lift IO) r => Eval r
 evalRequestHops = Eval
   { evalName = "Average request hop count"

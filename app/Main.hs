@@ -2,15 +2,16 @@
 module Main where
 
 import           Parameters
-import qualified Parameters.Algorithm as Alg
-import qualified Parameters.Requests  as Requests
-import qualified Parameters.Tree      as Tree
-import qualified Parameters.Weights   as Weights
+import qualified Parameters.Algorithm      as Alg
+import qualified Parameters.Requests       as Requests
+import qualified Parameters.Tree           as Tree
+import qualified Parameters.Weights        as Weights
 
 import           Colog
 import           Evaluation
 
 import           Arvy.Algorithm
+import           Arvy.Algorithm.Collection
 import           Arvy.Log
 import           Evaluation.Plot
 import           Polysemy
@@ -44,20 +45,25 @@ main = do
     $ runSpecParams SpecParams
     { specParamShared = SharedParams
       { sharedParamRandomSeed = 0
-      , sharedParamRequestCount = 10000
+      , sharedParamRequestCount = 100000
       , sharedParamRequests = Requests.random
-      , sharedParamEvals = [ evalRequestDist
+      , sharedParamEvals = [ evalRequestDist'
                            , evalRequestHops
                            ]
       }
     --, specParamNodeCount = 1000
     --, specParamWeights = Weights.unitEuclidian 2
-    , specParamAlg = Alg.ring
-    , specParamInit = 1000
+    , specParamAlg = Alg.reclique
+    , specParamInit = RecliqueConf
+      { recliqueFactor = 3
+      , recliqueLevels = 11
+      , recliqueBase = 2
+      }
     , specParamGenAlgs =
-      [ (Alg.ivy, Tree.random)
-      , (Alg.arrow, Tree.shortPairs)
-      , (Alg.arrow, Tree.bestStar)
+      [
+      (Alg.ivy, Tree.random),
+      (Alg.arrow, Tree.shortPairs),
+      (Alg.arrow, Tree.bestStar)
       ]
     }
   plotResults "wip" results
