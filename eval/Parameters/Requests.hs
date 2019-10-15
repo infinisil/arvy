@@ -1,5 +1,6 @@
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
 module Parameters.Requests
   ( RequestsParameter(..)
   , farthest
@@ -19,26 +20,16 @@ import Data.Random.Distribution.Uniform
 import Data.Random
 import Evaluation.Types
 import Data.Array.MArray
+import Data.Text (Text)
 
 data RequestsParameter r = RequestsParameter
-  { requestsId :: String
-  , requestsDescription :: String
+  { requestsName :: Text
   , requestsGet  :: Env -> Sem r (Sem r Int)
   }
 
-instance Eq (RequestsParameter r) where
-  RequestsParameter { requestsId = id1 } == RequestsParameter { requestsId = id2 } = id1 == id2
-
-instance Ord (RequestsParameter r) where
-  RequestsParameter { requestsId = id1 } `compare` RequestsParameter { requestsId = id2 } = id1 `compare` id2
-
-instance Show (RequestsParameter r) where
-  show RequestsParameter { requestsDescription = desc } = desc
-
 farthest :: Member (Lift IO) r => RequestsParameter r
 farthest = RequestsParameter
-  { requestsId = "farthest"
-  , requestsDescription = "Farthest"
+  { requestsName = "farthest"
   , requestsGet = \Env { envWeights = weights, envTree = tree' } -> do
       tree <- sendM $ freeze tree'
       return $ return $ fst $ maximumBy (comparing snd) (assocs (lengthsToRoot weights tree))
@@ -54,8 +45,7 @@ farthest = RequestsParameter
 
 random :: Member RandomFu r => RequestsParameter r
 random = RequestsParameter
-  { requestsId = "random"
-  , requestsDescription = "Uniformly random requests"
+  { requestsName = "random"
   , requestsGet = return . get
   } where
   get :: Member RandomFu r => Env -> Sem r Int
@@ -76,8 +66,7 @@ instance (Floating a, Distribution StdUniform a) => Distribution Lorenz a where
 
 pareto :: forall r . Member RandomFu r => RequestsParameter r
 pareto = RequestsParameter
-  { requestsId = "pareto"
-  , requestsDescription = "80-20 Pareto distribution (alpha = log 5 / log 4)"
+  { requestsName = "pareto"
   , requestsGet = \Env { envNodeCount = n } -> do
       -- Generate a random node order such that in graphs whose node indices indicate the graph structure this distribution is truly random
       order <- listArray @UArray (0, n - 1) <$> sampleRVar (shuffle [0 .. n - 1])
@@ -91,8 +80,7 @@ pareto = RequestsParameter
 
 interactive :: Member (Lift IO) r => RequestsParameter r
 interactive = RequestsParameter
-  { requestsId = "interactive"
-  , requestsDescription = "Interactive"
+  { requestsName = "interactive"
   , requestsGet = \Env { envTree = tree' } -> return $ do
       tree <- sendM $ freeze tree'
       -- TODO: Use haskeline, add haskeline effect to polysemy

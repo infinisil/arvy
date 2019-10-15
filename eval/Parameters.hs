@@ -1,7 +1,8 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Parameters where
 
@@ -14,10 +15,10 @@ import Parameters.Tree
 import Arvy.Log
 import qualified Data.Sequence as S
 import Data.NonNull hiding (last)
+import qualified Data.Text as Text
 
 import Polysemy
 import GHC.Word
-import Polysemy.Trace
 import Conduit
 import Evaluation.Request
 import Evaluation.Types
@@ -51,18 +52,18 @@ data GenParams r = GenParams
 --  tree <- runRandomSeed seed $ treeGen graphTree graphNodeCount weights
 
 evalsConduit
-  :: ( Traversable f
-     , Member Trace r )
-  => String
+  :: forall r f
+   . ( Traversable f
+     , LogMember r )
+  => Text.Text
   -> f (Eval r)
   -> Env
   -> ConduitT (NonNull (S.Seq Node)) Void (Sem r) (f Series)
-evalsConduit prefix evals env = --C.iterM (trace . show) .|
-  sequenceConduits (fmap (\eval -> do
-                             vals <- evalFun eval env .| C.sinkList
-                             lift $ trace $ prefix ++ ", " ++ evalName eval ++ ": " ++ show (last vals)
-                             return vals
-                         ) evals)
+evalsConduit prefix evals env = sequenceConduits (fmap runEval evals) where
+  runEval eval = do
+    vals <- evalFun eval env .| C.sinkList
+    lift $ lgInfo $ prefix <> ", " <> evalName eval <> ": " <> tshow (last vals)
+    return vals
 
 getWeightsArray :: ArvyData a -> GraphWeights
 getWeightsArray ArvyData { .. } = listArray ((0, 0), (arvyDataNodeCount - 1, arvyDataNodeCount - 1)) weights where
@@ -75,7 +76,7 @@ getWeightsArray ArvyData { .. } = listArray ((0, 0), (arvyDataNodeCount - 1, arv
 runGenParams
   :: forall r
    . ( LogMember r
-     , Members '[Lift IO, Trace] r )
+     , Member (Lift IO) r )
   => GenParams (RandomFu ': r)
   -> Sem r EvalResults
 runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
@@ -83,7 +84,7 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
   series <- transpose <$> mapM (runAlg weights) genParamAlgs
   return $ EvalResults "TODO" $ zip
     (map evalName sharedParamEvals)
-    (map (zip (map (\(alg, tree) -> genAlgName alg ++ "-" ++ treeName tree) genParamAlgs)) series)
+    (map (zip (map (\(alg, tree) -> genAlgName alg <> "-" <> treeName tree) genParamAlgs)) series)
   where
     {-# INLINE runAlg #-}
     runAlg :: GraphWeights -> (GenAlgParam (RandomFu ': r), TreeParam (RandomFu ': r)) -> Sem r [Series]

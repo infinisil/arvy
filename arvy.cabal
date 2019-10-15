@@ -89,6 +89,7 @@ library arvy-eval
                      , mono-traversable
                      , lens
                      , palette
+                     , text
 
 executable arvy
   import:              defaults

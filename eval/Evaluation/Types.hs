@@ -6,6 +6,7 @@ import           Data.Array.IO
 import           Data.Array.Unboxed
 import           Data.NonNull
 import qualified Data.Sequence      as S
+import           Data.Text          (Text)
 import           Polysemy
 
 type Edge = (Node, Node)
@@ -21,11 +22,11 @@ data Env = Env
 type Series = [(Double, Double)]
 
 data Eval r = Eval
-  { evalName :: String
+  { evalName :: Text
   , evalFun  :: Env -> ConduitT (NonNull (S.Seq Node)) (Double, Double) (Sem r) ()
   }
 
 data EvalResults = EvalResults
-  { evalResultsName :: String
-  , evalResults     :: [(String, [(String, Series)])]
+  { evalResultsName :: Text
+  , evalResults     :: [(Text, [(Text, Series)])]
   }

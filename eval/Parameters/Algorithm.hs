@@ -1,16 +1,20 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Parameters.Algorithm where
 
 import           Arvy.Algorithm
 import qualified Arvy.Algorithm.Collection as Arvy
+import           Arvy.Log
 import           Data.Ratio
+import           Data.Text                 (Text)
 
 data GenAlgParam r = GenAlgParam
-  { genAlgName :: String
+  { genAlgName :: Text
   , genAlg     :: GeneralArvy r
   }
 
 data SpecAlgParam p a r = SpecAlgParam
-  { specAlgName :: String
+  { specAlgName :: Text
   , specAlg     :: SpecializedArvy p a r
   }
 
@@ -27,7 +31,7 @@ ring :: SpecAlgParam NodeCount Arvy.RingNodeState r
 ring = SpecAlgParam "ring" Arvy.ring
 
 inbetween :: Ratio Int -> GenAlgParam r
-inbetween ratio = GenAlgParam ("inbetween-" ++ show ratio) (Arvy.inbetween ratio)
+inbetween ratio = GenAlgParam ("inbetween-" <> tshow ratio) (Arvy.inbetween ratio)
 
 {-
 

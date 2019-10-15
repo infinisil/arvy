@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Evaluation
   ( module Evaluation.Tree
   , module Evaluation.Utils

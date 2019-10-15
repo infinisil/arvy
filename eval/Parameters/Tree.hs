@@ -1,5 +1,6 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module Parameters.Tree where
 
@@ -24,11 +25,12 @@ import qualified Data.Sequence as Seq
 import Data.Foldable (foldr')
 import Data.STRef
 import Data.MonoTraversable
-import Polysemy.Trace
 import Data.Ord
+import Data.Text (Text)
+import Arvy.Log
 
 data TreeParam r = TreeParam
-  { treeName :: String
+  { treeName :: Text
   , treeGen :: NodeCount -> GraphWeights -> Sem r RootedTree
   }
 
@@ -222,7 +224,7 @@ pruferHalfPairDistances n p weights maxScore = runST $ do
 
 
 -- | Returns the edges of a spanning tree with minimum total pair distance. Complexity /O(n^n)/
-bestPairDistanceTree :: forall r . Member Trace r => NodeCount -> GraphWeights -> Sem r [Edge]
+bestPairDistanceTree :: forall r . LogMember r => NodeCount -> GraphWeights -> Sem r [Edge]
 bestPairDistanceTree n weights = do
   cands <- candidatesForMaxScore infinity (allPruferCodes n) 0
   return $ pruferToTree n (last cands)
@@ -232,16 +234,16 @@ bestPairDistanceTree n weights = do
   candidatesForMaxScore _ [] _ = return []
   candidatesForMaxScore maxScore (x:xs) k = case pruferHalfPairDistances n x weights maxScore of
     Just score -> do
-      trace $ percent ++ "New half score: " ++ show score ++ " with " ++ show (reverse $ pruferToTree n x)
+      lgDebug $ percent <> "New half score: " <> tshow score <> " with " <> tshow (reverse $ pruferToTree n x)
       rest <- candidatesForMaxScore score xs (k + 1)
       return (x : rest)
     Nothing -> do
       when (k `mod` 500000 == 0) $
-        trace $ percent ++ "No better score yet"
+        lgDebug $ percent <> "No better score yet"
       candidatesForMaxScore maxScore xs (k + 1)
-    where percent = "[" ++ show (round $ (100 :: Double) / fromIntegral count * fromIntegral k :: Int) ++ "] "
+    where percent = "[" <> tshow (round $ (100 :: Double) / fromIntegral count * fromIntegral k :: Int) <> "] "
 
-shortestPairs :: Member Trace r => TreeParam r
+shortestPairs :: LogMember r => TreeParam r
 shortestPairs = TreeParam
   { treeName = "shortestpairs"
   , treeGen = \n w -> reverse <$> bestPairDistanceTree n w >>= \case

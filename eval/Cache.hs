@@ -1,11 +1,12 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Cache where
 
 import Data.Store
 import Polysemy
-import Polysemy.Trace
 import System.Directory
+import Arvy.Log
 import System.FilePath
 import qualified Data.ByteString as BS
 
@@ -15,7 +16,7 @@ instance Show CacheKey where
   show (CacheKey key) = key
 
 
-cache :: forall a r . (Members '[Lift IO, Trace] r, Store a) => CacheKey -> Sem r a -> Sem r a
+cache :: forall a r . (LogMember r, Member (Lift IO) r, Store a) => CacheKey -> Sem r a -> Sem r a
 cache key compute = do
   path <- sendM $ (</> unCacheKey key) <$> getXdgDirectory XdgCache "arvy"
   exists <- sendM $ doesFileExist path
@@ -23,16 +24,16 @@ cache key compute = do
     contents <- sendM $ BS.readFile path
     case decode contents of
       Left err -> do
-        trace $ "Error decoding cache file " ++ show path ++ ": " ++ show err
+        lgError $ "Error decoding cache file " <> tshow path <> ": " <> tshow err
         computeAndStore path
       Right value -> do
-        trace $ "Reusing cached value for " ++ show key
+        lgDebug $ "Reusing cached value for " <> tshow key
         return value
     else computeAndStore path
   where
     computeAndStore :: FilePath -> Sem r a
     computeAndStore path = do
-      trace $ "Computing " ++ show key ++ "..."
+      lgDebug $ "Computing " <> tshow key <> "..."
       !value <- compute
       let encoded = encode value
       sendM $ createDirectoryIfMissing True (takeDirectory path)

@@ -1,5 +1,6 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Parameters.Weights
   ( WeightsParam(..)
@@ -15,10 +16,10 @@ module Parameters.Weights
 import Arvy.Algorithm
 import Evaluation.Types
 import Utils
+import Arvy.Log
 
 import Polysemy
 import Polysemy.RandomFu
-import Polysemy.Trace
 import qualified Algebra.Graph.Class as G
 import qualified Algebra.Graph.AdjacencyIntMap as GA
 import Data.Array.IArray (elems)
@@ -33,9 +34,10 @@ import Data.Array.MArray
 import Data.Array.ST
 import Data.Array.Unboxed
 import qualified Data.Array as A
+import Data.Text (Text)
 
 data WeightsParam r = WeightsParam
-  { weightsName :: String
+  { weightsName :: Text
   , weightsGen :: NodeCount -> Sem r GraphWeights
   }
 
@@ -88,7 +90,7 @@ clique = WeightsParam
 -- | Should contain the N-dimensional point for each node, distance between them can be calculated on the fly, tree can be anything
 unitEuclidian :: Member RandomFu r => Int -> WeightsParam r
 unitEuclidian dim = WeightsParam
-  { weightsName = "uniform" ++ show dim
+  { weightsName = "uniform" <> tshow dim
   , weightsGen = \n -> do
       points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
       return $ array ((0, 0), (n - 1, n - 1))
@@ -117,13 +119,13 @@ erdosProb :: ErdosProb -> Int -> Double
 erdosProb (ErdosProbEpsilon e) n = (1 + e) * log (fromIntegral n) / fromIntegral n
 
 -- | Stores underlying graph
-erdosRenyi :: Members '[RandomFu, Trace] r => ErdosProb -> WeightsParam r
+erdosRenyi :: ( LogMember r, Member RandomFu r) => ErdosProb -> WeightsParam r
 erdosRenyi prob@(ErdosProbEpsilon e) = WeightsParam
-  { weightsName = "erdos" ++ show e
+  { weightsName = "erdos" <> tshow e
   , weightsGen = \n -> generate (erdosProb prob n) n
   } where
 
-  generate :: Members '[RandomFu, Trace] r => Double -> Int -> Sem r GraphWeights
+  generate :: ( LogMember r, Member RandomFu r ) => Double -> Int -> Sem r GraphWeights
   generate p n = do
     -- Generate the random edges from lower to higher node indices only
     edges <- forM [ (u, v) | u <- [0 .. n - 1], v <- [u + 1 .. n - 1]] $ \edge -> do
@@ -139,13 +141,13 @@ erdosRenyi prob@(ErdosProbEpsilon e) = WeightsParam
       then return weights
       else do
         -- Try again if not connected
-        trace $ "Erdos Renyi graph wasn't connected with edge probability p=" ++ show p ++ " and node count n=" ++ show n ++ " retrying.."
+        lgWarning $ "Erdos Renyi graph wasn't connected with edge probability p=" <> tshow p <> " and node count n=" <> tshow n <> " retrying.."
         generate p n
 
 -- | Stores underlying graph
 barabasiAlbert :: Member RandomFu r => Int -> WeightsParam r
 barabasiAlbert m = WeightsParam
-  { weightsName = "barabasi" ++ show m
+  { weightsName = "barabasi" <> tshow m
   , weightsGen = \n -> do
       graph <- barabasiAlbertGen n m
       return $ shortestPathWeights n $ GA.symmetricClosure graph

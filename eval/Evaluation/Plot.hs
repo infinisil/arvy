@@ -10,13 +10,15 @@ import Graphics.Rendering.Chart.Easy
 import System.Directory
 import System.FilePath
 import Data.Colour.Palette.ColorSet
+import qualified Data.Text as T
+import Data.Text (Text)
 
 plotResults :: FilePath -> EvalResults -> IO ()
 plotResults path (EvalResults name results) = do
 
   let layouts = map toLayout results
       layouts' = layouts
-        & ix 0.layout_title .~ name
+        & ix 0.layout_title .~ T.unpack name
         -- & _init.traverse.layout_legend .~ Nothing
       stacked = def
         & slayouts_layouts .~ map StackedLayout layouts'
@@ -34,9 +36,9 @@ plotResults path (EvalResults name results) = do
     axisStyle :: AxisStyle = def
       & axis_label_style.font_size .~ 20
 
-    toLayout :: (String, [(String, Series)]) -> Layout Double Double
+    toLayout :: (Text, [(Text, Series)]) -> Layout Double Double
     toLayout (title, series) = def
-      & layout_y_axis.laxis_title .~ title
+      & layout_y_axis.laxis_title .~ T.unpack title
       & layout_plots .~ zipWith mkPlot lineColors series
       & layout_title_style.font_size .~ 50
       & layout_title_style.font_weight .~ FontWeightNormal
@@ -51,7 +53,7 @@ plotResults path (EvalResults name results) = do
       & layout_margin .~ 40
 
     mkPlot color (n, ser) = toPlot $ def
-      & plot_lines_title .~ n
+      & plot_lines_title .~ T.unpack n
       & plot_lines_values .~ [ser]
       & plot_lines_style.line_color .~ color
       & plot_lines_style.line_width .~ 3

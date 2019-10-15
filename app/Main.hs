@@ -14,7 +14,6 @@ import           Arvy.Algorithm
 import           Arvy.Log
 import           Evaluation.Plot
 import           Polysemy
-import           Polysemy.Trace
 import           Prelude
 
 data RingNodeData = RingNodeData
@@ -40,13 +39,11 @@ ringTree n = ArvyData
 main :: IO ()
 main = do
   results <- runM
-    $ runTraceIO
-    -- $ runLogBySeverity Error (cmap fmtMessage logTextStdout)
-    $ runIgnoringLog
+    $ runLogBySeverity Info (cmap fmtMessage logTextStdout)
     $ runGenParams GenParams
     { genParamShared = SharedParams
       { sharedParamRandomSeed = 0
-      , sharedParamRequestCount = 100000
+      , sharedParamRequestCount = 10000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalRequestHops
                            , evalRequestRatio
@@ -55,7 +52,7 @@ main = do
     , genParamNodeCount = 1000
     , genParamWeights = Weights.unitEuclidian 2
     , genParamAlgs =
-      [ (Alg.arrow, Tree.random)
+      [ (Alg.ivy, Tree.random)
       ]
     }
   plotResults "wip" results

@@ -1,34 +1,34 @@
-{-# LANGUAGE BangPatterns  #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Evaluation.Request where
 
-import Data.Functor
 import Data.Array.Unboxed
 import Prelude
 import Conduit
 import qualified Data.Conduit.Combinators as C
 import Evaluation.Types
 import Polysemy
-import Polysemy.Trace
 import Data.Time
 import Data.MonoTraversable
 import Data.NonNull
 import Arvy.Algorithm
 import Data.Sequences
+import Arvy.Log
 
-traceRequests :: forall r x . Members '[Lift IO, Trace] r => ConduitT x x (Sem r) ()
+traceRequests :: forall r x . ( LogMember r, Member (Lift IO) r ) => ConduitT x x (Sem r) ()
 traceRequests = do
   time <- lift $ sendM getCurrentTime
   go 0 time where
   go :: Int -> UTCTime -> ConduitT x x (Sem r) ()
   go k prev = await >>= \case
-    Nothing -> lift $ trace "Done"
+    Nothing -> lift $ lgInfo "Done"
     Just event -> do
       let k' = k + 1
       time <- lift $ sendM getCurrentTime
       if time `diffUTCTime` prev > 1
         then do
-          lift $ trace $ "[" ++ show k' ++ "]"
+          lift $ lgInfo $ "[" <> tshow k' <> "]"
           yield event
           go k' time
         else do
