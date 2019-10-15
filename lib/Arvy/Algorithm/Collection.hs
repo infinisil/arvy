@@ -394,6 +394,9 @@ recliqueLayers RecliqueConf { .. } = reverse . go recliqueLevels where
   go k x = b : go (k - 1) a where
     (a, b) = divMod x recliqueBase
 
+recliqueUnlayers :: RecliqueConf -> [Int] -> Node
+recliqueUnlayers RecliqueConf { .. } layers = foldl (\acc el -> acc * recliqueBase + el) 0 layers
+
 -- | A recursive clique graph. This is a clique of `recliqueBase` nodes, where each node contains a clique of `recliqueBase` nodes itself, and so on, `recliqueLevels` deep. Different nodes that are in the same lowest layer have distance 1 between them. Nodes in a different lowest layer but the same second-lowest layer have distance `recliqueFactor` between them, one layer up distance `recliqueFactor ^^ 2`, and so on.
 recliqueWeights :: RecliqueConf -> Node -> Node -> Weight
 recliqueWeights RecliqueConf { .. } u v
@@ -405,16 +408,43 @@ recliqueWeights RecliqueConf { .. } u v
       | a == b = 0
       | otherwise = 1 + dist (div a recliqueBase) (div b recliqueBase)
 
-reclique :: forall r . SpecializedArvy RecliqueConf [Int] r
+data RecliqueMessage i = RecliqueMessage Int [i] deriving Show
+
+recliqueInitialState :: RecliqueConf -> Node -> Maybe Int
+recliqueInitialState _ 0 = Nothing
+recliqueInitialState conf@RecliqueConf { .. } node = rightmostZero $ reverse (recliqueLayers conf node) where
+  rightmostZero :: [Int] -> Maybe Int
+  rightmostZero [] = Nothing
+  rightmostZero (0:xs) = (+1) <$> rightmostZero xs
+  rightmostZero _ = Just 0
+
+
+recliqueSuccessor :: RecliqueConf -> Node -> Node
+recliqueSuccessor conf node = recliqueUnlayers conf newLayers where
+  layers = recliqueLayers conf node
+  newLayers = reverse $ zeroLeftmost $ reverse layers
+  zeroLeftmost :: [Int] -> [Int]
+  zeroLeftmost [] = []
+  zeroLeftmost (0:xs) = 0 : zeroLeftmost xs
+  zeroLeftmost (_:xs) = 0 : xs
+
+
+reclique :: forall r . SpecializedArvy RecliqueConf (Maybe Int) r
 reclique = SpecializedArvy gen spec where
-  gen :: RecliqueConf -> Sem r (ArvyData [Int])
+  gen :: RecliqueConf -> Sem r (ArvyData (Maybe Int))
   gen conf = return ArvyData
     { arvyDataNodeCount = recliqueNodeCount conf
     , arvyDataNodeData = \node -> ArvyNodeData
-      { arvyNodeSuccessor = undefined
-      , arvyNodeAdditional = recliqueLayers conf node
+      { arvyNodeSuccessor = recliqueSuccessor conf node
+      , arvyNodeAdditional = recliqueInitialState conf node
       , arvyNodeWeights = recliqueWeights conf node
       }
     }
-  spec :: ArvySpec [Int] i r
-  spec = undefined
+  spec :: forall i . ArvySpec (Maybe Int) i r
+  spec = ArvySpec
+    { arvyBehavior = behaviorType @(State (Maybe Int) ': r) @RecliqueMessage ArvyBehavior
+      {
+      }
+    , arvyInitState = return . arvyNodeAdditional
+    , arvyRunner = const id
+    }
