@@ -13,6 +13,7 @@ module Arvy.Algorithm.Collection
   , IndexMeanType(..)
   , localMinPairs
   , reclique
+  , RecliqueConf(..)
   ) where
 
 import           Arvy.Algorithm
@@ -29,6 +30,9 @@ import Data.Random.RVar
 import Data.Random.Distribution.Uniform
 import Data.MonoTraversable
 import Data.Bifunctor
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import Data.Maybe (fromMaybe)
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
@@ -408,7 +412,6 @@ recliqueWeights RecliqueConf { .. } u v
       | a == b = 0
       | otherwise = 1 + dist (div a recliqueBase) (div b recliqueBase)
 
-data RecliqueMessage i = RecliqueMessage Int [i] deriving Show
 
 recliqueInitialState :: RecliqueConf -> Node -> Maybe Int
 recliqueInitialState _ 0 = Nothing
@@ -428,6 +431,7 @@ recliqueSuccessor conf node = recliqueUnlayers conf newLayers where
   zeroLeftmost (0:xs) = 0 : zeroLeftmost xs
   zeroLeftmost (_:xs) = 0 : xs
 
+data RecliqueMessage i = RecliqueMessage Int i (IntMap i) deriving Show
 
 reclique :: forall r . SpecializedArvy RecliqueConf (Maybe Int) r
 reclique = SpecializedArvy gen spec where
@@ -443,7 +447,20 @@ reclique = SpecializedArvy gen spec where
   spec :: forall i . ArvySpec (Maybe Int) i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(State (Maybe Int) ': r) @RecliqueMessage ArvyBehavior
-      {
+      { arvyMakeRequest = \i _ -> do
+          thisLevel <- fromMaybe (error "Bug in the arvy runner, makeRequest called for the root") <$> get
+          put Nothing
+          return (RecliqueMessage thisLevel i IntMap.empty)
+      , arvyForwardRequest = \(RecliqueMessage recvLevel root levelMap) i _ -> do
+          let newSucc = IntMap.findWithDefault root recvLevel levelMap
+          let newLevelMap = foldr (\el acc -> IntMap.insert el i acc) levelMap [0..recvLevel - 1]
+          thisLevel <- fromMaybe (error "Bug in the arvy runner, forwardRequest called for the root") <$> get
+          put (Just recvLevel)
+          return (newSucc, RecliqueMessage thisLevel root newLevelMap)
+      , arvyReceiveRequest = \(RecliqueMessage recvLevel root levelMap) _ -> do
+          let newSucc = IntMap.findWithDefault root recvLevel levelMap
+          put (Just recvLevel)
+          return newSucc
       }
     , arvyInitState = return . arvyNodeAdditional
     , arvyRunner = const id

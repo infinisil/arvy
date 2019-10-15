@@ -30,6 +30,9 @@ ivy = GenAlgParam "ivy" Arvy.ivy
 ring :: SpecAlgParam NodeCount Arvy.RingNodeState r
 ring = SpecAlgParam "ring" Arvy.ring
 
+reclique :: SpecAlgParam Arvy.RecliqueConf (Maybe Int) r
+reclique = SpecAlgParam "reclique" Arvy.reclique
+
 inbetween :: Ratio Int -> GenAlgParam r
 inbetween ratio = GenAlgParam ("inbetween-" <> tshow ratio) (Arvy.inbetween ratio)
 
