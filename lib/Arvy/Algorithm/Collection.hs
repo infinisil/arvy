@@ -403,7 +403,7 @@ recliqueLayers RecliqueConf { .. } = reverse . go recliqueLevels where
     (a, b) = divMod x recliqueBase
 
 recliqueUnlayers :: RecliqueConf -> [Int] -> Node
-recliqueUnlayers RecliqueConf { .. } layers = foldl (\acc el -> acc * recliqueBase + el) 0 layers
+recliqueUnlayers RecliqueConf { .. } = foldl (\acc el -> acc * recliqueBase + el) 0
 
 -- | A recursive clique graph. This is a clique of `recliqueBase` nodes, where each node contains a clique of `recliqueBase` nodes itself, and so on, `recliqueLevels` deep. Different nodes that are in the same lowest layer have distance 1 between them. Nodes in a different lowest layer but the same second-lowest layer have distance `recliqueFactor` between them, one layer up distance `recliqueFactor ^^ 2`, and so on.
 recliqueWeights :: RecliqueConf -> Node -> Node -> Weight
@@ -437,6 +437,7 @@ recliqueSuccessor conf node = recliqueUnlayers conf newLayers where
 
 data RecliqueMessage i = RecliqueMessage Int i (IntMap i) deriving Show
 
+{-# INLINE reclique #-}
 reclique :: forall r . SpecializedArvy RecliqueConf (Maybe Int) r
 reclique = SpecializedArvy gen spec where
   gen :: RecliqueConf -> Sem r (ArvyData (Maybe Int))
@@ -448,6 +449,7 @@ reclique = SpecializedArvy gen spec where
       , arvyNodeWeights = recliqueWeights conf node
       }
     }
+  {-# INLINE spec #-}
   spec :: forall i . NodeIndex i => ArvySpec (Maybe Int) i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(State (Maybe Int) ': r) @RecliqueMessage ArvyBehavior
@@ -473,15 +475,17 @@ reclique = SpecializedArvy gen spec where
 
 type DynamicStarState i = UArray i Int
 data DynamicStarMessage i = DynamicStarMessage
-  { dynStarMsgRoot :: i
-  , dynStarMsgRootCount :: Int
-  , dynStarMsgBest :: i
-  , dynStarMsgBestScore :: Double
+  { dynStarMsgRoot :: !i
+  , dynStarMsgRootCount :: !Int
+  , dynStarMsgBest :: !i
+  , dynStarMsgBestScore :: !Double
   } deriving Show
 
 
+{-# INLINE dynamicStar #-}
 dynamicStar :: forall r . LogMember r => GeneralArvy r
 dynamicStar = GeneralArvy spec where
+  {-# INLINE spec #-}
   spec :: forall i . NodeIndex i => ArvySpec () i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(LocalWeights i ': State (DynamicStarState i) ': r) ArvyBehavior
@@ -505,6 +509,7 @@ dynamicStar = GeneralArvy spec where
         return (listArray (0, nodeCount - 1) (replicate nodeCount 0) :: UArray Node Int)
     , arvyRunner = \weights -> interpret (weightHandler weights)
     } where
+    {-# INLINE getLocalScore #-}
     getLocalScore :: Sem (LocalWeights i ': State (DynamicStarState i) ': r) Double
     getLocalScore = do
       arr <- get
