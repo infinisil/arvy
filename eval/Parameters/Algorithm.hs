@@ -36,6 +36,9 @@ reclique = SpecAlgParam "reclique" Arvy.reclique
 inbetween :: Ratio Int -> GenAlgParam r
 inbetween ratio = GenAlgParam ("inbetween-" <> tshow ratio) (Arvy.inbetween ratio)
 
+dynamicStar :: LogMember r => GenAlgParam r
+dynamicStar = GenAlgParam "dynamicStar" Arvy.dynamicStar
+
 {-
 
 inbetweenWeighted :: Show s => Double -> Tree.InitialTreeParameter s r -> AlgorithmParameter r

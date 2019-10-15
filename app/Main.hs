@@ -38,8 +38,8 @@ ringTree n = ArvyData
         in fromIntegral dist
     }
   }
-main :: IO ()
-main = do
+main' :: IO ()
+main' = do
   results <- runM .@ runAsyncInIO
     $ runLogBySeverity Info (cmap messageText logTextStdout)
     $ runSpecParams SpecParams
@@ -64,6 +64,30 @@ main = do
       (Alg.ivy, Tree.random),
       (Alg.arrow, Tree.shortPairs),
       (Alg.arrow, Tree.bestStar)
+      ]
+    }
+  plotResults "wip" results
+
+main :: IO ()
+main = do
+  results <- runM .@ runAsyncInIO
+    $ runLogBySeverity Info (cmap messageText logTextStdout)
+    $ runGenParams GenParams
+    { genParamShared = SharedParams
+      { sharedParamRandomSeed = 0
+      , sharedParamRequestCount = 100000
+      , sharedParamRequests = Requests.random
+      , sharedParamEvals = [ evalRequestDist'
+                           , evalRequestHops
+                           ]
+      }
+    , genParamNodeCount = 100
+    , genParamWeights = Weights.unitEuclidian 2
+    , genParamAlgs =
+      [
+      (Alg.dynamicStar, Tree.random),
+      (Alg.arrow, Tree.bestStar),
+      (Alg.arrow, Tree.shortPairs)
       ]
     }
   plotResults "wip" results

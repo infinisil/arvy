@@ -1,5 +1,6 @@
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns      #-}
 module Arvy.Algorithm.Collection
   ( arrow
   , ivy
@@ -14,6 +15,7 @@ module Arvy.Algorithm.Collection
   , localMinPairs
   , reclique
   , RecliqueConf(..)
+  , dynamicStar
   ) where
 
 import           Arvy.Algorithm
@@ -467,3 +469,56 @@ reclique = SpecializedArvy gen spec where
     , arvyInitState = \_ -> return . arvyNodeAdditional
     , arvyRunner = const id
     }
+
+
+type DynamicStarState i = UArray i Int
+data DynamicStarMessage i = DynamicStarMessage
+  { dynStarMsgRoot :: i
+  , dynStarMsgRootCount :: Int
+  , dynStarMsgBest :: i
+  , dynStarMsgBestScore :: Double
+  } deriving Show
+
+
+dynamicStar :: forall r . LogMember r => GeneralArvy r
+dynamicStar = GeneralArvy spec where
+  spec :: forall i . NodeIndex i => ArvySpec () i r
+  spec = ArvySpec
+    { arvyBehavior = behaviorType @(LocalWeights i ': State (DynamicStarState i) ': r) ArvyBehavior
+      { arvyMakeRequest = \i _ -> do
+          newCount <- (+1) <$> gets (! i)
+          modify (// [(i, newCount)])
+          DynamicStarMessage i newCount i <$> getLocalScore
+      , arvyForwardRequest = \DynamicStarMessage { .. } i _ -> do
+          modify (// [(forward dynStarMsgRoot, dynStarMsgRootCount)])
+          score <- getLocalScore
+          let (newBest, newBestScore) = case dynStarMsgBestScore `compare` score of
+                GT -> (i, score)
+                _ -> (forward dynStarMsgBest, dynStarMsgBestScore)
+          return ( dynStarMsgBest
+                 , DynamicStarMessage (forward dynStarMsgRoot) dynStarMsgRootCount newBest newBestScore)
+      , arvyReceiveRequest = \DynamicStarMessage { .. } _ -> do
+          modify (// [(forward dynStarMsgRoot, dynStarMsgRootCount)])
+          return dynStarMsgBest
+      }
+    , arvyInitState = \nodeCount _ ->
+        return (listArray (0, nodeCount - 1) (replicate nodeCount 0) :: UArray Node Int)
+    , arvyRunner = \weights -> interpret (weightHandler weights)
+    } where
+    getLocalScore :: Sem (LocalWeights i ': State (DynamicStarState i) ': r) Double
+    getLocalScore = do
+      arr <- get
+      weights <- allWeights
+      lgDebug $ "Counts: " <> tshow (elems arr)
+      lgDebug $ "Weights: " <> tshow (elems weights)
+      let total = sum $ elems arr
+          nodeRange = bounds arr
+          summands =
+            [ fromIntegral (arr ! u) * fromIntegral (arr ! v) * (weights ! u + weights ! v)
+            | u <- range nodeRange
+            , v <- range nodeRange
+            , index nodeRange u < index nodeRange v
+            ]
+          score = sum summands / fromIntegral total ^^ (2 :: Int)
+      lgDebug $ "Score: " <> tshow score
+      return score
