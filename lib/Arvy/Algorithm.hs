@@ -29,11 +29,14 @@ module Arvy.Algorithm
   , Weight
   , LocalWeights(..)
   , weightTo
+  , allWeights
   , weightHandler
   ) where
 
 import Polysemy
 import Polysemy.State
+import Data.Ix
+import Data.Array.Unboxed
 
 {- |
 An Arvy heuristic for a dynamic algorithm.
@@ -55,8 +58,8 @@ data ArvyBehavior i msg r = ArvyBehavior
 data ArvySpec a i r = forall msg s r' . Show (msg Node) => ArvySpec
   { arvyBehavior :: ArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
-  , arvyInitState :: ArvyNodeData a -> Sem r s
-  , arvyRunner :: forall x . i ~ Node => (i -> Weight) -> Sem r' x -> Sem (State s ': r) x
+  , arvyInitState :: NodeCount -> ArvyNodeData a -> Sem r s
+  , arvyRunner :: forall x . i ~ Node => UArray i Weight -> Sem r' x -> Sem (State s ': r) x
   -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
   }
 
@@ -77,14 +80,15 @@ instance Forwardable i i where
 class ( Forwardable (Pred i) i
       , Forwardable i (Succ i)
       , Forwardable (Pred i) (Succ i)
+      , Ix i
       ) => NodeIndex i where
   type Pred i :: *
   type Succ i :: *
 
 -- | All types can trivially be node indices. This doesn't pose a problem since this is only used for correctness.
-instance NodeIndex i where
-  type Pred i = i
-  type Succ i = i
+instance NodeIndex Node where
+  type Pred Node = Node
+  type Succ Node = Node
 
 type Node = Int
 type NodeCount = Node
@@ -115,12 +119,15 @@ data SpecializedArvy p a r = SpecializedArvy (p -> Sem r (ArvyData a)) (forall i
 
 data LocalWeights ib (m :: * -> *) a where
   WeightTo :: Forwardable ia ib => ia -> LocalWeights ib m Weight
+  AllWeights :: LocalWeights ib m (UArray ib Weight)
 
 makeSem ''LocalWeights
 
 {-# INLINE weightHandler #-}
 weightHandler
-  :: (i -> Weight)
+  :: NodeIndex i
+  => UArray i Weight
   -> LocalWeights i m x -> Sem r x
-weightHandler f = \case
-  WeightTo i -> return $ f (forward i)
+weightHandler arr = \case
+  WeightTo i -> return $ arr ! forward i
+  AllWeights -> return arr

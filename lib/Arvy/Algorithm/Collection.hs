@@ -43,7 +43,7 @@ arrow = GeneralArvy ArvySpec
     , arvyForwardRequest = \(ArrowMessage sender) i _ -> return (sender, ArrowMessage i)
     , arvyReceiveRequest = \(ArrowMessage sender) _ -> return sender
     }
-  , arvyInitState = const (return ())
+  , arvyInitState = \_ _ -> return ()
   , arvyRunner = const raise
   }
 
@@ -51,33 +51,33 @@ arrow = GeneralArvy ArvySpec
 minWeight :: forall r . GeneralArvy r
 minWeight = GeneralArvy spec where
   {-# INLINE spec #-}
-  spec :: forall i . ArvySpec () i r
+  spec :: forall i . NodeIndex i => ArvySpec () i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(LocalWeights i ': r) ArvyBehavior
       { arvyMakeRequest = \i _ -> return [i]
       , arvyForwardRequest = \prevs i _ -> do
           weights <- traverse weightTo prevs
           let best = fst $ minimumBy (comparing snd) (zip prevs weights)
-          return (best, i : prevs)
+          return (best, i : map forward prevs)
       , arvyReceiveRequest = \prevs _ -> do
           weights <- traverse weightTo prevs
           return $ fst $ minimumBy (comparing snd) (zip prevs weights)
       }
-    , arvyInitState = const (return ())
+    , arvyInitState = \_ _ -> return ()
     , arvyRunner = \weights -> reinterpret (weightHandler weights)
     }
 
-newtype IvyMessage i = IvyMessage i deriving Show
+newtype IvyMessage i = IvyMessage i deriving (Functor, Show)
 
 -- | The Ivy Arvy algorithm, which always points all nodes back to the root node where the request originated from.
 ivy :: forall r . GeneralArvy r
 ivy = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
     { arvyMakeRequest = \i _ -> return (IvyMessage i)
-    , arvyForwardRequest = \msg@(IvyMessage root) _ _ -> return (root, msg)
+    , arvyForwardRequest = \msg@(IvyMessage root) _ _ -> return (root, fmap forward msg)
     , arvyReceiveRequest = \(IvyMessage root) _ -> return root
     }
-  , arvyInitState = const (return ())
+  , arvyInitState = \_ _ -> return ()
   , arvyRunner = const raise
   }
 
@@ -122,7 +122,7 @@ ring = SpecializedArvy generator spec where
           in fromIntegral dist
       }
     } where root = n `div` 2
-  spec :: ArvySpec RingNodeState i r
+  spec :: NodeIndex i => ArvySpec RingNodeState i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(State RingNodeState ': r) ArvyBehavior
       { arvyMakeRequest = \i _ -> get >>= \case
@@ -156,7 +156,7 @@ ring = SpecializedArvy generator spec where
             return root
           AfterCrossing { sender } -> return sender
       }
-    , arvyInitState = \ArvyNodeData { .. } -> return arvyNodeAdditional
+    , arvyInitState = \_ ArvyNodeData { .. } -> return arvyNodeAdditional
     , arvyRunner = const id
     }
 
@@ -178,7 +178,7 @@ inbetween ratio = GeneralArvy ArvySpec
       in return (f, InbetweenMessage newK newF newSeq)
     , arvyReceiveRequest = \(InbetweenMessage _ f _) _ -> return f
     }
-  , arvyInitState = const (return ())
+  , arvyInitState = \_ _ -> return ()
   , arvyRunner = const raise
   }
 
@@ -213,7 +213,7 @@ random = GeneralArvy ArvySpec
         return (suc, fmap forward s S.|> i)
     , arvyReceiveRequest = \s _ -> sampleRVar (randomSeq s)
     }
-  , arvyInitState = const (return ())
+  , arvyInitState = \_ _ -> return ()
   , arvyRunner = const raise
   }
 
@@ -280,9 +280,9 @@ Algorithm that logs indices of request paths at nodes, aggregating them with the
 indexMeanScore :: forall r . LogMember r => IndexMeanType -> (Int -> Double) -> GeneralArvy r
 indexMeanScore ty af = GeneralArvy spec where
   {-# INLINE spec #-}
-  spec :: forall i . ArvySpec () i r
+  spec :: forall i . NodeIndex i => ArvySpec () i r
   spec = ArvySpec
-    { arvyBehavior = behaviorType @(LocalWeights i ': State IndexMeanState ': r) ArvyBehavior
+    { arvyBehavior = behaviorType @(LocalWeights (Succ i) ': State IndexMeanState ': r) ArvyBehavior
       { arvyMakeRequest = \i s -> do
           (indexMean, _) <- get
           w <- edgePart s
@@ -298,22 +298,29 @@ indexMeanScore ty af = GeneralArvy spec where
           modify (second (+1))
           return best
       }
-    , arvyInitState = const (return initialIndexMeanState)
+    , arvyInitState = \_ _ -> return initialIndexMeanState
     , arvyRunner = \weights -> interpret (weightHandler weights)
-    }
+    } where
 
-  {-# INLINE select #-}
-  select :: IndexMeanMessage i -> Sem (LocalWeights i ': State IndexMeanState ': r) i
-  select (IndexMeanMessage w xs) = do
-    (oldIndexMean, k) <- get
-    let a = af k
-    let newIndexMean = logWeight w oldIndexMean
-    put (newIndexMean, k)
-    scores <- traverse (\(i, iScore) -> do
-                            weight <- weightTo i
-                            return (i, getScore a iScore weight)
-                        ) xs
-    return $ fst $ minimumBy (comparing snd) scores
+    {-# INLINE edgePart #-}
+    edgePart :: forall r' . Member (LocalWeights (Succ i)) r' => Succ i -> Sem r' Double
+    edgePart = case ty of
+      HopIndexBased -> \_ -> return 1
+      WeightSumBased -> weightTo
+
+
+    {-# INLINE select #-}
+    select :: IndexMeanMessage (Pred i) -> Sem (LocalWeights (Succ i) ': State IndexMeanState ': r) (Pred i)
+    select (IndexMeanMessage w xs) = do
+      (oldIndexMean, k) <- get
+      let a = af k
+      let newIndexMean = logWeight w oldIndexMean
+      put (newIndexMean, k)
+      scores <- traverse (\(i, iScore) -> do
+                              weight <- weightTo i
+                              return (i, getScore a iScore weight)
+                          ) xs
+      return $ fst $ minimumBy (comparing snd) scores
 
 
   {-# INLINE getScore #-}
@@ -321,11 +328,6 @@ indexMeanScore ty af = GeneralArvy spec where
   getScore _ Nothing weight = weight
   getScore a (Just iScore) weight = weight ** a * iScore ** (1 - a)
 
-  {-# INLINE edgePart #-}
-  edgePart :: forall r' i . Member (LocalWeights i) r' => i -> Sem r' Double
-  edgePart = case ty of
-    HopIndexBased -> \_ -> return 1
-    WeightSumBased -> weightTo
 
 
 
@@ -334,7 +336,7 @@ data LocalMinPairsMessage i = LocalMinPairsMessage [(i, Double)] [UArray Int Dou
 
 localMinPairs :: forall r . LogMember r => GeneralArvy r
 localMinPairs = GeneralArvy spec where
-  spec :: forall i . ArvySpec () i r
+  spec :: forall i . NodeIndex i => ArvySpec () i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(LocalWeights i ': r) ArvyBehavior
       { arvyMakeRequest = \i _ -> return (LocalMinPairsMessage [(i, 0)] [listArray (0, 0) [0]])
@@ -373,7 +375,7 @@ localMinPairs = GeneralArvy spec where
           let best = fst $ minimumBy (comparing snd) weights
           return best
       }
-    , arvyInitState = const (return ())
+    , arvyInitState = \_ _ -> return ()
     , arvyRunner = \weights -> reinterpret (weightHandler weights)
     }
 
@@ -444,7 +446,7 @@ reclique = SpecializedArvy gen spec where
       , arvyNodeWeights = recliqueWeights conf node
       }
     }
-  spec :: forall i . ArvySpec (Maybe Int) i r
+  spec :: forall i . NodeIndex i => ArvySpec (Maybe Int) i r
   spec = ArvySpec
     { arvyBehavior = behaviorType @(State (Maybe Int) ': r) @RecliqueMessage ArvyBehavior
       { arvyMakeRequest = \i _ -> do
@@ -453,15 +455,15 @@ reclique = SpecializedArvy gen spec where
           return (RecliqueMessage thisLevel i IntMap.empty)
       , arvyForwardRequest = \(RecliqueMessage recvLevel root levelMap) i _ -> do
           let newSucc = IntMap.findWithDefault root recvLevel levelMap
-          let newLevelMap = foldr (\el acc -> IntMap.insert el i acc) levelMap [0..recvLevel - 1]
+          let newLevelMap = foldr (\el acc -> IntMap.insert el i acc) (fmap forward levelMap) [0..recvLevel - 1]
           thisLevel <- fromMaybe (error "Bug in the arvy runner, forwardRequest called for the root") <$> get
           put (Just recvLevel)
-          return (newSucc, RecliqueMessage thisLevel root newLevelMap)
+          return (newSucc, RecliqueMessage thisLevel (forward root) newLevelMap)
       , arvyReceiveRequest = \(RecliqueMessage recvLevel root levelMap) _ -> do
           let newSucc = IntMap.findWithDefault root recvLevel levelMap
           put (Just recvLevel)
           return newSucc
       }
-    , arvyInitState = return . arvyNodeAdditional
+    , arvyInitState = \_ -> return . arvyNodeAdditional
     , arvyRunner = const id
     }
