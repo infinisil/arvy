@@ -2,28 +2,28 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % DOCUMENT METADATA
 
-\thesistype{Thesis Type} % Master's Thesis, Bachelor's Thesis, Semester Thesis, Group Project
-\title{Thesis Title}
+\thesistype{Bachelor's Thesis} % Master's Thesis, Bachelor's Thesis, Semester Thesis, Group Project
+\title{Practical Dynamic Directories}
 
-\author{Student's name}
-\email{student@ethz.ch}
+\author{Silvan Mosberger}
+\email{msilvan@student.ethz.ch}
 
 \institute{Distributed Computing Group \\[2pt]
 Computer Engineering and Networks Laboratory \\[2pt]
 ETH Zürich}
 
-% Optionally, you can put in your own logo here
-%\logo{\includegraphics[width=0.2\columnwidth]{figures/disco_logo_faded}}
-
-\supervisors{Supervisor 1, Supervisor 2\\[2pt] Prof.\ Dr.\ Roger Wattenhofer}
+\supervisors{András Papp, Pankaj Khanchandani\\[2pt] Prof.\ Dr.\ Roger Wattenhofer}
 
 % Optionally, keywords and categories of the work can be shown (on the Abstract page)
-%\keywords{Keywords go here.}
-%\categories{ACM categories go here.}
+\keywords{Arrow, Ivy, distributed directory, shared object}
+\categories{Network algorithms}
 
 \date{\today}
 
@@ -48,22 +48,70 @@ ETH Zürich}
 
 \tableofcontents
 
-\mainmatter % do not remove this line
+\mainmatter
 
-% Start writing here
-\chapter{First Chapter Title}
+\chapter{Introduction}
 
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\TODO{This is a TODO annotation.}
+Often in computing a single resource is shared between multiple components, where only one of them may access it at a time. In a distributed setting an algorithm to solve this is called a distributed mutual exclusion algorithm or distributed directory protocol. A trivial solution is to dedicate a single node to be the center where all requests for the resource should go, with the disadvantage of a lot of traffic for many requests. Better solutions to this problem include the Arrow and Ivy protocols, both of which work on similar principles to be explained in the following sections. In the Arvy paper these protocols have been combined in a flexible manner to allow a whole set of algorithms to be created.
 
-\section{First Section Title}
+In this thesis we explore this set of Arvy algorithms in the hopes of finding ones that work better than any already existing ones.
 
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.
+\section{Model}
 
-\subsection{First Subsection Title}
+We consider a complete graph $G=(V,E)$ and a cost function $c : E \rightarrow \mathbb{R}$ assigning a cost to each edge.
 
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.
+\section{Arrow, Ivy and Arvy}
 
-\begin{theorem}[First Theorem] \label{thm:first theorem}
+In this section we explain how Arrow, Ivy and Arvy work. Because Arvy is a generalization of both Arrow and Ivy, we start with it and specialize it to the others later.
+
+Arvy is based on the idea of maintaining a spanning tree over time: Every node stores a pointer to its parent $parent : V \rightarrow V$. If some node is a root, it points to itself. When a node $a_0$ needs the token, it sends a request message $req$ towards its parent $a_1=parent(a_0)$. When a node $a_i$ receives such a request, it forwards it to $a_{i+1}=parent(a_i)$ and so on until the root $a_n$ containing the token is reached. This final node then finishes its own work with the token and then sends it directly to $a_0$. The path of such a request message is $path(req)=\{a_0, a_1, a_2, \dots, a_n\}$. The main idea with Arvy is that each node $a_i$ receiving the request updates its parent to a node in $\{a_0, \dots, a_{i-1}\}$, so one of the nodes the request previously traveled through.
+
+\begin{algorithm}
+\caption{Arvy algorithm}
+\label{test}
+\begin{algorithmic}
+
+\Function{RequestToken}{$a_0$}
+\If{$parent(a_0)\neq a_0$}
+    \State send request for token to $parent(a_0)$
+    \State $parent(a_0)\gets a_0$
+\EndIf
+\EndFunction
+\Function{ReceiveRequest}{$a_k$, $req$}
+\If{$parent(a_k)=a_k$}
+    \State send token to $a_0$
+\Else
+    \State forward $req$ to $parent(a_k)$
+\EndIf
+\State $parent(a_k)\gets\;$\Call{SelectNewParent}{$a_0, a_1, \dots, a_{k-1}$}
+\EndFunction
+\Function{SelectNewParent}{$\{a_i\}$}
+\State\Return any of $a_i$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Arrow}
+
+Arrow is a specialized version of Arvy that makes nodes along the request path always select the most recent node as a new parent
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a_i\}$}
+\State\Return $a_i$
+\EndFunction
+\end{algorithmic}
+
+\subsection{Ivy}
+
+Similarly, Ivy is a specialized version of Arvy that makes nodes along the request path always select the oldest node as a new parent, which is always the node that made the request originally
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a_i\}$}
+\State\Return $a_0$
+\EndFunction
+\end{algorithmic}
+
+\chapter{Hi}
+
+\begin{theorem}[First Theorem]\label{thm:first theorem}
 	This is our first theorem.
 \end{theorem}
 
