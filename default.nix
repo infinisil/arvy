@@ -11,7 +11,12 @@ let
       algorithmicx
       cm-super
       algorithms
-      todonotes;
+      todonotes
+      minted
+      fvextra
+      ifplatform
+      xstring
+      framed;
   };
 
 in pkgs.stdenv.mkDerivation {
@@ -23,13 +28,17 @@ in pkgs.stdenv.mkDerivation {
     ".*\\.bst"
     ".*\\.bib"
   ];
-  nativeBuildInputs = [ tex ];
+  nativeBuildInputs = [
+    tex
+    pkgs.python3.pkgs.pygments
+    pkgs.which
+  ];
   buildPhase = ''
     HOME=$(mktemp -d)
-    pdflatex Thesis.tex
+    pdflatex -shell-escape Thesis.tex
     bibtex Thesis
-    pdflatex Thesis.tex
-    pdflatex Thesis.tex
+    pdflatex -shell-escape Thesis.tex
+    pdflatex -shell-escape Thesis.tex
   '';
   installPhase = ''
     mkdir -p $out

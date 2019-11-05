@@ -6,3 +6,5 @@
 *.bbl
 *.blg
 result*
+\#*#
+_minted*

@@ -7,6 +7,8 @@
 \usepackage{mathtools}
 \usepackage{subcaption}
 \usepackage{tikz}
+\usepackage{hyperref}
+\usepackage{minted}
 \usetikzlibrary{arrows.meta}
 
 
@@ -118,6 +120,8 @@ All of these algorithms are based on the idea of maintaining a rooted spanning t
 \subsection{Arrow}
 
 The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in that it just inverts the pointers along its path: When $a_{i+1}$ receives a request from $a_i$, it sets $parent(a_{i+1})=a_i$. See Figure~\ref{fig:arrow} for a walk-through of two requests with Arrow. Important on Arrow is that it doesn't ever change the structure of the spanning tree, meaning that the initial tree matters a lot for how well it performs.
+
+Arrow was originally described in \cite{Ray}.
 
 \TODO{Bounds on Arrow}
 
@@ -258,7 +262,9 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 
 \subsection{Ivy}
 
-Ivy encompasses an entirely different way to invert the arrows along the request path, namely that every node $a_{i+1}$ receiving the request sets its parent to the node that made the request: $parent(a_{i+1})=a_0$. Therefore $a_0$ ends up being the center of a star consisting of all nodes along the request path.
+Ivy encompasses an entirely different way to invert the arrows along the request path, namely that every node $a_{i+1}$ receiving the request sets its parent to the node that made the original request: $parent(a_{i+1})=a_0$. Therefore $a_0$ ends up being the center of a star consisting of all nodes along the request path. Figure~\ref{fig:ivy} shows an example of Ivy.
+
+Ivy was originally described in \cite{Ivy}.
 
 \begin{figure}[]
 \begin{subfigure}[t]{0.5\textwidth}
@@ -395,10 +401,9 @@ Ivy encompasses an entirely different way to invert the arrows along the request
 
 \subsection{Arvy}
 
-Arvy generalizes the ideas of Arrow and Ivy by allowing nodes $a_{i+1}$ that received a request to set their parent to any node the request already traveled through, so $parent(a_{i+1})\in\{a_0,\dots,a_i\}$.
+Arvy generalizes the ideas of Arrow and Ivy by allowing nodes $a_{i+1}$ that received a request to set their parent to any node the request already traveled through, so $parent(a_{i+1})\in\{a_0,\dots,a_i\}$. See Figure~\ref{fig:arvy} for an example.
 
-It's easy to see that this algorithm maintains a spanning tree over time with sequential requests. However this also holds for concurrent requests as the Arvy paper~\cite{Arvy} shows. Perhaps by surprise this means that no matter what nodes choose as their new parents, it can't prevent the algorithm from being correct.
-
+It's easy to see that this algorithm maintains a spanning tree over time with sequential requests and that it's correct. However this also holds for concurrent requests as the paper introducing Arvy~\cite{Arvy} shows.
 
 \begin{figure}[]
 \begin{subfigure}[t]{0.5\textwidth}
@@ -530,10 +535,13 @@ It's easy to see that this algorithm maintains a spanning tree over time with se
 \caption{After node 2 with the token received the request it sent it to node 5. The nodes 4, 3 and 2 on the request path were able to choose its new parent from $\{5\}$, $\{5,4\}$ and $\{5,4,3\}$ respectively.}
 \end{subfigure}
 \caption{Arvy example}
+\label{fig:arvy}
 \end{figure}
 
 
 \chapter{Algorithms}
+
+This section describes all the Arvy algorithms to be evaluated.
 
 \begin{algorithm}
 \caption{Arvy algorithm}
@@ -579,6 +587,90 @@ Similarly, Ivy is a specialized version of Arvy that makes nodes along the reque
 \EndFunction
 \end{algorithmic}
 
+\chapter{Implementation}
+
+Should include
+\begin{itemize}
+\item How the program design only allows expressing valid Arvy algorithms
+\end{itemize}
+
+As part of this thesis, a Haskell library for writing and testing Arvy algorithms was created, accessible at \url{https://github.com/infinisil/arvy}. In this chapter we explain some key design decisions that went into it. With Haskell's advanced type system it's possible to guarantee correctness of all Arvy heuristics declared with this library. Needless to say, this chapter is more technical than the others and advanced Haskell knowledge is required to fully understand it.
+
+\section{Request Path abstraction}
+
+An Arvy algorithm is only correct if and only if nodes can only set their new parent to nodes that were previously visited on the request path. With each node being referenced as an integer, this would be a problem, because a node $a_{n+1}$ could simply set $parent(a_{n+1})=0$ even though it might be the case that $0\notin\{a_0,\dots,a_n\}$ which would make the algorithm incorrect. So instead of representing nodes as integers, we represent them as some arbitrary type with certain capabilities that reflect them being part of the request path.
+
+One such trivial capability we'll need is that once we have some node index, we can forward that value via messages to other nodes. This makes sense since some node $a_{n+1}$ can't know about $\{a_0,\dots,a_n\}$ unless these nodes somehow forwarded their own values along with the messages. In Haskell, this forwarding can be represented as a typeclass on two types $i_a$ and $i_b$, stating that if you have a value of $i_a$ you can get a value of $i_b$. We can implement this typeclass trivially for all types that are equal, since forwarding will then be the identity.
+
+\begin{minted}{haskell}
+-- | A class for node indices that can be forwarded between nodes
+class Forwardable ia ib where
+  forward :: ia -> ib
+
+-- | All equivalent types can be trivially forwarded
+instance Forwardable i i where
+  forward = id
+\end{minted}
+
+Now we need to somehow encode a request path in a type. In such a request path the important constraint is that messages are only sent in one direction, meaning node indices can only be forwarded in one direction as well. Looking at it from a single node in the request path, we can forward from its predecessor to the current node and from the current node to its successor. Encoding this as a typeclass leaves us with the following for representing a node (index).
+
+\begin{minted}{haskell}
+class ( Forwardable (Pred i) i
+      , Forwardable i (Succ i)
+      ) => NodeIndex i where
+  -- The type representing the previous node
+  type Pred i :: *
+  -- The type representing the successor node
+  type Succ i :: *
+\end{minted}
+
+Now of course defining different types for every node along the request path is impossible, this is only used to prove correctness. So for the implementation, we can use integers to represent all nodes.
+
+\begin{minted}{haskell}
+type Node = Int
+
+instance NodeIndex Node where
+  -- Predecessors and successors in the request path are
+  -- all nodes represented by integers as well
+  type Pred Node = Node
+  type Succ Node = Node
+\end{minted}
+
+\section{Arvy Heuristic abstraction}
+
+The most important part of defining an Arvy algorithm is the heuristic it uses to decide the new node parent. We extend this to the notion of a behavior, which includes not only the new parents, but also how it gets decided what a request message looks like, how the initial message is generated, and what the final node receiving the message does. In fact each node on the request path should be allowed to run arbitrary code when they do the processing.
+
+For representing computations we use the relatively new effect library \href{https://hackage.haskell.org/package/polysemy}{Polysemy}. In this library an computation is described with $\texttt{Sem r a}$ where $\texttt{r}$ represents the possible effects it can have and $\texttt{a}$ being the result of the computation. With this said, the main type for defining an Arvy algorithm is defined as follows.
+
+\begin{minted}{haskell}
+{- |
+An Arvy heuristic for a dynamic algorithm.
+- @i@ is the node index type
+- @msg :: * -> *@ is the type of request messages passed between nodes,
+  parametrized by the node index type for allowing messages to forward
+  node indices
+- @r@ is the effects the algorithm runs in, which can include effects
+  parametrized by @i@ in order to allow effects dependent on indices
+-}
+data ArvyBehavior i msg r = ArvyBehavior
+  { arvyMakeRequest :: i -> Succ i -> Sem r (msg i)
+  -- ^ What message the node making the request should send to its parent
+  , arvyForwardRequest :: msg (Pred i) -> i -> Succ i -> Sem r (Pred i, msg i)
+  -- ^ What parent an intermediate node should select when receiving
+  -- a message, and what message to forward to its parent
+  , arvyReceiveRequest :: msg (Pred i) -> i -> Sem r (Pred i)
+  -- ^ What parent the last node should select when receiving a message
+  }
+\end{minted}
+
+This succinct-yet-complicated type includes a lot of information. The type signature of the $\texttt{arvyForwardRequest}$ function in particular is the most interesting.
+
+For one it says that an intermediate node receives a message $\texttt{msg (Pred i)}$ that can include node indices of nodes that were predecessors to the current node. It then needs to return a value of $\texttt{Pred i}$, which represents the new parent for the node. With how node indices are defined in the previous section, the only possible values to return are ones received from the message. This means to select a new parent, nodes have to decode the message which will contain node indices given by past nodes, then return one of them.
+
+In addition, the function receives values $\texttt{i}$ and $\texttt{Succ i}$ representing the current node index and the current nodes parent respectively. In addition to the new parent node to select, the function also needs to return a $\texttt{msg i}$ representing the message to be forwarded. The $\texttt{msg}$ type being parametrized by $\texttt{i}$ enforces that this message can only contain node indices to previous nodes (since all previous node indices $\texttt{Pred i}$ can be forwarded to $\texttt{i}$) or the current node (which is of type $\texttt{i}$ already). $\texttt{Succ i}$ however can't be sent in the message because there's no way to convert it to type $\texttt{i}$.
+
+Functions $\texttt{arvyMakeRequest}$ and $\texttt{arvyReceiveRequest}$ are special cases of $\texttt{arvyForwardRequest}$. The former of which is special in that a node making a request does not receive any message and it doesn't need to select a new parent since it becomes the root. The latter of which is special in that the final root node receiving the request doesn't have a parent and doesn't need to forward a message.
+
 \chapter{Results}
 
 Should include
@@ -587,42 +679,13 @@ Should include
 \item Show how to reproduce the results including parameters
 \end{itemize}
 
-\chapter{Program Design}
-
-Should include
-\begin{itemize}
-\item How the program design only allows expressing valid Arvy algorithms
-\end{itemize}
+\chapter{Summary}
 
 
-\begin{theorem}[First Theorem]\label{thm:first theorem}
-	This is our first theorem.
-\end{theorem}
-
-\begin{proof}
-	And this is the proof of the first theorem with a complicated formula and a reference to Theorem \ref{thm:first theorem}. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.
-	\begin{equation}
-		{\frac {\mathrm d}{\mathrm dx}}\arctan(\sin({x}^{2}))=-2 \cdot {\frac {\cos({x}^{2})x}{-2+\left (\cos({x}^{2})\right )^{2}}}
-	\end{equation}	
-\end{proof}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.2\columnwidth]{figures/disco_logo_faded}
-    \caption{This is an example graphic.}
-    \label{fig:example_figure}
-\end{figure}
-
-And here we cite some external documents~\cite{TestReference, TestReference2}.
-An example of an included graphic can be found in Figure~\ref{fig:example_figure}.
-Note that in \LaTeX, ``quotes'' do not use the usual double quote characters.
-
-% This displays the bibliography for all cited external documents. All references have to be defined in the file references.bib and can then be cited from within this document.
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 
-% This creates an appendix chapter, comment if not needed.
-\appendix
-\chapter{First Appendix Chapter Title}
+%\appendix
+%\chapter{First Appendix Chapter Title}
 
 \end{document}
