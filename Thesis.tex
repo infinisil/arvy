@@ -64,6 +64,7 @@ Often in computing a single resource is shared between multiple components, wher
 In this thesis we explore this set of Arvy algorithms with the hope of finding ones that work better than any already existing ones
 
 \section{Model}
+\label{model}
 
 We consider a complete graph $G=(V,E)$ with $n\coloneqq|V|$ vertices and $m\coloneqq\binom{n}{2}$ edges. Each edge has a cost $c : E \rightarrow \mathbb{R}$ associated with it, representing the amount of time it takes a message to traverse it. The cost function forms a metric space:
 \begin{itemize}
@@ -111,6 +112,7 @@ There are different ways to define efficiency in this context:
   \end{equation}
 \end{itemize}
 
+
 \section{Arrow, Ivy and Arvy}
 
 Two well-known algorithms for solving this problem are Arrow and Ivy, which are both a special case of an Arvy algorithm, which is where its name comes from.
@@ -118,6 +120,7 @@ Two well-known algorithms for solving this problem are Arrow and Ivy, which are 
 All of these algorithms are based on the idea of maintaining a rooted spanning tree over time: Every node stores a pointer to its parent $parent : V \rightarrow V$ while root nodes point to themselves. When a (non-root) node $a_0$ needs the token, it sends a request message towards its parent $a_1=parent(a_0)$. When a node $a_i$ receives such a request, it forwards it to $a_{i+1}=parent(a_i)$ and so on until the root $a_k$ containing the token is reached. This forms a request path $\{a_0,a_1,\dots,a_k\}$ of $k-1$ nodes. The final node then finishes its own work with the token after which it sends it directly to $a_0$. Now to make this a functioning algorithm, the arrows along this path need to be changed in some way such that the rooted tree is restored.
 
 \subsection{Arrow}
+\label{intro:arrow}
 
 The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in that it just inverts the pointers along its path: When $a_{i+1}$ receives a request from $a_i$, it sets $parent(a_{i+1})=a_i$. See Figure~\ref{fig:arrow} for a walk-through of two requests with Arrow. Important on Arrow is that it doesn't ever change the structure of the spanning tree, meaning that the initial tree matters a lot for how well it performs.
 
@@ -261,6 +264,7 @@ Arrow was originally described in \cite{Ray}.
 \TODO{Abstract drawing stuff, perhaps implement Arvy in \LaTeX?}
 
 \subsection{Ivy}
+\label{intro:ivy}
 
 Ivy encompasses an entirely different way to invert the arrows along the request path, namely that every node $a_{i+1}$ receiving the request sets its parent to the node that made the original request: $parent(a_{i+1})=a_0$. Therefore $a_0$ ends up being the center of a star consisting of all nodes along the request path. Figure~\ref{fig:ivy} shows an example of Ivy.
 
@@ -541,20 +545,21 @@ It's easy to see that this algorithm maintains a spanning tree over time with se
 
 \chapter{Algorithms}
 
-This section describes all the Arvy algorithms to be evaluated.
+This section describes all the Arvy algorithms to be tested. A simplified version of a general algorithm can be written as follows, which we'll be using in the following sections. Note that the request path is denoted as $\{a_i\}$ as in previous sections.
 
 \begin{algorithm}
 \caption{Arvy algorithm}
-\label{test}
+\label{arvyalg}
 \begin{algorithmic}
-
 \Function{RequestToken}{$a_0$}
+\Comment Node $a_0$ wants the token
 \If{$parent(a_0)\neq a_0$}
     \State send request for token to $parent(a_0)$
     \State $parent(a_0)\gets a_0$
 \EndIf
 \EndFunction
 \Function{ReceiveRequest}{$a_k$}
+\Comment Node $a_k$ receives a request for the token
 \If{$parent(a_k)=a_k$}
     \State send token to $a_0$
 \Else
@@ -562,37 +567,219 @@ This section describes all the Arvy algorithms to be evaluated.
 \EndIf
 \State $parent(a_k)\gets\;$\Call{SelectNewParent}{$a_0, a_1, \dots, a_{k-1}$}
 \EndFunction
-\Function{SelectNewParent}{$\{a_i\}$}
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
+\Comment Selects a new parent to connect to
 \State\Return any of $a_i$
 \EndFunction
 \end{algorithmic}
 \end{algorithm}
 
+Any concrete algorithm will have to define an implementation of $\textsc{SelectNewParent}$. 
 
 \section{Arrow}
 
-Arrow is a specialized version of Arvy that makes nodes along the request path always select the most recent node as a new parent
+As already explained in section~\ref{intro:arrow}, Arrow maintains the structure of the spanning tree by always selecting the most recent node as a new parent, therefore inverting the arrows.
 \begin{algorithmic}
-\Function{SelectNewParent}{$\{a_i\}$}
-\State\Return $a_i$
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
+\State\Return $a_{k-1}$
 \EndFunction
 \end{algorithmic}
 
 \section{Ivy}
 
-Similarly, Ivy is a specialized version of Arvy that makes nodes along the request path always select the oldest node as a new parent, which is always the node that made the request originally
+Also explained already in section~\ref{intro:ivy}, Ivy always connects every node along a request path to the node that made the original request.
 \begin{algorithmic}
-\Function{SelectNewParent}{$\{a_i\}$}
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
 \State\Return $a_0$
 \EndFunction
 \end{algorithmic}
 
-\chapter{Implementation}
+\section{Edge Cost Minimizer}
 
-Should include
+Since algorithms have access to the edge costs, we should make use of those. One simple first algorithm one can think of is one that always chooses the node with minimum edge cost as the new parent. See figure~\ref{fig:ecm} for an example. This heuristic intuitively should perform well since short paths make for short request paths.
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
+\State\Return$a_i$ such that $c(a_k,a_i),i\in\{0,\dots,k-1\}$ is minimal
+\EndFunction
+\end{algorithmic}
+
+Notable properties of this algorithm include
 \begin{itemize}
-\item How the program design only allows expressing valid Arvy algorithms
+\item The total edge distance in the tree can only get smaller over time, since a previous edge between $a_{k-1}$ and $a_k$ can only be replaced with a shorter one, which will be the same edge when $c(a_k,a_{k-1})$ is the minimum already.
+\item This in turn means that with a good enough distribution of nodes initiating requests, the tree will converge to a Minimum Spanning Tree (MST) eventually, because that's the state of lowest possible total edge distance.
+\item Consequently, once the tree has converged, this algorithm behaves exactly the same as Arrow, which never changes the tree by design. Therefore to get the eventual behavior of this algorithm, one can simply start with an MST directly and run Arrow. This seems to imply that in general this Algorithm isn't any more powerful than Arrow.
 \end{itemize}
+
+\begin{figure}
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}
+[bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={draw=blue,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=0.7]
+\node[bn] (n1) at (0,0) {$a_0$};
+\node[bn] (n2) at (1,2) {$a_1$};
+\node[bn] (n3) at (3,3) {$a_2$};
+\node[bn] (n4) at (5,2) {$a_3$};
+\node[bn] (n5) at (4,0) {$a_4$};
+\draw[be] (n1) -- node[blue]{request path} (n2);
+\draw[be] (n2) -- (n3);
+\draw[be] (n3) -- (n4);
+\draw[be] (n4) -- (n5);
+\draw[dotted] (n1) -- node{$3$} (n5);
+\draw[dotted] (n2) -- node{$5$} (n5);
+\draw[dotted] (n3) -- node{$1$} (n5);
+\draw[dotted] (n4) -- node{$4$} (n5);
+\end{tikzpicture}
+\caption{The request arrives at $a_4$ which now needs to decide which one of $a_0,\dots a_3$ to choose as a parent. For this it can access the edge costs to all of them.}
+\end{subfigure}
+\quad
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}
+[bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={draw=blue,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=0.7]
+\node[bn] (n1) at (0,0) {$a_0$};
+\node[bn] (n2) at (1,2) {$a_1$};
+\node[bn] (n3) at (3,3) {$a_2$};
+\node[bn] (n4) at (5,2) {$a_3$};
+\node[bn] (n5) at (4,0) {$a_4$};
+\draw[be] (n1) -- (n2);
+\draw[be] (n2) -- (n3);
+\draw[be] (n3) -- (n4);
+\draw[be] (n4) -- (n5);
+\draw[thick,arrows={-Stealth[scale=1.5]}] (n5) -- node{$1$} (n3);
+\end{tikzpicture}
+\caption{$a_2$ gets chosen as the new parent since the edge towards it has the smallest cost.}
+\end{subfigure}
+\caption{Edge Cost Minimizer example with a fourth node in the request path.}
+\label{fig:ecm}
+\end{figure}
+
+\section{Fixed Path Ratio}
+
+Another simple algorithm we'll call Fixed Path Ratio (FPR), which chooses the node at a fixed ratio $f\in[0,1]$ between the first and the last one. As an example, with a request path $a_0,a_1,a_2,a_3,a_4$ and a fixed ratio of $f=\frac{1}{2}$, node $a_5$ would choose $a_2$ as its new parent, since it's half-way between $a_0$ and $a_4$. We use the earlier node in case of a ratio being inbetween two nodes. See figure~\ref{fig:fpr} for an example.
+
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
+\State\Return $a_{\lfloor f(k-1)\rfloor}$
+\EndFunction
+\end{algorithmic}
+
+A variation of this algorithm FPR' doesn't use the fraction on the node counts, but on the edge costs instead. A request path $a_0,a_1,a_2,\dots,a_{k-1}$ gets mapped to costs $c'_i$ representing how far the request had to travel to get to node $a_i$. These costs are defined as
+\begin{equation}
+c'_i=\sum_{j=1}^ic(a_{j-1},a_j)
+\end{equation}
+
+The last node whose $c'$ is lower than or equal to $f\cdot c'_{k-1}$ is then selected.
+
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
+\State\Return $a_i$ with the maximum $i$ with the constraint $c'_i\leq f\cdot c'_{k-1}$ 
+\EndFunction
+\end{algorithmic}
+
+This algorithm has the following interesting properties:
+\begin{itemize}
+\item For $f=0$ these algorithms are equivalent to Ivy. Similarly $f=1$ is equivalent to Arrow.
+\item For $f=\frac{1}{2}$, FPR builds a binary tree on the request path, see figure~\ref{fig:fpr} for an example.
+\item With $c(u,v)=const\;\forall u,v$ FPR' is equivalent to FPR.
+
+\end{itemize}
+
+\begin{figure}
+\centering
+\begin{tikzpicture}
+[bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={thick,arrows={-Stealth[scale=1.5]}}
+,pe/.style={draw=blue,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=0.7]
+\node[bn] (n0) at (3,0) {$a_0$};
+\node[bn] (n1) at (1,0) {$a_1$};
+\node[bn] (n2) at (0,2) {$a_2$};
+\node[bn] (n3) at (1,4) {$a_3$};
+\node[bn] (n4) at (3,5) {$a_4$};
+\node[bn] (n5) at (5,4) {$a_5$};
+\node[bn] (n6) at (6,2) {$a_6$};
+
+\draw[pe] (n0) -- (n1);
+\draw[pe] (n1) -- node[blue]{request path} (n2);
+\draw[pe] (n2) -- (n3);
+\draw[pe] (n3) -- (n4);
+\draw[pe] (n4) -- (n5);
+\draw[pe] (n5) -- (n6);
+
+\draw[be] (n1) -- (n0);
+\draw[be] (n2) -- (n0);
+\draw[be] (n3) -- (n1);
+\draw[be] (n4) -- (n1);
+\draw[be] (n5) -- (n2);
+\draw[be] (n6) -- (n2);
+\end{tikzpicture}
+\caption{FPR algorithm with a ratio of $\frac{1}{2}$ and a request path of 7 nodes. A binary tree is created.}
+\label{fig:fpr}
+\end{figure}
+
+\section{Uniformly Random}
+
+Not a particularly interesting algorithm, but good as a reference point is a completely random algorithm, selecting a new parent uniformly random from all available choices.
+
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
+\State\Return choose $a_i$ uniformly at random
+\EndFunction
+\end{algorithmic}
+
+\section{Dynamic Star}
+
+As \cite{Peleg} showed, the best shortest path tree is a pretty good tree to use for Arrow if you know the probability distribution $p_i, i\in V$ of nodes making requests. A shortest path tree is a tree with a specific center node, while all others are connected to the center through a shortest path between them \TODO{Explain best shortest path tree}. Since we're dealing with a complete graph and metric costs, the direct edge between two nodes is always a shortest path, which when applied to all nodes results in a star-shaped tree with the center node connected directly to all others.
+
+This Dynamic Star algorithm measures the distribution $p_i$ at runtime and dynamically adjusts the tree according to it, striving for a star. The fact that Arvy is a distributed algorithm however poses a problem, as a node can't obtain a global view of the system to get accurate values for $p_i$, so we'll have to make do with every node $v$ having a local approximation $p_i^v$ of $p_i$.
+
+The idea is that each node $v\in V$ maintains a count $n_i^v\in\mathbb{N}_0$ of how many times node $i\in V$ made a request, initialized with all $0$. Because $v$ always knows how many requests it made itself, the value for $n_v^v$ is indeed accurate, while all others can be an outdated value, meaning $\forall i:n_v^i\leq n_v^v$. $n_i^v$ gets updated according to the following rules:
+\begin{enumerate}
+\item When node $v$ makes a request, set $n_v^v\gets n_v^v+1$
+\item Any message sent from $v$ shall include a subset of known counts $\{n_i^v,i\in S\subset V\}$, which when arriving at $u$ will update all received values if they are bigger than the values already known: $n_i^u\gets \max(n_i^u,n_i^v),i\in S$.
+\end{enumerate}
+
+Depending on the choice of the subset $S$ of value updates to send, the information propagation of the true values in the network might be slower or faster. Generally the bigger $|S|$, the faster information propagates. Some interesting choices for $S$ are
+\begin{itemize}
+\item On a request path $\{a_i\}$, $a_0$ only sends along its own count $S=\{n_{a_0}^{a_0}\}$, while all nodes along the path forward this $S$. Therefore all $a_i$ will momentarily know the accurate value for $n_{a_0}^{a_i}$.
+\item With $S=V$ we get as much information propagation as possible, but also $\mathcal{O}(n)$ message complexity.
+\item Message size can be reduced by making $S$ a uniform random selection of $V$, with $|S|\ll|V|$. With many requests happening, information should still propagate rather quickly.
+\item An improved version of this is a random weighted selection, preferring $n_i^v$ that have been updated more recently.
+\end{itemize}
+
+Once such $n_i^v$ are known, the approximated request probabilities $p_i^v$ are then simply
+\begin{equation}
+p_i^v=\frac{n_i^v}{\sum_jn_j^v}
+\end{equation}
+
+We then define the cost of a star tree with node $k$ in the center as follows:
+\begin{equation}
+c_{star}^k=\sum^{i,j}p_i^vp_j^v(c(i, k)+c(k,j))
+\end{equation}
+
+With this we have everything in place for the algorithm to select a new parent out of the available options $\{a_0,a_1,\dots,a_{k-1}\}$. We do so by selecting the $a_i$ with the lowest cost as the center of the star.
+
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a_0, a_1,\dots,a_{k-1}\}$}
+\State\Return Choose $a_i$ with lowest $c_{star}^{a_i}$
+\EndFunction
+\end{algorithmic}
+
+Justification is needed for the fact that the node $a_k$ selecting the new parent seems to access costs not imminent to it, which was given as a restriction in \ref{model}. This can be circumvented by each node $a_i$ calculating $c_{star}^{a_i}$ locally, then sending that value in the message to $a_{i+1}$. This is however not the same as calculating all $c_{star}$ values in the final node in the request path, but the resulting values shouldn't be far off.
+
+\chapter{Graph Weights, Initial Trees and Request Sequences}
+
+\chapter{Implementation Notes}
 
 As part of this thesis, a Haskell library for writing and testing Arvy algorithms was created, accessible at \url{https://github.com/infinisil/arvy}. In this chapter we explain some key design decisions that went into it. With Haskell's advanced type system it's possible to guarantee correctness of all Arvy heuristics declared with this library. Needless to say, this chapter is more technical than the others and advanced Haskell knowledge is required to fully understand it.
 
