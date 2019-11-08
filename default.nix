@@ -16,7 +16,8 @@ let
       fvextra
       ifplatform
       xstring
-      framed;
+      framed
+      commath;
   };
 
 in pkgs.stdenv.mkDerivation {

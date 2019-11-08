@@ -9,6 +9,7 @@
 \usepackage{tikz}
 \usepackage{hyperref}
 \usepackage{minted}
+\usepackage{commath}
 \usetikzlibrary{arrows.meta}
 
 
@@ -16,7 +17,7 @@
 % DOCUMENT METADATA
 
 \thesistype{Bachelor's Thesis} % Master's Thesis, Bachelor's Thesis, Semester Thesis, Group Project
-\title{Practical Dynamic Directories}
+\title{Exploration of Arvy Heuristics in Sequential Distributed Mutual Exclusion}
 
 \author{Silvan Mosberger}
 \email{msilvan@student.ethz.ch}
@@ -39,7 +40,6 @@ ETH Zürich}
 
 \frontmatter % do not remove this line
 \maketitle
-\TODO{Better title?}
 
 \cleardoublepage
 
@@ -746,12 +746,13 @@ This Dynamic Star algorithm measures the distribution $p_i$ at runtime and dynam
 The idea is that each node $v\in V$ maintains a count $n_i^v\in\mathbb{N}_0$ of how many times node $i\in V$ made a request, initialized with all $0$. Because $v$ always knows how many requests it made itself, the value for $n_v^v$ is indeed accurate, while all others can be an outdated value, meaning $\forall i:n_v^i\leq n_v^v$. $n_i^v$ gets updated according to the following rules:
 \begin{enumerate}
 \item When node $v$ makes a request, set $n_v^v\gets n_v^v+1$
+\label{rule1}
 \item Any message sent from $v$ shall include a subset of known counts $\{n_i^v,i\in S\subset V\}$, which when arriving at $u$ will update all received values if they are bigger than the values already known: $n_i^u\gets \max(n_i^u,n_i^v),i\in S$.
 \end{enumerate}
 
 Depending on the choice of the subset $S$ of value updates to send, the information propagation of the true values in the network might be slower or faster. Generally the bigger $|S|$, the faster information propagates. Some interesting choices for $S$ are
 \begin{itemize}
-\item On a request path $\{a_i\}$, $a_0$ only sends along its own count $S=\{n_{a_0}^{a_0}\}$, while all nodes along the path forward this $S$. Therefore all $a_i$ will momentarily know the accurate value for $n_{a_0}^{a_i}$.
+\item On a request path $\{a_0,a_1,\dots\}$, $a_0$ only sends along its own count $S=\{n_{a_0}^{a_0}\}$, while all nodes along the path forward this $S$. Therefore all $a_i$ will momentarily know the accurate value for $n_{a_0}^{a_i}$.
 \item With $S=V$ we get as much information propagation as possible, but also $\mathcal{O}(n)$ message complexity.
 \item Message size can be reduced by making $S$ a uniform random selection of $V$, with $|S|\ll|V|$. With many requests happening, information should still propagate rather quickly.
 \item An improved version of this is a random weighted selection, preferring $n_i^v$ that have been updated more recently.
@@ -764,7 +765,7 @@ p_i^v=\frac{n_i^v}{\sum_jn_j^v}
 
 We then define the cost of a star tree with node $k$ in the center as follows:
 \begin{equation}
-c_{star}^k=\sum^{i,j}p_i^vp_j^v(c(i, k)+c(k,j))
+c_{star}^k=\sum_{i,j}p_i^vp_j^v(c(i, k)+c(k,j))
 \end{equation}
 
 With this we have everything in place for the algorithm to select a new parent out of the available options $\{a_0,a_1,\dots,a_{k-1}\}$. We do so by selecting the $a_i$ with the lowest cost as the center of the star.
@@ -777,7 +778,83 @@ With this we have everything in place for the algorithm to select a new parent o
 
 Justification is needed for the fact that the node $a_k$ selecting the new parent seems to access costs not imminent to it, which was given as a restriction in \ref{model}. This can be circumvented by each node $a_i$ calculating $c_{star}^{a_i}$ locally, then sending that value in the message to $a_{i+1}$. This is however not the same as calculating all $c_{star}$ values in the final node in the request path, but the resulting values shouldn't be far off.
 
-\chapter{Graph Weights, Initial Trees and Request Sequences}
+\subsection{Non-converging Dynamic Star}
+
+One slight problem with the Dynamic Star algorithm is that in general it eventually converges to a static tree. This is because as the total number of request grows bigger, changes to $n_i^v$ matter less and less. After $R\in\mathbb{N}$ requests, another request can cause a maximum change to $p_i^v$ of
+\begin{equation}
+\begin{split}
+\left|p_i^v-p_i^{'v}\right| = & \left|\frac{n_i^v}{\sum_jn_j^v}-\frac{n_i^{'v}}{\sum_jn_j^{'v}}\right| = \left|\frac{n_i^v}{R}-\frac{n_i^v+\{0,1\}}{R+1}\right| \\
+= & \left|\frac{n_i^vR+n_i^v-n_i^vR+\{0,1\}R}{R(R+1)}\right| = \frac{\left|n_i^v-\{0,1\}R\right|}{R(R+1)} \\
+\leq & \frac{R}{R(R+1)}=\frac{1}{R+1}\to_{R\to\infty} 0
+\end{split}
+\end{equation}
+
+Where $\{0,1\}$ is $1$ or $0$ depending on whether $n_i^v$ was increased or not.
+
+This is a problem because it means the longer a system runs, the less it's adapting to changes in the probability pattern. If after $10^{100}$ requests a request-controlling adversary shows up, it could exploit this essentially static tree by constantly bouncing requests between two nodes with the worst connection. If this were to happen initially it wouldn't be a problem as the heuristic could adapt to this by choosing a better star center quickly. This means the algorithm's behavior is dependent on how long it has been running.
+
+The general idea to solve this problem is to give less weight to older requests. This can be done in multiple ways:
+\begin{itemize}
+\item After every increment of $n_i^v$ by one, all counts get decreased by a constant factor: $\forall i:n_i^v\gets \alpha n_i^v$ with $0<\alpha<1$. If this was a global view this would work well, since after $R$ requests an original contribution to $n_i^{global}$ of $1$ would be reduced to $\alpha^R$, implementing an exponential weight falloff. However since this is not a global view, it won't work as well, because depending on the propagation speed with $|S|$, the $n_i^v$ will be more outdated, resulting in old requests having more weight than they would in a global view.
+\item A slight improvement over this can be achieved: For each message sent from $v$, the total amount of requests known $\sum_jn_j^v$ is sent as well. When received by $u$, it's possible for it to calculate the difference of known requests $dR=\sum_jn_j^v-\sum_jn_j^u$. This means all $n_i^u$ are about that many requests more in the past than $n_i^v$, so an update is done on them to compensate for this: $\forall i:n_i^u\gets\alpha^{dR}n_i^u$. This is better because the multiplication with $\alpha$ doesn't depend on the selection of $|S|$ anymore, resulting in older values being more accurately weighed.
+\item With the requirement of nodes being able to measure passing of time, it's possible to improve on this: Every $dt$ time units, all counts get decreased with the constant factor $\forall i:n_i^v\gets \alpha n_i^v$. This is now a accurate time-based exponential falloff, which is independent of both the propagation speed and the request pattern.
+\end{itemize}
+
+\chapter{Graph Costs, Initial Trees and Request Sequences}
+
+The performance of an Arvy algorithm depends not only on the algorithm itself, but also on the costs of the edges, the initial tree and the request sequence.
+
+\section{Graph Costs}
+
+\paragraph{Clique}
+
+\begin{equation}
+c(u,v)=
+\begin{cases}
+1 & \text{if}\;u\neq v \\
+0 & \text{otherwise}
+\end{cases}
+\end{equation}
+
+\paragraph{Ring}
+
+\begin{equation}
+c(u,v)\equiv|u-v|\;(\bmod\;n)
+\end{equation}
+
+\paragraph{Uniformly Random Hypercube}
+
+Each node $i$ has an associated uniform random point $p_i:[0,1]^d$.
+\begin{equation}
+c(u,v)=\norm{p_u-p_v}
+\end{equation}
+
+\paragraph{Erdős-Rényi Random Graph}
+
+Generate a non-complete graph $G'$ by connecting every possible edge with probability $p$.
+\begin{equation}
+c(u,v)=\text{length of shortest path from $u$ to $v$ in $G'$}
+\end{equation}
+
+\paragraph{Barabási-Albert Random Graph}
+
+For an $m\in\mathbb{N}$, start with a graph $G'=(\{1,\dots,m\},\varnothing)$. Then iteratively add additional nodes while connecting it to $m$ existing nodes, with probabilities proportional to their degrees.
+
+\begin{equation}
+c(u,v)=\text{length of shortest path from $u$ to $v$ in $G'$}
+\end{equation}
+
+\section{Initial Trees}
+
+\paragraph{Ring}
+
+\paragraph{Random}
+
+\paragraph{Minimum Pair Distance Tree}
+
+This initial tree minimizes arguably the most important measure for Arvy, the total distance between all pairs of nodes. This is important because with uniformly random requests, every path between a pair of nodes has the same chance of being used. A way to calculate this minimum is by brute force search through all possible trees. Because there are $n^{n-2}$ possible trees according to \cite{Borchardt} this approach is not practical for more than a couple nodes.
+
+\paragraph{Approximal Mimimum Pair Distance}
 
 \chapter{Implementation Notes}
 
