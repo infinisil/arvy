@@ -246,9 +246,9 @@ bestPairDistanceTree n weights = do
 shortestPairs :: LogMember r => TreeParam r
 shortestPairs = TreeParam
   { treeName = "shortestpairs"
-  , treeGen = \n w -> reverse <$> bestPairDistanceTree n w >>= \case
-      edges@((root, _):_) -> return ( array (0, n - 1) ((root, root) : edges) )
-      _ -> error "No root! Shouldn't occur"
+  , treeGen = \n w -> do
+      edges <- reverse <$> bestPairDistanceTree n w
+      return ( array (0, n - 1) [(r, r) | r <- [0..n-1] ] // map swap edges)
   }
 
 bestStar :: TreeParam r
