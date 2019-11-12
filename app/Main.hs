@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import           Parameters
@@ -13,10 +14,15 @@ import           Evaluation
 import           Arvy.Algorithm
 import           Arvy.Algorithm.Collection
 import           Arvy.Log
+import           Control.Monad
+import           Data.Array.Unboxed
+import           Data.Ix
 import           Evaluation.Plot
 import           Polysemy
 import           Polysemy.Async
+import           Polysemy.RandomFu
 import           Prelude
+import           Utils
 
 data RingNodeData = RingNodeData
   { ringSuccessor :: Node
@@ -38,17 +44,33 @@ ringTree n = ArvyData
         in fromIntegral dist
     }
   }
-main' :: IO ()
-main' = do
+
+main :: IO ()
+main = runM $ runRandomIO $ runLogBySeverity Info (cmap messageText logTextStdout) $ do
+  let n = 10
+  weights <- Weights.weightsGen (Weights.unitEuclidian 2) n
+  tree <- Tree.treeGen Tree.shortestPairs n weights
+  forM (assocs tree) $ \(a, b) -> do
+    if (a /= b) then do
+      lgInfo $ "\\draw[thick] (n" <> tshow a <> ") -- (n" <> tshow b <> ");"
+    else do
+      lgDebug $ "Root is " <> tshow a
+
+  lgDebug $ tshow tree
+
+main'' :: IO ()
+main'' = do
   results <- runM .@ runAsyncInIO
     $ runLogBySeverity Info (cmap messageText logTextStdout)
     $ runSpecParams SpecParams
     { specParamShared = SharedParams
       { sharedParamRandomSeed = 0
-      , sharedParamRequestCount = 100000
+      , sharedParamRequestCount = 10000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalRequestDist'
+                           , evalRequestRatio
                            , evalRequestHops
+                           , evalTreeEdgeDist
                            ]
       }
     --, specParamNodeCount = 1000
@@ -56,28 +78,32 @@ main' = do
     , specParamAlg = Alg.reclique
     , specParamInit = RecliqueConf
       { recliqueFactor = 3
-      , recliqueLevels = 11
-      , recliqueBase = 2
+      , recliqueLevels = 5
+      , recliqueBase = 3
       }
     , specParamGenAlgs =
       [
-      (Alg.ivy, Tree.random),
+      (Alg.dynamicStar, Tree.shortPairs),
       (Alg.arrow, Tree.shortPairs),
-      (Alg.arrow, Tree.bestStar)
+      (Alg.arrow, Tree.bestStar),
+      (Alg.localMinPairs, Tree.shortPairs),
+      (Alg.indexMeanHop, Tree.shortPairs),
+      (Alg.indexMeanWeight, Tree.shortPairs)
       ]
     }
   plotResults "wip" results
 
-main :: IO ()
-main = do
+main' :: IO ()
+main' = do
   results <- runM .@ runAsyncInIO
     $ runLogBySeverity Info (cmap messageText logTextStdout)
     $ runGenParams GenParams
     { genParamShared = SharedParams
       { sharedParamRandomSeed = 0
       , sharedParamRequestCount = 100000
-      , sharedParamRequests = Requests.random
-      , sharedParamEvals = [ evalRequestDist'
+      , sharedParamRequests = Requests.farthestRatio
+      , sharedParamEvals = [ evalRequestDist
+                           , evalRequestRatio
                            , evalRequestHops
                            ]
       }
@@ -86,8 +112,10 @@ main = do
     , genParamAlgs =
       [
       (Alg.dynamicStar, Tree.random),
+      (Alg.arrow, Tree.shortPairs),
       (Alg.arrow, Tree.bestStar),
-      (Alg.arrow, Tree.shortPairs)
+      (Alg.ivy, Tree.random),
+      (Alg.localMinPairs, Tree.random)
       ]
     }
   plotResults "wip" results

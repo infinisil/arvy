@@ -88,11 +88,15 @@ clique = WeightsParam
   }
 
 -- | Should contain the N-dimensional point for each node, distance between them can be calculated on the fly, tree can be anything
-unitEuclidian :: Member RandomFu r => Int -> WeightsParam r
+unitEuclidian :: (LogMember r, Member RandomFu r) => Int -> WeightsParam r
 unitEuclidian dim = WeightsParam
   { weightsName = "uniform" <> tshow dim
   , weightsGen = \n -> do
       points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
+      forM (assocs points) $ \(i, pt) -> do
+        let x = 10 * pt ! 0
+        let y = 10 * pt ! 1
+        lgInfo $ "\\coordinate (n" <> tshow i <> ") at (" <> tshow x <> "," <> tshow y <> ");"
       return $ array ((0, 0), (n - 1, n - 1))
         [ ((u, v), distance (points ! u) (points ! v))
         | u <- [0 .. n - 1]
