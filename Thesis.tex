@@ -44,7 +44,7 @@ ETH Zürich}
 \cleardoublepage
 
 \begin{acknowledgements}
-I thank Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
+I thank my advisors Pankaj and András for the weekly discussions, which helped greatly in guiding the direction of this work and developing new ideas.
 \end{acknowledgements}
 
 
@@ -76,31 +76,36 @@ We consider a complete graph $G=(V,E)$ with $n\coloneqq|V|$ vertices and $m\colo
 
 As a reasonable constraint, a node $v$ can only query costs from itself to other nodes, so it has access to $\{c(v, u)\;|\;u\in V\}$. In a realistic scenario these costs can be obtained and updated by doing regular pings to other nodes. In our model we don't consider changing costs however.
 
-In addition, Every node can be considered a machine with the ability to execute arbitrary effectful code such as reading/writing state or generating randomness. However execution is instantaneous, so no time passes during execution. Therefore traversing graph edges are the only place to spend time on.
+In addition, Every node can be considered a machine with the ability to execute arbitrary effectful code such as reading/writing state or generating randomness. We model execution to be atomic, so no time passes during it. Therefore traversing graph edges are the only place to spend time on.
 
-A major simplification we make is that nodes can only request the token in series. So only after the token has reached the requesting node another node can make a request for it. Therefore requests can be represented as an series $r=\{r_i\},r_i\in N$ where $r_i$ encodes the $i$-th request originating from node $r_i$. For being able to reason more easily about execution time we let $i\in[1,i_{max}]$ to only have finitely many requests.
+A major simplification we make is that nodes can only request the token in series. So only after the token has reached the requesting node another node can make a request for it. Therefore requests can be represented as an series $R=\{r_1,r_2,\dots\},r_i\in V$ where $r_i$ encodes the $i$-th request originating from node $r_i$. While this series could be endless, for being able to reason more easily about execution time we let it be finite.
 
-In the type of algorithms we'll look at, when the $i$-th request gets made by node $r_i$, the request travels along some path $p_i=\{p_{i0},p_{i1},\dots,p_{ip_{max}}\}$ of $p_{max}+1$ nodes \TODO{$p_{max}$ should really be ${p_{max}}_i$, better variable names?}, where $p_{i0}=r_i$ is the node making the request and $p_{ip_{max}}$ is the node currently holding the token. The token is then sent directly from $p_{ip_{max}}$ to $p_{i0}$ to satisfy the request. Without loss of generality, nodes can't send requests when they have the token already, meaning $p_{i0}\neq p_{ip_{max}}$.
+In the type of algorithms we'll look at, when the $i$-th request gets made by node $r_i$, the request travels along some path $A_i=\{a_i^{(0)},a_i^{(1)},\dots,a_i^{(l_i)}\}$ with $l_i=|A_i|-1$ being the index of the last node as well as the number of messages that are being sent. Then $a_i^{(0)}=r_i$ is the node making the request and the $a_i^{(l_i)}$ is the node currently holding the token. After the request was sent along this path, the token is then sent directly from $a_i^{(l_i)}$ to $a_i^{(0)}$ to satisfy the request. Without loss of generality, nodes can't send requests when they have the token already, meaning $a_i^{(0)}\neq a_i^{(l_i)}$ or $|A_i|\geq 2$. In addition, it holds that $a_i^{(0)}=a_{i+1}^{(l_{i+1})}$ for all $i\in\mathbb{N}$, meaning the node making a request in a request will be the last node in the request path in the following request.
 
-The goal is to satisfy the requests most efficiently. We first define $\mathcal{C}(p_i)$ to be the cost of traversing path $p_i$:
+The goal is to satisfy the requests most efficiently. We first define $c(A_i)$ to be the cost of traversing request path $A_i$:
 \begin{equation}
-\mathcal{C}(p_i)\coloneqq\sum_{k=1}^{p_{max}}c(p_{i(k-1)}, p_{ik})
+c(A_i)\coloneqq\sum_{k=1}^{l_i}c(a_i^{(k-1)}, a_i^{(k)})
 \end{equation}
 
-There are different ways to define efficiency in this context:
+Also let $c_{avg}$ be the average cost of an edge in the graph:
+\begin{equation}
+c_{avg}=\frac{1}{|V|^2}\sum_{u,v\in V}c(u,v)
+\end{equation}
+
+Now there are different reasonable ways to define efficiency for a sequence of requests $R$.
 \begin{itemize}
 \item
-  One way is to look at the average time it takes to satisfy a request. This would include the cost to traverse the request path in addition to sending the token back. However because the cost to send the token back is unchangeable in our case we ignore it. Therefore
+  One way is to look at the average time it takes to satisfy a request. This would include the cost to traverse the request path in addition to sending the token back. However because the cost to send the token back is unchangeable in our case we ignore it. To get a measure that's independent of the cost values in the graph, we divide by $c_{avg}$ as well.
   \begin{equation}
-    \mathcal{C}_{time}(r) = \frac{1}{i_{max}}\sum_i\mathcal{C}(p_i)
+    \mathcal{C}_{time}(R) = \frac{1}{|R|}\sum_{i=1}^{|R|}\frac{c(A_i)}{c_{avg}}
   \end{equation}
 
-  This measure is better suited for overall performance because it reflects the average request.
+  This measure is better suited for overall performance because the occasional poorly performing request gets averaged out.
   
 \item
-  Another way is to look at how much worse the request path is than how well it could have been by getting the ratio of the actual request path to what it could have been with a direct connection.
+  Another way is to look at how much worse the request paths are than a direct connection.
   \begin{equation}
-    \mathcal{C}_{ratio}(r) = \frac{1}{i_{max}}\sum_i\frac{\mathcal{C}(p_i)}{c(p_{i0},p_{ip_{max}})}
+    \mathcal{C}_{ratio}(R) = \frac{1}{|R|}\sum_{i=1}^{|R|}\frac{c(A_i)}{c(p_i^{(0)},p_i^{(l_i)})}
   \end{equation}
 
   This measure penalizes request paths that are much longer than the direct path, so it's better suited for getting a sense of how individual requests are doing.
@@ -108,7 +113,7 @@ There are different ways to define efficiency in this context:
 \item
   Even though in our model there is no execution time for computations on nodes, it could still be interesting to see how many nodes a request has to travel through. Therefore we define another measure, the average hop count:
   \begin{equation}
-    \mathcal{C}_{hops}(r) = \frac{1}{i_{max}}\sum_ip_{max}
+    \mathcal{C}_{hops}(r) = \frac{1}{|R|}\sum_il_i
   \end{equation}
 \end{itemize}
 
@@ -117,12 +122,12 @@ There are different ways to define efficiency in this context:
 
 Two well-known algorithms for solving this problem are Arrow and Ivy, which are both a special case of an Arvy algorithm, which is where its name comes from.
 
-All of these algorithms are based on the idea of maintaining a rooted spanning tree over time: Every node stores a pointer to its parent $parent : V \rightarrow V$ while root nodes point to themselves. When a (non-root) node $a_0$ needs the token, it sends a request message towards its parent $a_1=parent(a_0)$. When a node $a_i$ receives such a request, it forwards it to $a_{i+1}=parent(a_i)$ and so on until the root $a_k$ containing the token is reached. This forms a request path $\{a_0,a_1,\dots,a_k\}$ of $k-1$ nodes. The final node then finishes its own work with the token after which it sends it directly to $a_0$. Now to make this a functioning algorithm, the arrows along this path need to be changed in some way such that the rooted tree is restored.
+All of these algorithms are based on the idea of maintaining a rooted spanning tree over time: Every node stores a pointer to its parent $parent : V \rightarrow V$ while root nodes point to themselves. When a (non-root) node $a^{(0)}$ needs the token, it sends a request message towards its parent $a^{(1)}=parent(a^{(0)})$. When a node $a^{(i)}$ receives such a request, it forwards it to $a^{(i+1)}=parent(a^{(i)})$ and so on until the root $a^{(l)}$ containing the token is reached. This forms a request path $A=\{a^{(0)},a^{(1)},\dots,a^{(l)}\}$. The final node then finishes its own work with the token after which it sends it back directly to $a^{(0)}$. Now to make this a functioning algorithm, the arrows along this path need to be inverted in some way such that the rooted tree is restored.
 
 \subsection{Arrow}
 \label{intro:arrow}
 
-The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in that it just inverts the pointers along its path: When $a_{i+1}$ receives a request from $a_i$, it sets $parent(a_{i+1})=a_i$. See Figure~\ref{fig:arrow} for a walk-through of two requests with Arrow. Important on Arrow is that it doesn't ever change the structure of the spanning tree, meaning that the initial tree matters a lot for how well it performs.
+The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in that it just inverts the pointers along its path: When $a^{(i+1)}$ receives a request from $a^{(i)}$, it sets $parent(a^{(i+1)})=a^{(i)}$. See Figure~\ref{fig:arrow} for a walk-through of two requests with Arrow. Notable on Arrow is that it doesn't ever change the structure of the spanning tree, meaning that the initial tree matters a lot for how well it performs.
 
 Arrow was originally described in \cite{Ray}.
 
@@ -266,7 +271,7 @@ Arrow was originally described in \cite{Ray}.
 \subsection{Ivy}
 \label{intro:ivy}
 
-Ivy encompasses an entirely different way to invert the arrows along the request path, namely that every node $a_{i+1}$ receiving the request sets its parent to the node that made the original request: $parent(a_{i+1})=a_0$. Therefore $a_0$ ends up being the center of a star consisting of all nodes along the request path. Figure~\ref{fig:ivy} shows an example of Ivy.
+Ivy encompasses an entirely different way to invert the arrows along the request path, namely that every node $a^{(i+1)}$ receiving the request sets its parent to the node that made the original request: $parent(a^{(i+1)})=a^{(0)}$. Therefore $a^{(0)}$ ends up being the center of a star consisting of all nodes along the request path. Figure~\ref{fig:ivy} shows an example of Ivy.
 
 Ivy was originally described in \cite{Ivy}.
 
@@ -405,7 +410,7 @@ Ivy was originally described in \cite{Ivy}.
 
 \subsection{Arvy}
 
-Arvy generalizes the ideas of Arrow and Ivy by allowing nodes $a_{i+1}$ that received a request to set their parent to any node the request already traveled through, so $parent(a_{i+1})\in\{a_0,\dots,a_i\}$. See Figure~\ref{fig:arvy} for an example.
+Arvy generalizes the ideas of Arrow and Ivy by allowing nodes $a^{(i+1)}$ that received a request to set their parent to any node the request already traveled through, so $parent(a^{(i+1)})\in\{a^{(0)},\dots,a^{(i)}\}$. See Figure~\ref{fig:arvy} for an example.
 
 It's easy to see that this algorithm maintains a spanning tree over time with sequential requests and that it's correct. However this also holds for concurrent requests as the paper introducing Arvy~\cite{Arvy} shows.
 
@@ -778,6 +783,8 @@ With this we have everything in place for the algorithm to select a new parent o
 
 Justification is needed for the fact that the node $a_k$ selecting the new parent seems to access costs not imminent to it, which was given as a restriction in \ref{model}. This can be circumvented by each node $a_i$ calculating $c_{star}^{a_i}$ locally, then sending that value in the message to $a_{i+1}$. This is however not the same as calculating all $c_{star}$ values in the final node in the request path, but the resulting values shouldn't be far off.
 
+Note that this algorithm needs $\mathcal{O}(n^2)$ time for calculation of $c_{star}$ in each node along the request path, making it very slow to run in comparison to other algorithms. Messages only need to send the $S$ and the $a_i$ with lowest $c_{star}^{a_i}$, making message complexity $\mathcal{O}(|S|)$.
+
 \subsection{Non-converging Dynamic Star}
 
 One slight problem with the Dynamic Star algorithm is that in general it eventually converges to a static tree. This is because as the total number of request grows bigger, changes to $n_i^v$ matter less and less. After $R\in\mathbb{N}$ requests, another request can cause a maximum change to $p_i^v$ of
@@ -791,7 +798,7 @@ One slight problem with the Dynamic Star algorithm is that in general it eventua
 
 Where $\{0,1\}$ is $1$ or $0$ depending on whether $n_i^v$ was increased or not.
 
-This is a problem because it means the longer a system runs, the less it's adapting to changes in the probability pattern. If after $10^{100}$ requests a request-controlling adversary shows up, it could exploit this essentially static tree by constantly bouncing requests between two nodes with the worst connection. If this were to happen initially it wouldn't be a problem as the heuristic could adapt to this by choosing a better star center quickly. This means the algorithm's behavior is dependent on how long it has been running.
+This is a problem because it means the longer a system runs, the less it's adapting to changes in the probability pattern. If after $10^{100}$ requests a request-controlling adversary shows up, it could exploit this practically static tree by constantly bouncing requests between two nodes with the worst connection. If this were to happen initially it wouldn't be a problem as the heuristic could adapt to this by choosing a better star center quickly. This means the algorithm's behavior is dependent on how long it has been running.
 
 The general idea to solve this problem is to give less weight to older requests. This can be done in multiple ways:
 \begin{itemize}
@@ -799,6 +806,234 @@ The general idea to solve this problem is to give less weight to older requests.
 \item A slight improvement over this can be achieved: For each message sent from $v$, the total amount of requests known $\sum_jn_j^v$ is sent as well. When received by $u$, it's possible for it to calculate the difference of known requests $dR=\sum_jn_j^v-\sum_jn_j^u$. This means all $n_i^u$ are about that many requests more in the past than $n_i^v$, so an update is done on them to compensate for this: $\forall i:n_i^u\gets\alpha^{dR}n_i^u$. This is better because the multiplication with $\alpha$ doesn't depend on the selection of $|S|$ anymore, resulting in older values being more accurately weighed.
 \item With the requirement of nodes being able to measure passing of time, it's possible to improve on this: Every $dt$ time units, all counts get decreased with the constant factor $\forall i:n_i^v\gets \alpha n_i^v$. This is now a accurate time-based exponential falloff, which is independent of both the propagation speed and the request pattern.
 \end{itemize}
+
+In this thesis we assume that the request pattern is periodic, where this is not a big problem. Therefore this Non-converging Dynamic Star algorithm is not further evaluated.
+
+\section{Recursive Clique}
+
+As we'll see in section~\ref{result:clique}, Ivy performs well on cliques of less than 5 nodes. Taking advantage of this fact, we design a graph resembling a clique, but where each node can contain another clique within, and so on. See figure~\ref{fig:reclique} for an example with 2 layers of cliques and each layer having a clique of 3 nodes. This resulting recursive clique graph allows running Ivy recursively, taking advantage of Ivy's performance in each recursion level.
+
+A recursive clique graph has a level count parameter $l$ representing the number of levels and a base parameter $b$ for the number of nodes in a clique on a single level. We call the $b$ nodes in all layers except the lowest one \textit{virtual}, because they only exist to group non-virtual nodes in lower layers together. The total number of nodes in such a graph is $b^l$. In addition, for defining costs between edges, we declare a parameter $f>1$ for the increase factor in edge distance between one level. This factor represents how far apart nodes in higher levels are. We define nodes in a clique in the lowest level to have distance $1$ from each other. For arbitrary nodes we can define the cost as
+
+\begin{equation}
+c(u,v)=\begin{cases}
+0 & \text{if $u=v$} \\
+1 & \text{otherwise if $u$ and $v$ share the same lowest layer} \\
+f & \text{otherwise if $u$ and $v$ share the same second-lowest layer} \\
+f^2 & \text{otherwise if $u$ and $v$ share the same third-lowest layer} \\
+\vdots & \\
+f^{l-1} & \text{otherwise, $u$ and $v$ are in different nodes of the highest layer} \\
+\end{cases}
+\end{equation}
+
+When running a recursive Ivy algorithm on such a graph, the guiding rules are:
+\begin{enumerate}
+\item The spanning tree can only include at most one connection between all virtual nodes on a single layer. This ensures that if a request was made from within the virtual node where the token currently is at, the request path does not exit that virtual node. In addition this means there a request path can include at most $b-1$ edges of length $f^{l-1}$ from the most upper layer (and similarly for lower layers), therefore keeping the number of long edges at a minimum.
+\label{reclique-rule-conn}
+\item Connect to the earliest possible node in the request path. This ensures that the inverted arrows on the request path lead future requests to the root on the fastest way possible while still satisfying rule \ref{reclique-rule-conn}. This gives Ivy-like behavior on each layer and across layers.
+\label{reclique-rule-early}
+\end{enumerate}
+
+See figure~\ref{fig:reclique-alg} for an example of how this algorithm behaves.
+
+While in this algorithm we only limit ourselves to these three parameters for simplicity, this idea can be extended much further: Each layer can contain arbitrary graphs without regularity. As an example, with three nodes at the top-most layer, the first node could contain a subgraph of a star, the second node a ring graph and the third node another graph containing more subgraphs for each node. This then also calls for running different Arvy algorithms on each layer, using whichever works best for that layers graph. This is therefore very flexible. In a realistic scenario, the top-most layer can represent different data centers around the world, the layer below different racks in the data center and the layer below that different machines in a rack.
+
+\begin{figure}
+\centering
+\begin{tikzpicture}
+\coordinate (A) at (0:2);
+\path (A) +(0:0.3) coordinate (AA);
+\path (A) +(120:0.3) coordinate (AB);
+\path (A) +(240:0.3) coordinate (AC);
+\coordinate (B) at (120:2);
+\path (B) +(0:0.3) coordinate (BA);
+\path (B) +(120:0.3) coordinate (BB);
+\path (B) +(240:0.3) coordinate (BC);
+\coordinate (C) at (240:2);
+\path (C) +(0:0.3) coordinate (CA);
+\path (C) +(120:0.3) coordinate (CB);
+\path (C) +(240:0.3) coordinate (CC);
+
+\draw (A) -- node[above,sloped]{$f$} (B) -- node[left]{$f$} (C) -- node[below,sloped]{$f$} (A);
+
+\fill[white] (A) circle [radius=17pt];
+\fill[white] (B) circle [radius=17pt];
+\fill[white] (C) circle [radius=17pt];
+\draw (A) circle [radius=17pt];
+\draw (B) circle [radius=17pt];
+\draw (C) circle [radius=17pt];
+
+\foreach \x in {A,B,C}
+  \foreach \y in {A,B,C}
+    \fill (\x\y) circle [radius=2pt];
+
+\draw (AA) -- node[above,sloped]{\scriptsize{1}} (AB) -- node[left]{\scriptsize{1}} (AC) -- node[below,sloped]{\scriptsize{1}} (AA);
+\draw (BA) -- node[above,sloped]{\scriptsize{1}} (BB) -- node[left]{\scriptsize{1}} (BC) -- node[below,sloped]{\scriptsize{1}} (BA);
+\draw (CA) -- node[above,sloped]{\scriptsize{1}} (CB) -- node[left]{\scriptsize{1}} (CC) -- node[below,sloped]{\scriptsize{1}} (CA);
+
+\end{tikzpicture}
+\caption{Recursive Clique graph with 2 levels and 3 nodes in each level. Nodes in the same lowest layer clique have distance $1$ between them, while nodes in different lowest layer cliques have distance $f$ between them.}
+\label{fig:reclique}
+\end{figure}
+
+
+\begin{figure}
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}
+[be/.style={draw=black,arrows={-Stealth[scale=1.5]}}]
+\coordinate (A) at (0:1.8);
+\path (A) +(0:0.5) coordinate (AA);
+\path (A) +(120:0.5) coordinate (AB);
+\path (A) +(240:0.5) coordinate (AC);
+\coordinate (B) at (120:1.8);
+\path (B) +(0:0.5) coordinate (BA);
+\path (B) +(120:0.5) coordinate (BB);
+\path (B) +(240:0.5) coordinate (BC);
+\coordinate (C) at (240:1.8);
+\path (C) +(0:0.5) coordinate (CA);
+\path (C) +(120:0.5) coordinate (CB);
+\path (C) +(240:0.5) coordinate (CC);
+
+\draw[be] (AB) -- (AA);
+\draw[be] (AC) -- (AA);
+\draw[be] (BB) -- (BA);
+\draw[be] (BC) -- (BA);
+\draw[be] (CB) -- (CA);
+\draw[be] (CC) -- (CA);
+\draw[be] (BA) to[out=0,in=90] (AA);
+\draw[be] (CA) to[out=0,in=-90] (AA);
+
+\foreach \x in {A,B,C}
+  \foreach \y in {A,B,C}
+    \fill (\x\y) circle [radius=2pt];
+
+\fill[red] (CC) circle [radius=2pt,fill=red];
+\node[below=0 of CC] {\scriptsize{$a_0$}};
+\node[below right=0 and -5pt of CA] {\scriptsize{$a_1$}};
+\node[right=0 of AA] {\scriptsize{$a_2$}};
+
+\end{tikzpicture}
+\caption{The first node $a_0$ on the request path makes a request for the token which lies at root node $a_2$. $a_2$ will invert its arrow to point to $a_0$ with a long edge, which rule~\ref{reclique-rule-conn} allows because the previous long edge $(a_1,a_2)$ is discarded when the request traverses it.}
+\label{fig:reclique-alg-a}
+\end{subfigure}
+\quad
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}
+[be/.style={draw=black,arrows={-Stealth[scale=1.5]}}]
+\coordinate (A) at (0:1.8);
+\path (A) +(0:0.5) coordinate (AA);
+\path (A) +(120:0.5) coordinate (AB);
+\path (A) +(240:0.5) coordinate (AC);
+\coordinate (B) at (120:1.8);
+\path (B) +(0:0.5) coordinate (BA);
+\path (B) +(120:0.5) coordinate (BB);
+\path (B) +(240:0.5) coordinate (BC);
+\coordinate (C) at (240:1.8);
+\path (C) +(0:0.5) coordinate (CA);
+\path (C) +(120:0.5) coordinate (CB);
+\path (C) +(240:0.5) coordinate (CC);
+
+\draw[be] (AB) -- (AA);
+\draw[be] (AC) -- (AA);
+\draw[be] (BB) -- (BA);
+\draw[be] (BC) -- (BA);
+\draw[be] (CB) -- (CA);
+\draw[be] (CA) -- (CC);
+\draw[be] (BA) to[out=0,in=90] (AA);
+\draw[be] (AA) to[out=-90,in=-20] (CC);
+
+\foreach \x in {A,B,C}
+  \foreach \y in {A,B,C}
+    \fill (\x\y) circle [radius=2pt];
+
+\fill[red] (CB) circle [radius=2pt,fill=red];
+\node[above=0 of CB] {\scriptsize{$a_0$}};
+\node[right=0 of CA] {\scriptsize{$a_1$}};
+\node[left=0 of CC] {\scriptsize{$a_2$}};
+
+\end{tikzpicture}
+\caption{In the new tree, $a_0$ makes a request for the token at $a_2$ in the same virtual node. As with normal Ivy, all nodes will connect back to the node $a_0$ who made the original request.}
+\end{subfigure}
+
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}
+[be/.style={draw=black,arrows={-Stealth[scale=1.5]}}]
+\coordinate (A) at (0:1.8);
+\path (A) +(0:0.5) coordinate (AA);
+\path (A) +(120:0.5) coordinate (AB);
+\path (A) +(240:0.5) coordinate (AC);
+\coordinate (B) at (120:1.8);
+\path (B) +(0:0.5) coordinate (BA);
+\path (B) +(120:0.5) coordinate (BB);
+\path (B) +(240:0.5) coordinate (BC);
+\coordinate (C) at (240:1.8);
+\path (C) +(0:0.5) coordinate (CA);
+\path (C) +(120:0.5) coordinate (CB);
+\path (C) +(240:0.5) coordinate (CC);
+
+\draw[be] (AB) -- (AA);
+\draw[be] (AC) -- (AA);
+\draw[be] (BB) -- (BA);
+\draw[be] (BC) -- (BA);
+\draw[be] (CA) -- (CB);
+\draw[be] (CC) -- (CB);
+\draw[be] (BA) to[out=0,in=90] (AA);
+\draw[be] (AA) to[out=-90,in=-20] (CC);
+
+\foreach \x in {A,B,C}
+  \foreach \y in {A,B,C}
+    \fill (\x\y) circle [radius=2pt];
+
+\fill[red] (BB) circle [radius=2pt,fill=red];
+\node[above=0 of BB] {\scriptsize{$a_0$}};
+\node[above right=0 and -3pt of BA] {\scriptsize{$a_1$}};
+\node[right=0 of AA] {\scriptsize{$a_2$}};
+\node[below left=0 and -3pt of CC] {\scriptsize{$a_3$}};
+\node[above=0 of CB] {\scriptsize{$a_4$}};
+
+\end{tikzpicture}
+\caption{The request path has two long edges, invoking the Ivy behavior on the upper layer: $a_3$ will connect back to $a_0$. Then when $a_4$ receives the request, the rules disallow it from connecting back to $a_0$ as well, since this would lead to multiple edges between virtual nodes. Therefore $a_4$ has to connect back to $a_2$}
+\end{subfigure}
+\quad
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}
+[be/.style={draw=black,arrows={-Stealth[scale=1.5]}}]
+\coordinate (A) at (0:1.8);
+\path (A) +(0:0.5) coordinate (AA);
+\path (A) +(120:0.5) coordinate (AB);
+\path (A) +(240:0.5) coordinate (AC);
+\coordinate (B) at (120:1.8);
+\path (B) +(0:0.5) coordinate (BA);
+\path (B) +(120:0.5) coordinate (BB);
+\path (B) +(240:0.5) coordinate (BC);
+\coordinate (C) at (240:1.8);
+\path (C) +(0:0.5) coordinate (CA);
+\path (C) +(120:0.5) coordinate (CB);
+\path (C) +(240:0.5) coordinate (CC);
+
+\draw[be] (AB) -- (AA);
+\draw[be] (AC) -- (AA);
+\draw[be] (BA) -- (BB);
+\draw[be] (BC) -- (BA);
+\draw[be] (CA) -- (CB);
+\draw[be] (CB) -- (CC);
+\draw[be] (AA) to[out=90,in=0] (BB);
+\draw[be] (CC) to[out=110,in=-110] (BB);
+
+\foreach \x in {A,B,C}
+  \foreach \y in {A,B,C}
+    \fill (\x\y) circle [radius=2pt];
+
+\end{tikzpicture}
+\caption{The resulting tree still only has $2$ long edges due to how the rules were enforced.}
+\end{subfigure}
+\caption{Example of Recursive Clique algorithm on a recursive clique graph with parameters $b=3$ and $l=2$.}
+\label{fig:reclique-alg}
+\end{figure}
 
 \chapter{Graph Costs, Initial Trees and Request Sequences}
 
@@ -848,13 +1083,162 @@ c(u,v)=\text{length of shortest path from $u$ to $v$ in $G'$}
 
 \paragraph{Ring}
 
-\paragraph{Random}
+A tree forming a ring.
+
+\paragraph{Minimum Spanning Tree}
+
+The minimum spanning tree (MST) is the tree with lowest total edge cost.
+
+\paragraph{Uniformly Random Tree}
+
+A uniformly random tree out of all possible trees. An algorithm for generating such a tree is as follows:
+\begin{enumerate}
+\item Select a random root node $r\gets_{u.a.r.}V$
+\item Define $S=\{r\}$ to be the set of all nodes already included in the tree
+\item Select a random node already in the tree $u\gets_{u.a.r.}S$
+\label{random-tree-goto}
+\item Select a random node not yet in the tree $v\gets_{u.a.r.}V\setminus S$
+\item Output edge $(u,v)$ as part of the resulting tree
+\item Set $S\gets S\cup\{v\}$
+\item Unless $S=V$, go to step \ref{random-tree-goto}
+\end{enumerate}
 
 \paragraph{Minimum Pair Distance Tree}
 
-This initial tree minimizes arguably the most important measure for Arvy, the total distance between all pairs of nodes. This is important because with uniformly random requests, every path between a pair of nodes has the same chance of being used. A way to calculate this minimum is by brute force search through all possible trees. Because there are $n^{n-2}$ possible trees according to \cite{Borchardt} this approach is not practical for more than a couple nodes.
+This initial tree minimizes arguably most important measure for the Arrow algorithm: The average distance between all pairs of nodes. This is important because with uniformly random requests, every pair of nodes has the same chance of occurring subsequently in the request sequence. Consequently the average time to satisfy a request is the average distance between all pairs of nodes. See figure~\ref{fig:minPairDist} for example of such trees. Noticeable is that central nodes are forming and not all short edges are used.
 
-\paragraph{Approximal Mimimum Pair Distance}
+A way to calculate this minimum is by brute force search through all possible trees. However because there are as much as $n^{n-2}$ possible trees~\cite{Borchardt} in a graph of $n$ nodes, this is not practical for more than a couple nodes. A listing of all possible trees can be obtained by the $n^{n-2}$ Prüfer~\cite{Prufer} sequences, for each of which the total pair distance needs to be found which is of order $\mathcal{O}(n^2)$\TODO{Explain algorithm for $\mathcal{O}(n^2)$ complexity?}, giving a total complexity of $\mathcal{O}(n^n)$.
+
+\begin{figure}[]
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}[scale=0.5]\footnotesize
+\draw[step=1cm,gray,very thin] (0,0) grid (10,10);
+\foreach \x/\xtext in { 5/0.5, 10/1}
+  \draw[black,xshift=\x cm] (0,.3) -- (0,0)
+    node[below] {$\xtext$};
+\foreach \y/\ytext in {5/0.5,10/1}
+  \draw[black, yshift=\y cm] (.3,0) -- (0,0)
+    node[left] {$\ytext$};
+\draw[black] (0,0) node[anchor=north east] {O};
+\draw[black,thick,->] (0, 0) -- (10.4, 0) node[right] {$x$};
+\draw[black,thick,->] (0, 0) -- (0, 10.4) node[above] {$y$};
+
+\coordinate (n0) at (6.2307871625908895,6.847027862484314);
+\coordinate (n1) at (1.4908587845403831,9.344058188486937e-2);
+\coordinate (n2) at (8.287496589039378,0.8087839284280984);
+\coordinate (n3) at (3.662398504604587,0.2833983731779788);
+\coordinate (n4) at (0.46715307814554796,7.233804012602063);
+\coordinate (n5) at (9.057142532479283,7.467617781163527);
+\coordinate (n6) at (7.44580515795162,3.7458151873056766);
+\coordinate (n7) at (2.5041109412617235,0.3813699908645396);
+\coordinate (n8) at (1.4952402484562444,6.327917885574969);
+\coordinate (n9) at (8.966635336689189,0.6898816967621113);
+\draw[thick] (n0) -- (n6);
+\draw[thick] (n1) -- (n7);
+\draw[thick] (n3) -- (n6);
+\draw[thick] (n4) -- (n8);
+\draw[thick] (n5) -- (n6);
+\draw[thick] (n6) -- (n2);
+\draw[thick] (n7) -- (n3);
+\draw[thick] (n8) -- (n6);
+\draw[thick] (n9) -- (n2);
+
+\foreach \n in {n0,n1,n2,n3,n4,n5,n6,n7,n8,n9}
+  \fill (\n) circle [radius=3pt];
+
+\end{tikzpicture}
+\end{subfigure}
+\quad
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}[scale=0.5]\footnotesize
+\draw[step=1cm,gray,very thin] (0,0) grid (10,10);
+\foreach \x/\xtext in { 5/0.5, 10/1}
+  \draw[black,xshift=\x cm] (0,.3) -- (0,0)
+    node[below] {$\xtext$};
+\foreach \y/\ytext in {5/0.5,10/1}
+  \draw[black, yshift=\y cm] (.3,0) -- (0,0)
+    node[left] {$\ytext$};
+\draw[black] (0,0) node[anchor=north east] {O};
+\draw[black,thick,->] (0, 0) -- (10.4, 0) node[right] {$x$};
+\draw[black,thick,->] (0, 0) -- (0, 10.4) node[above] {$y$};
+
+\coordinate (n0) at (6.486317401060322,1.7238949217908428);
+\coordinate (n1) at (7.356328176128615,6.7307533977302025);
+\coordinate (n2) at (3.5627260906386415,7.493578518706636);
+\coordinate (n3) at (8.582933996984575,1.1655496682661926);
+\coordinate (n4) at (5.35937147771363,8.338368157065618);
+\coordinate (n5) at (5.224998480720355,5.848686799435092);
+\coordinate (n6) at (4.8023010605002465,3.2954642049633076);
+\coordinate (n7) at (7.334875634225844,3.82310788843208);
+\coordinate (n8) at (8.606186458999954,3.198710520132577);
+\coordinate (n9) at (9.099399064468583,7.859275597076669);
+\draw[thick] (n0) -- (n7);
+\draw[thick] (n2) -- (n5);
+\draw[thick] (n3) -- (n7);
+\draw[thick] (n4) -- (n5);
+\draw[thick] (n5) -- (n1);
+\draw[thick] (n6) -- (n5);
+\draw[thick] (n7) -- (n5);
+\draw[thick] (n8) -- (n7);
+\draw[thick] (n9) -- (n1);
+\foreach \n in {n0,n1,n2,n3,n4,n5,n6,n7,n8,n9}
+  \fill (\n) circle [radius=3pt];
+
+\end{tikzpicture}
+\end{subfigure}
+\caption{Examples of 10-node minimum pair distance trees for uniformly random 2-dimensional points in the unit square and euclidean weights between them.}
+\label{fig:minPairDist}
+\end{figure}
+
+\paragraph{Approximated Mimimum Pair Distance}
+
+Because calculating the actual minimum pair distance tree is impractical, we describe an algorithm that constructs a tree in $\mathcal{O}(n^3)$ time that tries to minimize pair distance as well as possible. Let $c_{G'}(u, v)$ denote the distance of the shortest path from $u$ to $v$ in a tree graph $G'=(V',E')$ of nodes $V'\subset V$ and edges $E'\subset E$. Then let $\mathcal{C}_{pairs}(G')$ denote the total distance between all pairs of nodes in $G'$.
+\begin{equation}
+\mathcal{C}_{pairs}(G') = \sum_{u,v\in V'}c_{G'}(u,v)
+\end{equation}
+
+The algorithm is based on the idea of connecting nodes one-by-one to the tree, in every step choosing the node and a connecting edge that minimizes the total pair distance. We do this efficiently by maintaining a data structure that allows querying the increase of total pair distance for a node and edge in constant time.
+
+Let $V'$ be the set of nodes currently included in the tree. $V'$ gets initialized to $\{r\}$ where $r$ is an arbitrarily chosen node. Our data structure then encompasses an array $p:V'\to\mathbb{R}$, where $p(v)$ stores the total distance from node $v$ to all other nodes $V'\setminus\{v\}$ in the current tree. In addition, a two-dimensional array $s:(V',V')\to\mathbb{R}$ is needed, where $s(u,v)$ stores the shortest distance in the tree between nodes $u$ and $v$.
+\begin{equation}
+\begin{split}
+s(u,v)=&c_{G'}(u,v)\\
+p(u)=&\sum_{i\in V'}c_{G'}(i,u) \\
+\end{split}
+\end{equation}
+
+Now if edge $(u,v)$ with $u\in V'$ and $v\in V\setminus V'$ were to get added to the tree to get $G''=G'\cup(\{v\}, \{(u,v)\})$, the total pair distance increases only by the new pairs from $v$ to all nodes in $V'$. With our data structure we can calculate this increase in constant time:
+\begin{equation}
+\begin{split}
+& \mathcal{C}_{pairs}(G'')-\mathcal{C}_{pairs}(G') \\
+=\;&\sum_{i\in V'}c_{G''}(i, v)+\sum_{i\in V'}c_{G''}(v, i)=2\sum_{i\in V'}c_{G''}(i, v) \\
+=\;&2\sum_{i\in V'}\left(c_{G'}(i,u)+c(u,v)\right)=2\left(\sum_{i\in V'}c_{G'}(i,u)+|V'|\cdot c(u,v)\right) \\
+=\;&2\left(p(u)+|V'|\cdot c(u,v)\right) \\
+\end{split}
+\end{equation}
+
+In addition, we can update our data structure for the new edge $(u,v)$ in linear time:
+\begin{itemize}
+\item To set the total distance from $v$ to all other nodes is just the total distance to all other nodes from $u$, plus the new edge once for every node: $p(v)\gets p(u)+|V'|\cdot c(u,v)$
+\item For all other nodes, $p$ needs to be increased by the shortest path to $v$, which is just the shortest path to $u$ plus the cost of the edge $(u,v)$: $p(i)\gets p(i)+s(i,u)+c(u,v)$ for all $i\in V'$
+\item Also the shortest path from all nodes to $v$ gets initialized to the shortest path to $u$ plus the cost of the edge $(u,v)$: $s(i,v)\gets s(i,u)+c(u,v)$ for all $i\in V'$
+\item Similarly the shortest path from $v$ to all nodes: $s(v,i)\gets c(v,u)+s(u,i)$ for all $i\in V'$
+\end{itemize}
+
+As a result, our algorithm looks as follows:
+\begin{enumerate}
+\item Set $V'=\{r\}$ for an arbitrary node $r\in V$ and initialize $p(r)=0$ and $s(r,r)=0$
+\item Add the edge $(u,v)$ ($u\in V'$ and $v\in V\setminus V'$) which increases the total pair distance by the minimum to the resulting tree
+\label{approxStep}
+\item Update $p$ and $s$ according to the new edge
+\item Unless $V'=V$, go to step \ref{approxStep}
+\end{enumerate}
+
+Because the tree gets one more node in every iteration, the sequence of the number of edges between tree and non-tree nodes is $1n,2(n-1),3(n-2),\dots,(n-1)2,n1$. Every iteration therefore takes $\mathcal{O}(n^2)$ to find the best edge and an additional $\mathcal{O}(n)$ to update the data structure. The total complexity of this algorithm is therefore $\mathcal{O}(n\cdot(n^2+n))=\mathcal{O}(n^3)$.
+
+\TODO{Go into how good this actually is?}
 
 \chapter{Implementation Notes}
 
@@ -942,6 +1326,16 @@ Should include
 \item Resulting plots of interesting evaluations
 \item Show how to reproduce the results including parameters
 \end{itemize}
+
+What are the results?
+\begin{itemize}
+\item Ivy is better than the best arrow for cliques with node counts only <5
+\item For uniformly random requests, the best star is a very good tree
+\item 
+\end{itemize}
+
+\section{Ivy is better than Arrow for cliques of less than 5 nodes}
+\label{result:clique}
 
 \chapter{Summary}
 
