@@ -17,7 +17,8 @@ let
       ifplatform
       xstring
       framed
-      commath;
+      commath
+      pgfplots;
   };
 
 in pkgs.stdenv.mkDerivation {

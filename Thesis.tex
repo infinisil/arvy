@@ -5,6 +5,7 @@
 \usepackage{algpseudocode}
 \usepackage{algorithm}
 \usepackage{mathtools}
+\usepackage{pgfplots}
 \usepackage{subcaption}
 \usepackage{tikz}
 \usepackage{hyperref}
@@ -89,7 +90,7 @@ As a reasonable constraint, a node $v$ can only query costs from itself to other
 
 \paragraph{Request Paths} In the type of algorithms we'll look at, when the $i$-th request gets made by node $r_i$, the request travels along some path $A_i=\{a_i^{(0)},a_i^{(1)},\dots,a_i^{(l_i)}\}$ with $l_i=|A_i|-1$ being the index of the last node and the number of messages that are being sent. Then $a_i^{(0)}=r_i$ is the node making the request and the $a_i^{(l_i)}$ is the node currently holding the token. After the request was sent along this path, the token is then sent back directly from $a_i^{(l_i)}$ to $a_i^{(0)}$ to satisfy the request. Without loss of generality, nodes can't send requests when they have the token already, meaning $a_i^{(0)}\neq a_i^{(l_i)}$ or $|A_i|\geq 2$. In addition, it holds that $a_i^{(0)}=a_{i+1}^{(l_{i+1})}$ for all $i\in\mathbb{N}$, meaning the node making a request in a request will be the last node in the request path in the following request.
 
-\paragraph{Performance} In order to be able to talk about performance of such algorithms, we first define $c(A_i)$ to be the cost of traversing request path $A_i$:
+\paragraph{Performance}\label{model-perf} In order to be able to talk about performance of such algorithms, we first define $c(A_i)$ to be the cost of traversing request path $A_i$:
 \begin{equation}
 c(A_i)\coloneqq\sum_{k=1}^{l_i}c(a_i^{(k-1)}, a_i^{(k)})
 \end{equation}
@@ -552,6 +553,57 @@ Notable properties of this algorithm include
 \label{fig:ecm}
 \end{figure}
 
+\section{Local Pair Distance Minimizer}
+
+An even better measure to minimize is the total distance between all pairs of nodes in the spanning tree $T$, defined as
+\begin{equation}
+\mathcal{C}_{pairs}(T) = \sum_{u,v\in V, u\neq v}c_T(u,v)
+\end{equation}
+
+where $c_T(u,v)$ is the cost of the shortest path between nodes $u$ and $v$ in the tree. Tree mutations aside, this directly corresponds to the performance of Arvy algorithms with uniformly random requests, since all pairs of nodes have the same probability of being used, meaning their distance in the tree contributes the same amount to the cost of an average request. In Section~\ref{tree:mpd} we discuss such minimal trees further. Notably the complexity to calculate this optimal tree is $\mathcal{O}(n^n)$, unrealistic for many nodes. In addition, nodes don't have access to a global view of the graph at runtime which is needed to calculate the minimum pair distance tree.
+
+We can however devise an algorithm that minimizes pair distance in a local subgraph consisting of only the nodes in the request path. Specifically when node $a^{(k)}$ needs to select a new parent node out of the candidates $A=\{a^{(0)},\dots,a^{(k-1)}\}$, it looks at the tree graph $T=(V',E')$ (with $V'\in A$ and $E'\subset V'\times V'$) of nodes in the request path that was constructed from the parent selections of all previous nodes in the path. It then selects the node $a^{(i)}$ such that selecting this node yields the lowest possible pair distance, meaning $\mathcal{C}_{pairs}(T_i)$ with $T_i=(V'\cup a^{(k)},E'\cup(a^{(i)},a^{(k)}))$ is minimal. See Figure~\ref{fig:lpm} for an example.
+
+\begin{algorithmic}
+\Function{SelectNewParent}{$\{a^{(0)}, a^{(1)},\dots,a^{(k-1)}\}$}
+\State\Return$a^{(i)}$ such that $\mathcal{C}_{pairs}(T_i)$ is minimal, use highest $i$ for tie-breaking
+\EndFunction
+\end{algorithmic}
+
+\begin{figure}[H]
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}[arvy-expl,scale=2,font=\scriptsize]
+\node[v] (0) at (0,0) {$a^{(0)}$};
+\node[v] (1) at (0,2) {$a^{(1)}$};
+\node[v] (2) at (2,3) {$a^{(2)}$};
+\draw[e] (1) --node[left]{4} (0);
+\draw[dashed] (2) --node[below=2pt]{6} (0);
+\draw[e] (2) --node[above]{5} (1);
+\end{tikzpicture}
+\caption{$a^{(2)}$ chooses $a^{(1)}$ as its new parent, since the total pair distance for that tree $\mathcal{C}_{pairs}(T_1)=c_{T_i}(a^{(0)},a^{(1)})+c_{T_i}(a^{(0)},a^{(2)})+c_{T_i}(a^{(1)},a^{(2)})=4+9+5=18$ is smaller than the one for $a^{(0)}$ which would be $4+10+6=20$}
+\end{subfigure}
+\quad
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\begin{tikzpicture}[arvy-expl,scale=2,font=\scriptsize]
+\node[v] (0) at (0,0) {$a^{(0)}$};
+\node[v] (1) at (0,2) {$a^{(1)}$};
+\node[v] (2) at (2,3) {$a^{(2)}$};
+\node[v] (3) at (3,1) {$a^{(3)}$};
+\draw[e] (1) --node[left]{4} (0);
+\draw[dashed] (2) --node[below=2pt]{6} (0);
+\draw[e] (2) --node[above]{5} (1);
+\draw[dashed] (0) --node[below]{2} (3);
+\draw[e] (3) --node[above]{3} (1);
+\draw[dashed] (2) --node[right]{2} (3);
+\end{tikzpicture}
+\caption{Even though edge $(a^{(3)},a^{(1)})$ is the longest one to select, $a^{(3)}$ chooses $a^{(1)}$ as its new parent, since it minimizes the total pair distance. Here $\mathcal{C}_{pairs}(T_0)=37$, $\mathcal{C}_{pairs}(T_1)=36$, $\mathcal{C}_{pairs}(T_2)=38$}
+\end{subfigure}
+\caption{Local Pair Distance Minimizer example}
+\label{fig:lpm}
+\end{figure}
+
 \section{Fixed Ratio}
 
 \paragraph{Hop-based}
@@ -568,7 +620,7 @@ Another simple algorithm is one which chooses the node at a fixed ratio $f\in[0,
 
 A possible variation of this algorithm doesn't use the fraction on the node counts, but on the edge costs instead. A request path $a^{(0)},a^{(1)},a^{(2)},\dots,a^{(k-1)}$ gets mapped to costs $c^{(i)}$ representing how far the request had to travel to get to node $a^{(i)}$. Formally these costs are defined as
 \begin{equation}
-c^{(i)}=\sum_{k=1}^ic(a^{(k-1)},a^{(k)})
+c^{(i)}=\sum_{j=1}^ic(a^{(j-1)},a^{(j)})
 \end{equation}
 
 The last node whose $c^{(i)}$ is lower than or equal to $f\cdot c^{(k-1)}$ is then selected.
@@ -595,13 +647,13 @@ These algorithms have the following interesting properties:
 ,pe/.style={dashed,draw=blue,arrows={-Stealth[scale=1]}}
 ,req/.style={bn,red!70!black}
 ,auto,scale=0.7]
-\node[bn] (n0) at (4,0) {$a_0$};
-\node[bn] (n1) at (1,0) {$a_1$};
-\node[bn] (n2) at (0,2) {$a_2$};
-\node[bn] (n3) at (1,4) {$a_3$};
-\node[bn] (n4) at (3,5) {$a_4$};
-\node[bn] (n5) at (5,4) {$a_5$};
-\node[bn] (n6) at (6,2) {$a_6$};
+\node[bn] (n0) at (4,0) {$a^{(0)}$};
+\node[bn] (n1) at (1.5,0) {$a^{(1)}$};
+\node[bn] (n2) at (0,2) {$a^{(2)}$};
+\node[bn] (n3) at (1,4) {$a^{(3)}$};
+\node[bn] (n4) at (3,5) {$a^{(4)}$};
+\node[bn] (n5) at (5,4) {$a^{(5)}$};
+\node[bn] (n6) at (6,2) {$a^{(6)}$};
 
 \draw[pe] (n0) to[out=200,in=-20] (n1);
 \draw[pe] (n1) -- node[blue]{\scriptsize{request path}} (n2);
@@ -991,6 +1043,7 @@ This algorithm is based on logging request path indices: Each node $v$ stores a 
 The performance of an Arvy algorithm depends not only on the algorithm itself, but also on the costs of the edges, the initial tree and the request sequence.
 
 \section{Graph Costs}
+\label{graph-costs}
 
 Oftentimes an underlying non-complete graph is used to determine the costs of a complete graph by using the shortest route. In non-complete graphs without associated costs, all edges can be given a unit cost of 1.
 
@@ -1025,6 +1078,7 @@ c(u,v)=\text{length of shortest path from $u$ to $v$ in $G'$}
 \end{equation}
 
 \section{Initial Trees}
+\label{initial-trees}
 
 \paragraph{Ring}
 
@@ -1050,10 +1104,11 @@ A uniformly random tree out of all possible trees. An algorithm for generating s
 \end{enumerate}
 
 \paragraph{Minimum Pair Distance Tree}
+\label{tree:mpd}
 
 This initial tree minimizes arguably most important measure for the Arrow algorithm: The average distance between all pairs of nodes. This is important because with uniformly random requests, every pair of nodes has the same chance of occurring subsequently in the request sequence. Consequently the average time to satisfy a request is the average distance between all pairs of nodes. See figure~\ref{fig:minPairDist} for example of such trees. Noticeable is that central nodes are forming and not all short edges are used.
 
-A way to calculate this minimum is by brute force search through all possible trees. However because there are as much as $n^{n-2}$ possible trees~\cite{Borchardt} in a graph of $n$ nodes, this is not practical for more than a couple nodes. A listing of all possible trees can be obtained by the $n^{n-2}$ Prüfer~\cite{Prufer} sequences, for each of which the total pair distance needs to be found which is of order $\mathcal{O}(n^2)$\TODO{Explain algorithm for $\mathcal{O}(n^2)$ complexity?}, giving a total complexity of $\mathcal{O}(n^n)$.
+A way to calculate this minimum is by brute force search through all possible trees. However because there are as much as $n^{n-2}$ possible trees~\cite{Borchardt} in a graph of $n$ nodes, this is not practical for more than a couple nodes. A listing of all possible trees can be obtained by the $n^{n-2}$ Prüfer~\cite{Prufer} sequences, for each of which the total pair distance needs to be found which is of order $\mathcal{O}(n^2)$ (with an algorithm similar to the one described in the next paragraph), giving a total complexity of $\mathcal{O}(n^n)$.
 
 \begin{figure}[]
 \begin{subfigure}[t]{0.5\textwidth}
@@ -1188,13 +1243,13 @@ Because the tree gets one more node in every iteration, the sequence of the numb
 
 \chapter{Implementation Notes}
 
-As part of this thesis, a Haskell library for writing and testing Arvy algorithms was created, accessible at \url{https://github.com/infinisil/arvy}. In this chapter we explain some key design decisions that went into it. With Haskell's advanced type system it's possible to guarantee correctness of all Arvy heuristics declared with this library. Needless to say, this chapter is more technical than the others and advanced Haskell knowledge is required to fully understand it.
+As part of this thesis, a Haskell library for writing and testing Arvy algorithms was created, accessible at \url{https://github.com/infinisil/arvy}. In this chapter we explain some key design decisions that went into it. Most notably, Haskell's advanced type system allowed guaranteeing correctness of all Arvy heuristics defined with this library. We will look at parts of the file \href{https://github.com/Infinisil/arvy/blob/1bdac2aa8e599372f2b058d26ec9c33fd53d7a72/lib/Arvy/Algorithm.hs}{$\texttt{lib/Arvy/Algorithm.hs}$} where the core of this library is defined. Needless to say, this chapter is more technical than the others and advanced Haskell knowledge is required to fully understand it.
 
 \section{Request Path abstraction}
 
-An Arvy algorithm is only correct if and only if nodes can only set their new parent to nodes that were previously visited on the request path. With each node being referenced as an integer, this would be a problem, because a node $a_{n+1}$ could simply set $parent(a_{n+1})=0$ even though it might be the case that $0\notin\{a_0,\dots,a_n\}$ which would make the algorithm incorrect. So instead of representing nodes as integers, we represent them as some arbitrary type with certain capabilities that reflect them being part of the request path.
+An Arvy algorithm is only correct if and only if nodes can only set their new parent to nodes that were previously visited on the request path. With each node being referenced as an integer, this would be a problem, because a node $a^{(k)}$ could simply set $parent(a^{(k)})=0$ even though it might be the case that $0\notin\{a^{(0)},\dots,a^{(k-1)}\}$ which would make the algorithm incorrect. So instead of representing nodes as integers, we represent them as some arbitrary type with certain capabilities that reflect it being part of the request path.
 
-One such trivial capability we'll need is that once we have some node index, we can forward that value via messages to other nodes. This makes sense since some node $a_{n+1}$ can't know about $\{a_0,\dots,a_n\}$ unless these nodes somehow forwarded their own values along with the messages. In Haskell, this forwarding can be represented as a typeclass on two types $i_a$ and $i_b$, stating that if you have a value of $i_a$ you can get a value of $i_b$. We can implement this typeclass trivially for all types that are equal, since forwarding will then be the identity.
+One such trivial capability we'll need is that once we have some node index, we can forward that value via messages to other nodes. This makes sense since some node $a^{(k)}$ can't know about $\{a^{(0)},\dots,a^{(k-1)}\}$ unless these nodes somehow forwarded their own values along with the messages. In Haskell, this forwarding can be represented as a typeclass on two types $i_a$ and $i_b$, stating that if you have a value of $i_a$ you can get a value of $i_b$. We can implement this typeclass trivially for all types that are equal, since forwarding will then be the identity.
 
 \begin{minted}{haskell}
 -- | A class for node indices that can be forwarded between nodes
@@ -1234,7 +1289,7 @@ instance NodeIndex Node where
 
 The most important part of defining an Arvy algorithm is the heuristic it uses to decide the new node parent. We extend this to the notion of a behavior, which includes not only the new parents, but also how it gets decided what a request message looks like, how the initial message is generated, and what the final node receiving the message does. In fact each node on the request path should be allowed to run arbitrary code when they do the processing.
 
-For representing computations we use the relatively new effect library \href{https://hackage.haskell.org/package/polysemy}{Polysemy}. In this library an computation is described with $\texttt{Sem r a}$ where $\texttt{r}$ represents the possible effects it can have and $\texttt{a}$ being the result of the computation. With this said, the main type for defining an Arvy algorithm is defined as follows.
+For representing computations we use the relatively new effect library \href{https://hackage.haskell.org/package/polysemy}{Polysemy}. In this library a computation is described with the type $\texttt{Sem r a}$ where $\texttt{r}$ represents the possible effects it can have and $\texttt{a}$ being the result of the computation. As an example, a computation that's allow to use randomness and returns a boolean is described by the type $\texttt{Sem '[Random] Bool}$. With this said, the main type for defining an Arvy algorithm is defined as follows.
 
 \begin{minted}{haskell}
 {- |
@@ -1257,7 +1312,7 @@ data ArvyBehavior i msg r = ArvyBehavior
   }
 \end{minted}
 
-This succinct-yet-complicated type includes a lot of information. The type signature of the $\texttt{arvyForwardRequest}$ function in particular is the most interesting.
+This succinct-yet-complicated type includes a lot of information. When a node makes a request for the token, $\texttt{arvyMakeRequest}$ is called which generates a message to be sent to the nodes parent. Then when a message arrives at a node, depending on whether it has the token or not, the functions $\texttt{arvyReceiveRequest}$ or $\texttt{arvyForwardRequest}$ are called respectively, the latter of which then needs to generate another message for forwarding. Function $\texttt{arvyForwardRequest}$ is the most interesting one since it has to handle both receiving and sending a message, so we'll look at its type signature a bit closer.
 
 For one it says that an intermediate node receives a message $\texttt{msg (Pred i)}$ that can include node indices of nodes that were predecessors to the current node. It then needs to return a value of $\texttt{Pred i}$, which represents the new parent for the node. With how node indices are defined in the previous section, the only possible values to return are ones received from the message. This means to select a new parent, nodes have to decode the message which will contain node indices given by past nodes, then return one of them.
 
@@ -1266,6 +1321,73 @@ In addition, the function receives values $\texttt{i}$ and $\texttt{Succ i}$ rep
 Functions $\texttt{arvyMakeRequest}$ and $\texttt{arvyReceiveRequest}$ are special cases of $\texttt{arvyForwardRequest}$. The former of which is special in that a node making a request does not receive any message and it doesn't need to select a new parent since it becomes the root. The latter of which is special in that the final root node receiving the request doesn't have a parent and doesn't need to forward a message.
 
 \chapter{Results}
+
+In this chapter we first look at the evaluation results from simulating different scenarios for Arvy. In each of the scenarios we have the following possible variations:
+
+\begin{itemize}
+\item Number of nodes. This will be in the range 100 to 10000, depending on how fast the execution of algorithms are.
+\item Graph cost function. This is one of the graph costs described in Section~\ref{graph-costs}.
+\item Request sequence. This will be one of the request sequences defined in Section~\ref{request-sequences}.
+\end{itemize}
+
+We then run different Arvy algorithms on such scenarios, which we can compare against each other in a single plot. In addition we specify the initial tree used for these algorithms, which can be one of the ones specified in Section~\ref{initial-trees}. The measures we will be looking at include mainly the ones described in Section~\ref{model-perf}.
+
+\section{Plots}
+
+\pgfplotsset{width=\textwidth,height=0.5\textwidth}
+
+\subsection{1000 nodes, all algs, random requests, 3-dim unit hypercube}
+
+\subsection{10 nodes, Arvy with different trees, random requests, 3-dim unit hypercube}
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  xmode = log,
+  title = Test,
+  xlabel = Number of requests,
+  ylabel = Average request distance,
+  xmin = 1,
+  xmax = 100000,
+  no markers,
+  grid,
+  thick,
+  legend pos = south east,
+  colormap name = colormap/jet,
+  cycle list = { [samples of colormap=6] },
+  legend style = { font = \scriptsize },
+]
+\pgfplotstableread{data/low/dist.dat}{\data}
+\addplot table [x={x}, y={arrow-shortpairs}] {\data};
+\addlegendentry {Arrow with Approx Min Pairs}
+\addplot table [x={x}, y={arrow-star}] {\data};
+\addlegendentry {Arrow with best star}
+\addplot table [x={x}, y={arrow-shortestpairs}] {\data};
+\addlegendentry {Arrow with Min Pairs}
+\addplot table [x={x}, y={ivy-random}] {\data};
+\addlegendentry {ivy}
+\addplot table [x={x}, y={localMinPairs-random}] {\data};
+\addlegendentry {local min pairs}
+\addplot table [x={x}, y={minWeight-random}] {\data};
+\addlegendentry {min weight}
+\end{axis}
+\end{tikzpicture}
+
+\subsection{Ivy vs Arrow on 3,4,5,6 nodes in a clique}
+
+\subsection{Recursive clique vs others}
+
+\subsection{1000 nodes, all algs, adversary, 3-dim unit hypercube}
+
+\subsection{Fixed ratio isn't very good all around}
+
+\subsection{Ivy is better for >~7 dimensional hypercube}
+
+\section{Arrow}
+
+We first 
+
+In this chapter we show results we 
 
 Should include
 \begin{itemize}
@@ -1277,7 +1399,7 @@ What are the results?
 \begin{itemize}
 \item Ivy is better than the best arrow for cliques with node counts only <5
 \item For uniformly random requests, the best star is a very good tree
-\item 
+\item Recursive clique is good
 \end{itemize}
 
 \section{Ivy is better than Arrow for cliques of less than 5 nodes}
