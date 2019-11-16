@@ -18,13 +18,16 @@ let
       xstring
       framed
       commath
-      pgfplots;
+      pgfplots
+      latexmk;
   };
 
 in pkgs.stdenv.mkDerivation {
   name = "thesis";
   src = pkgs.lib.sourceByRegex ./. [
     "figures.*"
+    "data.*"
+    "Makefile"
     ".*\\.tex"
     ".*\\.cls"
     ".*\\.bst"
@@ -35,15 +38,10 @@ in pkgs.stdenv.mkDerivation {
     pkgs.python3.pkgs.pygments
     pkgs.which
   ];
-  buildPhase = ''
+  preBuild = ''
     HOME=$(mktemp -d)
-    pdflatex -shell-escape Thesis.tex
-    bibtex Thesis
-    pdflatex -shell-escape Thesis.tex
-    pdflatex -shell-escape Thesis.tex
   '';
   installPhase = ''
-    mkdir -p $out
-    mv Thesis.pdf $out
+    install -Dt $out Thesis.pdf
   '';
 }

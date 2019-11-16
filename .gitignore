@@ -5,6 +5,8 @@
 *.aux
 *.bbl
 *.blg
+*.fdb_latexmk
+*.fls
 result*
 \#*#
 _minted*
