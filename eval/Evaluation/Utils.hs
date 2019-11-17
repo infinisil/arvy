@@ -1,16 +1,15 @@
 module Evaluation.Utils where
 
-import Data.Functor
-import Prelude
-import Control.Monad
-import qualified Data.Sequence as S
-import Data.Sequence (Seq, (|>))
-import Conduit
-import Polysemy
+import           Conduit
+import           Control.Monad
 import qualified Data.Conduit.Combinators as C
-import Evaluation.Types
-import qualified Data.NonNull as NN
-import Data.List
+import           Data.List
+import qualified Data.NonNull             as NN
+import           Data.Sequence            (Seq, (|>))
+import qualified Data.Sequence            as S
+import           Evaluation.Types
+import           Polysemy
+import           Prelude
 
 -- Welford's online algorithm https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 meanStddev :: forall n m . Monad m => Floating n => ConduitT n (n, n) m ()
@@ -61,7 +60,7 @@ decayingFilter r = go 0 0 (r - 1) where
       case (p, d) of
         (0, 0) -> go (n + 1) (2 ^ (n + 1) - 1) r
         (0, _) -> go n (2 ^ n - 1) (d - 1)
-        _ -> go n (p - 1) d
+        _      -> go n (p - 1) d
 
 logFilter :: forall a m . Monad m => Env -> Int -> ConduitT a a m ()
 logFilter Env { envRequestCount } count = go (NN.impureNonNull indices) 1 where

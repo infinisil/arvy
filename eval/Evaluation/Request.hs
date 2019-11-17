@@ -1,20 +1,19 @@
-{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE DeriveFunctor     #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Evaluation.Request where
 
-import Data.Array.Unboxed
-import Prelude
-import Conduit
+import           Arvy.Algorithm
+import           Arvy.Log
+import           Conduit
+import           Data.Array.Unboxed
 import qualified Data.Conduit.Combinators as C
-import Evaluation.Types
-import Polysemy
-import Data.Time
-import Data.MonoTraversable
-import Data.NonNull
-import Arvy.Algorithm
-import Data.Sequences
-import Arvy.Log
+import           Data.MonoTraversable
+import           Data.NonNull
+import           Data.Sequences
+import           Data.Time
+import           Evaluation.Types
+import           Polysemy
+import           Prelude
 
 traceRequests :: forall r x . ( LogMember r, Member (Lift IO) r ) => ConduitT x x (Sem r) ()
 traceRequests = do
@@ -56,7 +55,3 @@ requestRatios Env { envWeights = weights } = C.filter ((>= 2) . olength) .| C.ma
                                                                       weights ! (from, to))
                                                      (otoList (Data.NonNull.init s))
                                                      (otoList (Data.NonNull.tail s)))
-
---requestRatio :: Monad m => Env -> ConduitT ArvyEvent Double m ()
---requestRatio Env { envWeights = weights } = collectRequests (\edge -> Sum (weights ! edge)) -- Collect requests by measuring the length of the edges they take
---  .| C.map (\(Request a b (Sum path)) -> if a == b then 1 else path / weights ! (a, b)) -- Calculate the ratio between request edge lengths and graph edge length

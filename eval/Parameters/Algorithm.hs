@@ -7,6 +7,8 @@ import qualified Arvy.Algorithm.Collection as Arvy
 import           Arvy.Log
 import           Data.Ratio
 import           Data.Text                 (Text)
+import           Polysemy
+import           Polysemy.RandomFu
 
 data GenAlgParam r = GenAlgParam
   { genAlgName :: Text
@@ -27,6 +29,9 @@ minWeight = GenAlgParam "minWeight" Arvy.minWeight
 ivy :: GenAlgParam r
 ivy = GenAlgParam "ivy" Arvy.ivy
 
+random :: Member RandomFu r => GenAlgParam r
+random = GenAlgParam "random" Arvy.random
+
 localMinPairs :: LogMember r => GenAlgParam r
 localMinPairs = GenAlgParam "localMinPairs" Arvy.localMinPairs
 
@@ -37,9 +42,12 @@ reclique :: SpecAlgParam Arvy.RecliqueConf (Maybe Int) r
 reclique = SpecAlgParam "reclique" Arvy.reclique
 
 inbetween :: Ratio Int -> GenAlgParam r
-inbetween ratio = GenAlgParam ("inbetween-" <> tshow ratio) (Arvy.inbetween ratio)
+inbetween ratio = GenAlgParam ("inbetween-" <> tshow (numerator ratio) <> "-" <> tshow (denominator ratio)) (Arvy.inbetween ratio)
 
-dynamicStar :: LogMember r => GenAlgParam r
+inbetweenWeighted :: Double -> GenAlgParam r
+inbetweenWeighted ratio = GenAlgParam ("inbetween2-" <> tshow ratio) (Arvy.inbetweenWeighted ratio)
+
+dynamicStar :: (Member (Lift IO) r, LogMember r) => GenAlgParam r
 dynamicStar = GenAlgParam "dynamicStar" Arvy.dynamicStar
 
 indexMeanHop :: LogMember r => GenAlgParam r
