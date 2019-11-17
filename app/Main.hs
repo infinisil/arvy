@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns      #-}
 module Main where
 
 import           Parameters
@@ -7,8 +8,11 @@ import qualified Parameters.Algorithm      as Alg
 import qualified Parameters.Requests       as Requests
 import qualified Parameters.Tree           as Tree
 import qualified Parameters.Weights        as Weights
+import           System.Environment
+import           System.IO
 
 import           Colog
+import qualified Data.Text                 as T
 import           Evaluation
 
 import           Arvy.Algorithm
@@ -45,18 +49,31 @@ ringTree n = ArvyData
     }
   }
 
-main :: IO ()
-main = runM $ runRandomIO $ runLogBySeverity Info (cmap messageText logTextStdout) $ do
-  let n = 10
-  weights <- Weights.weightsGen (Weights.unitEuclidian 2) n
-  tree <- Tree.treeGen Tree.shortestPairs n weights
-  forM (assocs tree) $ \(a, b) -> do
-    if (a /= b) then do
-      lgInfo $ "\\draw[thick] (n" <> tshow a <> ") -- (n" <> tshow b <> ");"
-    else do
+drawTree :: LogMember r => T.Text -> RootedTree -> Sem r ()
+drawTree name tree = do
+  lgInfo $ "\\nextgroupplot[title=" <> name <> "]"
+  lgInfo "\\treenodes"
+  forM_ (assocs tree) $ \(a, b) ->
+    if a /= b then
+      lgInfo $ "\\draw[thick] (" <> tshow a <> ") -- (" <> tshow b <> ");"
+    else
       lgDebug $ "Root is " <> tshow a
 
-  lgDebug $ tshow tree
+main :: IO ()
+main = do
+  hSetBuffering stdout LineBuffering
+  [read -> seed] <- getArgs
+  runM $ runRandomSeed seed $ runLogBySeverity Info (cmap messageText logTextStdout) $ do
+    let n = 10
+    lgInfo "\\newcommand{\\treenodes}{"
+    weights <- Weights.weightsGen (Weights.unitEuclidian 2) n
+    lgInfo "}"
+    Tree.treeGen Tree.mst n weights >>= drawTree "MST"
+    Tree.treeGen Tree.bestStar n weights >>= drawTree "Best Star"
+    Tree.treeGen Tree.shortestPairs n weights >>= drawTree "Pair Minimizer"
+    Tree.treeGen Tree.shortPairs n weights >>= drawTree "Approx Pair Minimizer"
+
+    return ()
 
 main'' :: IO ()
 main'' = do

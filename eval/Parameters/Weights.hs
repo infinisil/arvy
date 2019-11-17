@@ -13,32 +13,32 @@ module Parameters.Weights
   , shortestPathWeights
   ) where
 
-import Arvy.Algorithm
-import Evaluation.Types
-import Utils
-import Arvy.Log
+import           Arvy.Algorithm
+import           Arvy.Log
+import           Evaluation.Types
+import           Utils
 
-import Polysemy
-import Polysemy.RandomFu
-import qualified Algebra.Graph.Class as G
-import qualified Algebra.Graph.AdjacencyIntMap as GA
-import Data.Array.IArray (elems)
-import Control.Monad
-import Data.List (foldl')
-import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
-import Data.IntMultiSet (IntMultiSet)
-import qualified Data.IntMultiSet as IntMultiSet
-import Data.Random.Distribution.Uniform
-import Data.Array.MArray
-import Data.Array.ST
-import Data.Array.Unboxed
-import qualified Data.Array as A
-import Data.Text (Text)
+import qualified Algebra.Graph.AdjacencyIntMap    as GA
+import qualified Algebra.Graph.Class              as G
+import           Control.Monad
+import qualified Data.Array                       as A
+import           Data.Array.IArray                (elems)
+import           Data.Array.MArray
+import           Data.Array.ST
+import           Data.Array.Unboxed
+import           Data.IntMultiSet                 (IntMultiSet)
+import qualified Data.IntMultiSet                 as IntMultiSet
+import           Data.IntSet                      (IntSet)
+import qualified Data.IntSet                      as IntSet
+import           Data.List                        (foldl')
+import           Data.Random.Distribution.Uniform
+import           Data.Text                        (Text)
+import           Polysemy
+import           Polysemy.RandomFu
 
 data WeightsParam r = WeightsParam
   { weightsName :: Text
-  , weightsGen :: NodeCount -> Sem r GraphWeights
+  , weightsGen  :: NodeCount -> Sem r GraphWeights
   }
 
 -- TODO: Does this really not use any additional storage?
@@ -94,9 +94,9 @@ unitEuclidian dim = WeightsParam
   , weightsGen = \n -> do
       points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
       forM (assocs points) $ \(i, pt) -> do
-        let x = 10 * pt ! 0
-        let y = 10 * pt ! 1
-        lgInfo $ "\\coordinate (n" <> tshow i <> ") at (" <> tshow x <> "," <> tshow y <> ");"
+        let x = pt ! 0
+        let y = pt ! 1
+        lgInfo $ "\\node[fill,circle,inner sep=0pt, minimum size=3pt] (" <> tshow i <> ") at (axis cs:" <> tshow x <> "," <> tshow y <> ") {};"
       return $ array ((0, 0), (n - 1, n - 1))
         [ ((u, v), distance (points ! u) (points ! v))
         | u <- [0 .. n - 1]

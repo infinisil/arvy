@@ -100,6 +100,7 @@ executable arvy
   main-is:             Main.hs
   build-depends:       base ^>=4.12.0.0
                      , arvy
+                     , text
                      , arvy-eval
                      , array
                      , polysemy-zoo
