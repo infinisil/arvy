@@ -1,5 +1,5 @@
-- Plots
 - Related work
 - Summary
-- Make sure all a_i are the same. ! Partial requests path can be different than full requests paths! Full paths can use p_i^(j), while partial ones can use a_i! Nice!
 - Request sequences (uniformly random and adversial)
+- examples for all initial trees
+- Cross-link algorithms/trees from plot section, use hyperrefs, name the algs

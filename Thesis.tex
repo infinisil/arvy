@@ -12,6 +12,7 @@
 \usepackage{minted}
 \usepackage{commath}
 \usetikzlibrary{arrows.meta}
+\usetikzlibrary{pgfplots.groupplots}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -87,7 +88,7 @@ As a reasonable constraint, a node $v$ can only query costs from itself to other
 
 \paragraph{Sequential Requests} A major simplification we make is that nodes can only request the token sequentially. So only after the token has reached the requesting node another node can make a request for it. Therefore requests can be represented as an series $R=\{r_1,r_2,\dots\},r_i\in V$ where $r_i$ encodes the $i$-th request originating from node $r_i$. While this series could be endless, for being able to reason more easily about execution time we let it be finite.
 
-\paragraph{Request Paths} In the type of algorithms we'll look at, when the $i$-th request gets made by node $r_i$, the request travels along some path $A^{(i)}=\{a^{(i)}_0,a^{(i)}_1,\dots,a^{(i)}_{l_i}\}$ with $l_i=|A^{(i)}|-1$ being the index of the last node and also the number of messages that are being sent. Then $a^{(i)}_0=r_i$ is the node making the request and the $a^{(i)}_{l_i}$ is the node currently holding the token. After the request was sent along this path, the token is then sent back directly from $a^{(i)}_{l_i}$ to $a^{(i)}_0$ to satisfy the request. Without loss of generality, nodes can't send requests when they have the token already, meaning $a^{(i)}_0\neq a^{(i)}_{l_i}$ or $|A^{(i)}|\geq 2$. In addition, it holds that $a^{(i)}_0=a^{(i+1)}_{l_{i+1}}$ for all $i\in\mathbb{N}$, meaning the node making a request in a request will be the last node in the request path in the following request.
+\paragraph{Request Paths} In the type of algorithms we'll look at, when the $i$-th request gets made by node $r_i$, the request travels along some path $A^{(i)}=\{a^{(i)}_0,a^{(i)}_1,\dots,a^{(i)}_{l_i}\}$ with $l_i=|A^{(i)}|-1$ being the index of the last node and also the number of messages that are being sent. Then $a^{(i)}_0=r_i$ is the node making the request and the $a^{(i)}_{l_i}$ is the node currently holding the token. After the request was sent along this path, the token is then sent back directly from $a^{(i)}_{l_i}$ to $a^{(i)}_0$ to satisfy the request. If $|A^{(i)}|=1$ the node making the request has the token already. It holds that $a^{(i)}_0=a^{(i+1)}_{l_{i+1}}$ for all $i\in\mathbb{N}$, meaning the node making a request in a request will be the last node in the request path in the following request.
 
 \paragraph{Performance}\label{model-perf} In order to be able to talk about performance of such algorithms, we first define $c(A^{(i)})$ to be the cost of traversing request path $A^{(i)}$:
 \begin{equation}
@@ -108,9 +109,9 @@ Now there are multiple reasonable ways to define performance for a sequence of r
   \end{equation}
 
 \item
-  A different way is to look at how much worse the request paths are in comparison to a direct connection between the first and the last node in it. We again average this over all requests $R$. If after these requests the system were to be in the same state as initially, this would resemble the competitive ratio. \TODO{Look up proper definition of comp ratio in some paper}. This measure penalizes more for request paths that are much longer than the direct path, so it's better suited for getting a sense of how individual requests are doing.
+  A different way is to look at how much worse the request paths are in comparison to a direct connection between the first and the last node in it. We again average this over all requests $R$. If after these requests the system were to be in the same state as initially, this would resemble the competitive ratio. \TODO{Look up proper definition of comp ratio in some paper}. To avoid dividing by $0$, we only look at the requests where the node making the request isn't the one holding the token: $R'=\{r_i\in R,|A^{(i)}|\geq 2\}$. This measure penalizes more for request paths that are much longer than the direct path, so it's better suited for getting a sense of how individual requests are doing.
   \begin{equation}
-    \mathcal{C}_{ratio}(R) = \frac{1}{|R|}\sum_{i=1}^{|R|}\frac{c(A^{(i)})}{c(a^{(i)}_0,a^{(i)}_{l_i})}
+    \mathcal{C}_{ratio}(R) = \frac{1}{|R'|}\sum_{i=1}^{|R'|}\frac{c(A^{(i)})}{c(a^{(i)}_0,a^{(i)}_{l_i})}
   \end{equation}
 
 \item
@@ -483,6 +484,7 @@ Not a particularly interesting algorithm, but good as a reference point is a com
 \end{algorithmic}
 
 \section{Edge Cost Minimizer}
+\label{alg:ecm}
 
 Since algorithms have access to the edge costs, we should make use of them. A simple algorithm is one that always chooses the node with minimum edge cost as the new parent. In case there are multiple edges with the same cost, choose the last one of them. See Figure~\ref{fig:ecm} for an example. Intuitively this heuristic should perform well since short paths make for short request paths.
 \begin{algorithmic}
@@ -904,6 +906,7 @@ These algorithms have the following interesting properties:
 \end{figure}
 
 \section{Dynamic Star}
+\label{dynstar}
 
 To understand the Dynamic Star algorithm, we first look at the results from \cite{Peleg}, which for one is about finding a good tree to use for Arrow. A probability distribution $p_i, i\in V$ for each node making a request is given. Then the chance that a request travels from node $i$ to node $j$ is simply $p_ip_j$. Now let $d_T(i,j)$ be the cost to go from node $i$ to $j$ in some spanning tree $T$, similarly let $d_G(i,j)$ be the cost for the way from $i$ to $j$ by taking the shortest path in graph $G$. Then the expected cost of a single request in a tree and the graph respectively is
 \begin{equation}
@@ -982,65 +985,6 @@ The general idea to solve this problem is to give less weight to older requests.
 
 In this thesis however we assume that the request pattern is periodic, where the problem described here isn't possible. Therefore this non-converging Dynamic Star algorithm is not further evaluated.
 
-\section{Index Mean}
-
-Let us look at an example of a graph 
-This algorithm is based on the idea that less central nodes get a more uneven 
-
-This algorithm is based on logging request path indices: Each node $v$ stores a count For a request path through nodes $a_{i}$, 
-
-\begin{figure}
-\centering
-\begin{tikzpicture}
-[v/.style = { fill, inner sep=0pt, minimum size=4pt, circle }
-,scale=0.7
-,font=\scriptsize
-]
-\node[v] (l) at (0,0) {};
-\node[v] (l1) at (-1,0.5) {};
-\draw (l) -- (l1);
-\node[v] (l11) at (-1.6,1.5) {};
-\draw (l1) -- (l11);
-\node[v] (l12) at (-2,0.5) {};
-\draw (l1) -- (l12);
-\node[v] (l2) at (-1,-0.5) {};
-\draw (l) -- (l2);
-\node[v] (l21) at (-2,-0.5) {};
-\draw (l2) -- (l21);
-\node[v] (l22) at (-1.6,-1.5) {};
-\draw (l2) -- (l22);
-
-\node[v] (m1) at (1,2) {};
-\node[v] (m2) at (3,3) {};
-\node[v] (m3) at (5,2) {};
-\node[v] (r) at (6,0) {};
-\node (r1) at (6.5,1) {};
-\node (r2) at (7,0.5) {};
-\node (r3) at (7,-0.5) {};
-\node (r4) at (6.5,-1) {};
-\draw (l) --node[sloped, below]{1} (m1);
-\draw (m1) --node[sloped, below]{1} (m2);
-\draw (m2) --node[sloped, below]{1} (m3);
-\draw (m3) --node[sloped, below]{1} (r);
-\draw (l) --node[sloped, below]{2} (r);
-
-\node[v] (r) at (6,0) {};
-\node[v] (r1) at (7,0.5) {};
-\draw (r) -- (r1);
-\node[v] (r11) at (7.6,1.5) {};
-\draw (r1) -- (r11);
-\node[v] (r12) at (8,0.5) {};
-\draw (r1) -- (r12);
-\node[v] (r2) at (7,-0.5) {};
-\draw (r) -- (r2);
-\node[v] (r21) at (8,-0.5) {};
-\draw (r2) -- (r21);
-\node[v] (r22) at (7.6,-1.5) {};
-\draw (r2) -- (r22);
-\end{tikzpicture}
-\caption{Example of }
-\end{figure}
-
 \chapter{Graph Costs, Initial Trees and Request Sequences}
 
 The performance of an Arvy algorithm depends not only on the algorithm itself, but also on the costs of the edges, the initial tree and the request sequence.
@@ -1083,10 +1027,6 @@ c(u,v)=\text{length of shortest path from $u$ to $v$ in $G'$}
 \section{Initial Trees}
 \label{initial-trees}
 
-\paragraph{Ring}
-
-A tree forming a ring.
-
 \paragraph{Minimum Spanning Tree}
 
 The minimum spanning tree (MST) is the tree with lowest total edge cost.
@@ -1094,7 +1034,7 @@ The minimum spanning tree (MST) is the tree with lowest total edge cost.
 \paragraph{Uniformly Random Tree}
 
 A uniformly random tree out of all possible trees. An algorithm for generating such a tree is as follows:
-\TODO{Use algorithmic}
+
 \begin{enumerate}
 \item Select a random root node $r\gets_{u.a.r.}V$
 \item Define $S=\{r\}$ to be the set of all nodes already included in the tree
@@ -1105,6 +1045,21 @@ A uniformly random tree out of all possible trees. An algorithm for generating s
 \item Set $S\gets S\cup\{v\}$
 \item Unless $S=V$, go to step \ref{random-tree-goto}
 \end{enumerate}
+
+\paragraph{Best Star}
+
+As we learned in Section~\ref{dynstar}, the shortest-path tree with minimum $c_R(T_c)$ for some center node $c$ has at most two times longer paths than direct paths in the graph. By assuming uniformly random requests with $p_i=\frac{1}{n}$ for all nodes $i$, we can use this to generate an initial tree without knowing the request distribution. This also simplifies the calculation for $C_R(T_c)$ to
+\begin{equation}
+\begin{split}
+c_R(T_c)&=\sum_{i,j}\frac{1}{n}\frac{1}{n}(c(i,c)+c(c,j)) \\
+&=\frac{1}{n^2}\sum_{i,j}(c(i,c)+c(c,j)) \\
+&=\frac{1}{n^2}\sum_{i,j}c(i,c)+\frac{1}{n^2}\sum_{i,j}c(c,j) \\
+&=\frac{n}{n^2}\sum_{i}c(i,c)+\frac{n}{n^2}\sum_{j}c(c,j) \\
+&=\frac{2}{n}\sum_{i}c(i,c) \\
+\end{split}
+\end{equation}
+
+This means finding $c_R(T_c)$ for a single $c$ can be done in time $\mathcal{O}(n)$ and for finding the best $c$ with smallest $c_R(T_c)$, $\mathcal{O}(n^2)$ is needed.
 
 \paragraph{Minimum Pair Distance Tree}
 \label{tree:mpd}
@@ -1243,6 +1198,15 @@ As a result, our algorithm looks as follows:
 Because the tree gets one more node in every iteration, the sequence of the number of edges between tree and non-tree nodes is $1n,2(n-1),3(n-2),\dots,(n-1)2,n1$. Every iteration therefore takes $\mathcal{O}(n^2)$ to find the best edge and an additional $\mathcal{O}(n)$ to update the data structure. The total complexity of this algorithm is therefore $\mathcal{O}(n\cdot(n^2+n))=\mathcal{O}(n^3)$.
 
 \TODO{Go into how good this actually is?}
+\TODO{Show some examples}
+
+\section{Request Sequences}
+
+This section describes all the 
+
+\paragraph{Uniformly random requests} This request sequence distributes requests uniformly across all nodes.
+
+\paragraph{Adversarial requests} This request sequence looks at the current tree and chooses the node furthest away
 
 \chapter{Implementation Notes}
 
@@ -1327,94 +1291,381 @@ Functions $\texttt{arvyMakeRequest}$ and $\texttt{arvyReceiveRequest}$ are speci
 
 In this chapter we first look at the evaluation results from simulating different scenarios for Arvy. In each of the scenarios we have the following possible variations:
 
-\begin{itemize}
-\item Number of nodes. This will be in the range 100 to 10000, depending on how fast the execution of algorithms are.
-\item Graph cost function. This is one of the graph costs described in Section~\ref{graph-costs}.
-\item Request sequence. This will be one of the request sequences defined in Section~\ref{request-sequences}.
-\end{itemize}
+We then run different Arvy algorithms on such scenarios, which we can compare against each other in a single plot. In addition we specify the initial tree used for these algorithms, which can be one of the ones specified in Section~\ref{initial-trees}. The measures we will be looking at include mainly the ones described in Section~\ref{model-perf}. Note that we will be using a moving average of the 100 last requests for $\mathcal{C}_{time}$ to get much smoother plots.
 
-We then run different Arvy algorithms on such scenarios, which we can compare against each other in a single plot. In addition we specify the initial tree used for these algorithms, which can be one of the ones specified in Section~\ref{initial-trees}. The measures we will be looking at include mainly the ones described in Section~\ref{model-perf}.
+\pgfplotsset{
+  every axis legend/.append style={
+    at={(0.5,1.03)},
+    anchor=south
+  },
+  width=0.9\textwidth,
+  height=0.5\textwidth,
+  legend columns = 3,
+  every axis/.append style = {
+    xmode = log,
+    xmin = 1,
+    grid,
+    colormap name = colormap/jet,
+    legend style = { font = \scriptsize },
+    xlabel = Number of requests,
+    no markers,
+  },
+  every axis plot post/.append style = {
+    thick,
+    x={x},
+    line join=round,
+  },
+}
 
-\section{Plots}
 
-\pgfplotsset{width=\textwidth,height=0.5\textwidth}
+\section{Comparison between initial trees for Arrow}
 
-\subsection{1000 nodes, all algs, random requests, 3-dim unit hypercube}
-
-\subsection{10 nodes, Arvy with different trees, random requests, 3-dim unit hypercube}
+For this evaluation we run Arrow on different initial trees to see how well they perform on uniformly random requests. We use only 10 nodes such that we can compute the minimum pair distance tree in reasonable time. For graph costs we use uniformly random points from a 2-dimensional hypercube. First we look at how the average time to satisfy requests changes over time.
 
 \begin{tikzpicture}
 \centering
 \begin{axis}[
-  xmode = log,
-  title = Test,
-  xlabel = Number of requests,
-  ylabel = Average request distance,
-  xmin = 1,
+  ylabel = Average request time $\mathcal{C}_{time}$,
   xmax = 100000,
-  no markers,
-  grid,
-  thick,
-  legend pos = south east,
-  colormap name = colormap/jet,
-  cycle list = { [samples of colormap=6] },
-  legend style = { font = \scriptsize },
+  cycle list = { [samples of colormap=5] },
 ]
-\pgfplotstableread{data/low/dist.dat}{\data}
-\addplot table [x={x}, y={arrow-shortpairs}] {\data};
-\addlegendentry {Arrow with Approx Min Pairs}
-\addplot table [x={x}, y={arrow-star}] {\data};
-\addlegendentry {Arrow with best star}
-\addplot table [x={x}, y={arrow-shortestpairs}] {\data};
-\addlegendentry {Arrow with Min Pairs}
-\addplot table [x={x}, y={ivy-random}] {\data};
-\addlegendentry {ivy}
-\addplot table [x={x}, y={localMinPairs-random}] {\data};
-\addlegendentry {local min pairs}
-\addplot table [x={x}, y={minWeight-random}] {\data};
-\addlegendentry {min weight}
+\pgfplotstableread{data/trees/time.dat}{\data}
+\addplot table [y={arrow-random}] {\data};
+\addlegendentry {Random}
+\addplot table [y={arrow-mst}] {\data};
+\addlegendentry {MST}
+\addplot table [y={arrow-shortpairs}] {\data};
+\addlegendentry {Approx. pair minimizer}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best star}
+\addplot table [y={arrow-shortestpairs}] {\data};
+\addlegendentry {Pair minimizer}
 \end{axis}
 \end{tikzpicture}
 
-\subsection{Ivy vs Arrow on 3,4,5,6 nodes in a clique}
+Not surprisingly, the tree minimizing total pair distance outperforms every other initial tree. Due to its running time of $\mathcal{O}(n^n)$ however it won't be very practical. Interestingly the next best one is the best star tree with only a running time of $\mathcal{O}(n^2)$, followed closely by the approximated total pair distance minimizer with runtime $\mathcal{O}(n^3)$. The MST comes next with a slightly worse time. Understandably, a completely random tree is not a good tree to use for fast average request time.
+
+Conclusively, for all future evaluations of Arrow we will use the Best Star tree.
+
+Now let's also look at the number of hops for each of them.
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = Average request hops $\mathcal{C}_{hops}$,
+  xmax = 100000,
+  cycle list = { [samples of colormap=5] },
+]
+\pgfplotstableread{data/trees/hops.dat}{\data}
+\addplot table [y={arrow-random}] {\data};
+\addlegendentry {Random}
+\addplot table [y={arrow-mst}] {\data};
+\addlegendentry {MST}
+\addplot table [y={arrow-shortpairs}] {\data};
+\addlegendentry {Approx. pair minimizer}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best star}
+\addplot table [y={arrow-shortestpairs}] {\data};
+\addlegendentry {Pair minimizer}
+\end{axis}
+\end{tikzpicture}
+
+Here as expected the star tree has the lowest hop counts out of all trees. This is lower than $2$ because nodes can make requests when they have the token already, giving a hop count of $0$, and the center node always has a hop count $\leq 1$. Interestingly the uniformly random tree tree has a decently low hop count.
+
+Note that while this is only the result for a single random seed with only 10 nodes, the results are the same for other random seeds and node counts. Also since in this case the tree never changes, it would be possible to calculate accurate expectations for these measures.
+
+\section{Tree Convergence}
+
+In this section we look at the behavior of algorithms in regards to the tree they end up with after many uniformly random requests. To get a feeling for the tree we look at the tree's average edge cost. We use only $100$ nodes since the Dynamic Star algorithm is quite slow to run. For edge costs we use uniformly random points in a 2-dimensional hypercube.
+
+In addition to looking at the total tree edge cost for algorithms, we also plot some fixed baselines for known trees. This includes one for the MST, one for the Best Star tree, and one for a completely random tree.
+
+All algorithms start with an initially completely random tree.
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = Average tree edge cost,
+  xmax = 100000,
+  cycle list = { [samples of colormap=8] },
+]
+\pgfplotstableread{data/converging/treeWeight.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Tree: Best Star}
+\addplot table [y={arrow-mst}] {\data};
+\addlegendentry {Tree: MST}
+\addplot table [y={arrow-random}] {\data};
+\addlegendentry {Tree: Random}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Alg: Ivy}
+\addplot table [y={random-random}] {\data};
+\addlegendentry {Alg: Random algorithm}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {Alg: Local Pair Minimizer}
+\addplot table [y={minWeight-random}] {\data};
+\addlegendentry {Alg: Edge Cost Minimizer}
+\addplot table [y={dynamicStar-random}] {\data};
+\addlegendentry {Alg: Dynamic Star}
+\end{axis}
+\end{tikzpicture}
+
+What we can see from this plot:
+\begin{itemize}
+\item The Dynamic Star algorithm converges to the Best Star tree, indicated by their lines merging into one. The fact that the line does not jitter indicates a converged tree. This makes sense since they both optimize for a minimal $c_R(T_c)$ with a uniform request distribution. Only with very bad luck of a bunch of requests to the same nodes in a row it is possible for it to stray from a Best Star tree, getting more improbable the longer it runs.
+\item The Edge Cost Minimizer algorithm as expected converges to the MST, which is already explained in Section~\ref{alg:ecm}. Here we can directly see how this algorithm only ever decreases average edge cost, indicated by its line monotonically decreasing until it reaches the lowest possible state of the MST.
+\item The Ivy algorithm seems to continuously have a tree with high average edge cost, in the same range as a completely random tree. This makes more or less sense since Ivy does not look at edge costs at all when selecting new node parents. If we were to include the Fixed Ratio algorithm in this plot it would show the same result for the same reason.
+\item A completely random algorithm similarly doesn't produce any better tree.
+\item Interestingly, the Local Pair Minimizer algorithm seems to go towards a rather low average edge cost with no known baseline in that region.
+\end{itemize}
+
+From this we conclude that the eventual behavior of the Dynamic Star and Edge Cost Minimizer algorithms can be achieved by simply using Arrow on the Best Star tree and the MST respectively. Therefore we don't further look at these algorithms.
+
+\section{Fixed Ratio algorithms}
+
+Here we look at the Fixed Ratio class of algorithms, both hop-based and weight-based ones, with different values for the ratio $f$, including $f=0$ for Ivy and $f=1$ for Arrow.
+
+\begin{tabular}{ r | l }
+  Node count & 1000 \\ \hline
+  Graph weights & Uniformly random points in 2-dim unit hypercube \\ \hline
+  Algorithms & Arrow with Best Star and hop-based \\
+  & Fixed Ratio with $f=\frac{i}{8}$ and random initial tree \\ \hline
+  Requests & $10^6$ uniformly random \\
+\end{tabular}
+\TODO{This for every plot}
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = Average request distance,
+  xmax = 1000000,
+  cycle list = { [samples of colormap=10] },
+  legend columns = 5,
+]
+\pgfplotstableread{data/ratio/time.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best Arrow}
+\addplot table [y={inbetween-0-1-random}] {\data};
+\addlegendentry {$f=\frac{0}{8}$ (Ivy)}
+\addplot table [y={inbetween-1-8-random}] {\data};
+\addlegendentry {$f=\frac{1}{8}$}
+\addplot table [y={inbetween-1-4-random}] {\data};
+\addlegendentry {$f=\frac{2}{8}$}
+\addplot table [y={inbetween-3-8-random}] {\data};
+\addlegendentry {$f=\frac{3}{8}$}
+\addplot table [y={inbetween-1-2-random}] {\data};
+\addlegendentry {$f=\frac{4}{8}$}
+\addplot table [y={inbetween-5-8-random}] {\data};
+\addlegendentry {$f=\frac{5}{8}$}
+\addplot table [y={inbetween-3-4-random}] {\data};
+\addlegendentry {$f=\frac{6}{8}$}
+\addplot table [y={inbetween-7-8-random}] {\data};
+\addlegendentry {$f=\frac{7}{8}$}
+\addplot table [y={inbetween-1-1-random}] {\data};
+\addlegendentry {$f=\frac{8}{8}$ (Arrow)}
+\end{axis}
+\end{tikzpicture}
+
+From this we can see that generally, the lower the ratio, the shorter average request costs. This is somewhat explainable that with a lower ratio shortcuts are taken, which are advantageous since we started with a completely random tree. However, for some reason ratios around $f=\frac{6}{8}$ seem to converge to some average request count lower than all others. So mysteriously it seems that $f=\frac{6}{8}=\frac{3}{4}$ with hop-based Fixed Ratio is a not too bad algorithm to use for this scenario. \TODO{explanation?}
+
+We now also look at the weight-based Fixed Ratio algorithm:
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = Average request distance,
+  xmax = 100000,
+  cycle list = { [samples of colormap=10] },
+  legend columns = 5,
+]
+\pgfplotstableread{data/ratio2/time.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best Arrow}
+\addplot table [y={inbetween2-0.0-random}] {\data};
+\addlegendentry {$f=\frac{0}{8}$ (Ivy)}
+\addplot table [y={inbetween2-0.125-random}] {\data};
+\addlegendentry {$f=\frac{1}{8}$}
+\addplot table [y={inbetween2-0.25-random}] {\data};
+\addlegendentry {$f=\frac{2}{8}$}
+\addplot table [y={inbetween2-0.375-random}] {\data};
+\addlegendentry {$f=\frac{3}{8}$}
+\addplot table [y={inbetween2-0.5-random}] {\data};
+\addlegendentry {$f=\frac{4}{8}$}
+\addplot table [y={inbetween2-0.625-random}] {\data};
+\addlegendentry {$f=\frac{5}{8}$}
+\addplot table [y={inbetween2-0.75-random}] {\data};
+\addlegendentry {$f=\frac{6}{8}$}
+\addplot table [y={inbetween2-0.875-random}] {\data};
+\addlegendentry {$f=\frac{7}{8}$}
+\addplot table [y={inbetween2-1.0-random}] {\data};
+\addlegendentry {$f=\frac{8}{8}$ (Arrow)}
+\end{axis}
+\end{tikzpicture}
+
+With an initial look, the anomalies from the previous plot are not present anymore. However they now appear in the opposite direction: The ratios around $f=\frac{3}{4}$ are all \textit{above} the highest ratio, giving a performance ordering from best to worst of $\frac{0}{8}, \frac{1}{8}, \frac{2}{8}, \frac{3}{8}, \frac{8}{8}, \frac{4}{8}, \frac{5}{8}, \frac{6}{8}, \frac{7}{8}$. This is very peculiar and we can't explain the reason for this.
+
+\section{Comparison between algorithms}
+
+We now look at all algorithms still relevant, ignoring ones that eventually converge to a static tree.
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = Average request distance,
+  xmax = 100000,
+  cycle list = { [samples of colormap=4] },
+  legend columns = 4,
+]
+\pgfplotstableread{data/algs/time.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best Arrow}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {Local Pair Minimizer}
+\addplot table [y={inbetween-3-4-random}] {\data};
+\addlegendentry {Hop-based Fixed Ratio with $f=\frac{3}{4}$}
+\end{axis}
+\end{tikzpicture}
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = Hops,
+  xmax = 100000,
+  cycle list = { [samples of colormap=4] },
+  legend columns = 4,
+]
+\pgfplotstableread{data/algs/hops.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best Arrow}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {Local Pair Minimizer}
+\addplot table [y={inbetween-3-4-random}] {\data};
+\addlegendentry {Hop-based Fixed Ratio with $f=\frac{3}{4}$}
+\end{axis}
+\end{tikzpicture}
+
+\section{Adversarial requests}
+
+\begin{tikzpicture}
+\centering
+\begin{groupplot}[
+  xmax = 100000,
+  cycle list = { [samples of colormap=5] },
+  legend columns = 2,
+  group style = {
+    group size = 1 by 2,
+    xlabels at = edge bottom,
+    ylabels at = edge left,
+  },
+]
+\nextgroupplot[ylabel=Average request distance]
+\pgfplotstableread{data/adversary/time.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best Arrow}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {Local Pair Minimizer}
+\addplot table [y={inbetween-3-4-random}] {\data};
+\addlegendentry {Hop-based Fixed Ratio with $f=\frac{3}{4}$}
+\addplot table [y={dynamicStar-random}] {\data};
+\addlegendentry {Dynamic Star}
+
+\nextgroupplot[ylabel=Hops]
+\pgfplotstableread{data/adversary/hops.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addplot table [y={ivy-random}] {\data};
+\addplot table [y={localMinPairs-random}] {\data};
+\addplot table [y={inbetween-3-4-random}] {\data};
+\addplot table [y={dynamicStar-random}] {\data};
+\end{groupplot}
+\end{tikzpicture}
+
+\subsection{Ivy in small cliques}
+\label{result:clique}
+
+The fact that Arrow on the Best Star seems to have been the best algorithm gives the impression that we don't need any algorithms that change the tree. However let's look at Ivy in a clique of a low number of nodes
+
+\begin{tikzpicture}
+\begin{groupplot}[
+  ylabel = Average request distance,
+  xmax = 100000,
+  cycle list = { [samples of colormap=2] },
+  small,
+  group style = {
+    group size = 2 by 2,
+    xlabels at = edge bottom,
+    ylabels at = edge left,
+    vertical sep = 1.5cm,
+  },
+]
+\nextgroupplot[title={$3$ nodes},legend to name={CommonLegend1}]
+\pgfplotstableread{data/low3/time.dat}{\3}
+\addplot table [y={ivy-shortestpairs}] {\3};
+\addlegendentry{Ivy}
+\addplot table [y={arrow-shortestpairs}] {\3};
+\addlegendentry{Arrow}
+
+\nextgroupplot[title={$4$ nodes}]
+\pgfplotstableread{data/low4/time.dat}{\4}
+\addplot table [y={ivy-shortestpairs}] {\4};
+\addplot table [y={arrow-shortestpairs}] {\4};
+
+\nextgroupplot[title={$5$ nodes}]
+\pgfplotstableread{data/low5/time.dat}{\5}
+\addplot table [y={ivy-shortestpairs}] {\5};
+\addplot table [y={arrow-shortestpairs}] {\5};
+
+\nextgroupplot[title={$6$ nodes}]
+\pgfplotstableread{data/low6/time.dat}{\6}
+\addplot table [y={ivy-shortestpairs}] {\6};
+\addplot table [y={arrow-shortestpairs}] {\6};
+
+\end{groupplot}
+\path[text=black] (group c1r1.north east) -- node[above=0.5cm]{\ref{CommonLegend1}} (group c2r1.north west);
+\end{tikzpicture}
 
 \subsection{Recursive clique vs others}
 
-\subsection{1000 nodes, all algs, adversary, 3-dim unit hypercube}
+\begin{tikzpicture}
+\begin{groupplot}[
+  ylabel = Average request distance,
+  xmax = 1000000,
+  cycle list = { [samples of colormap=5] },
+  small,
+  group style = {
+    group size = 2 by 1,
+    xlabels at = edge bottom,
+    ylabels at = edge left,
+  },
+]
+\pgfplotstableread{data/reclique/time.dat}{\data}
+\nextgroupplot[legend to name={CommonLegend}]
+\addplot table [y={reclique}] {\data};
+\addlegendentry {Reclique}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best Arrow}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {Local Pair Minimizer}
+\addplot table [y={inbetween-3-4-random}] {\data};
+\addlegendentry {Hop-based Fixed Ratio with $f=\frac{3}{4}$}
 
-\subsection{Fixed ratio isn't very good all around}
+\nextgroupplot[xmin=1000]
+\addplot table [y={reclique}] {\data};
+\addplot table [y={arrow-star}] {\data};
+\end{groupplot}
+\path[text=black] (group c1r1.north east) -- node[above]{\ref{CommonLegend}} (group c2r1.north west);
+\end{tikzpicture}
 
-\subsection{Ivy is better for >~7 dimensional hypercube}
-
-\section{Arrow}
-
-We first 
-
-In this chapter we show results we 
-
-Should include
-\begin{itemize}
-\item Resulting plots of interesting evaluations
-\item Show how to reproduce the results including parameters
-\end{itemize}
-
-What are the results?
-\begin{itemize}
-\item Ivy is better than the best arrow for cliques with node counts only <5
-\item For uniformly random requests, the best star is a very good tree
-\item Recursive clique is good
-\end{itemize}
-
-\section{Ivy is better than Arrow for cliques of less than 5 nodes}
-\label{result:clique}
 
 \chapter{Summary}
 
-
 \bibliographystyle{IEEEtran}
 \bibliography{references}
-
-%\appendix
-%\chapter{First Appendix Chapter Title}
 
 \end{document}
