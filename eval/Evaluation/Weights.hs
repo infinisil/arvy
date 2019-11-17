@@ -18,3 +18,6 @@ weightDistribution Env { envWeights = weights } delta = runSTUArray $ do
   where
     maxWeight = maximum (elems weights)
     maxBin = floor (maxWeight / delta)
+
+avgWeight :: Env -> Double
+avgWeight Env { envWeights = weights } = sum (elems weights) / fromIntegral (rangeSize (bounds weights))
