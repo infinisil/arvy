@@ -66,7 +66,7 @@ decayingFilter r = go 0 0 (r - 1) where
 logFilter :: forall a m . Monad m => Env -> Int -> ConduitT a a m ()
 logFilter Env { envRequestCount } count = go (NN.impureNonNull indices) 1 where
 
-  lc :: Double = log (fromIntegral envRequestCount)
+  lc :: Double = log (fromIntegral envRequestCount - 1)
   indices = map head $ group $ map (floor . exp) [0.0, lc / (fromIntegral count - 1) .. lc]
 
   go :: NN.NonNull [Int] -> Int -> ConduitT a a m ()
