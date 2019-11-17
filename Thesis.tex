@@ -65,7 +65,7 @@ Often in computing a single resource is shared between multiple components, wher
 
 In this thesis we come up with new Arvy heuristics and measure their empirical performance in a simulation of sequential requests.
 
-\section{Previous Work}
+\section{Related Work}
 
 \TODO{}
 
@@ -1299,6 +1299,10 @@ We then run different Arvy algorithms on such scenarios, which we can compare ag
     at={(0.5,1.03)},
     anchor=south
   },
+  legend cell align = left,
+  legend image post style = {
+    line width = 3pt,
+  },
   width=0.9\textwidth,
   height=0.5\textwidth,
   legend columns = 3,
@@ -1585,7 +1589,7 @@ We now look at all algorithms still relevant, ignoring ones that eventually conv
 \end{groupplot}
 \end{tikzpicture}
 
-\subsection{Ivy in small cliques}
+\section{Ivy in small cliques}
 \label{result:clique}
 
 The fact that Arrow on the Best Star seems to have been the best algorithm gives the impression that we don't need any algorithms that change the tree. However let's look at Ivy in a clique of a low number of nodes
@@ -1629,7 +1633,7 @@ The fact that Arrow on the Best Star seems to have been the best algorithm gives
 \path[text=black] (group c1r1.north east) -- node[above=0.5cm]{\ref{CommonLegend1}} (group c2r1.north west);
 \end{tikzpicture}
 
-\subsection{Recursive clique vs others}
+\section{Recursive clique vs others}
 
 \begin{tikzpicture}
 \begin{groupplot}[
