@@ -1,17 +1,40 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Evaluation.Plot where
 
 import           Evaluation.Types
 
-import Graphics.Rendering.Chart
-import Graphics.Rendering.Chart.Backend.Cairo
-import Data.Functor
-import Data.Default.Class
-import Graphics.Rendering.Chart.Easy
-import System.Directory
-import System.FilePath
-import Data.Colour.Palette.ColorSet
-import qualified Data.Text as T
-import Data.Text (Text)
+import           Control.Monad
+import           Data.Colour.Palette.ColorSet
+import           Data.Default.Class
+import           Data.Functor
+import           Data.List
+import           Data.Text                              (Text)
+import qualified Data.Text                              as T
+import qualified Data.Text.IO                           as TIO
+import           Graphics.Rendering.Chart
+import           Graphics.Rendering.Chart.Backend.Cairo
+import           Graphics.Rendering.Chart.Easy
+import           System.Directory
+import           System.FilePath
+
+writeSeriesToDat :: FilePath -> [(Text, Series)] -> IO ()
+writeSeriesToDat path allSeries@((_, firstSeries):_) = do
+  let xs = map fst firstSeries
+      labels = map fst allSeries
+      yss = map (map snd . snd) allSeries
+      firstLine = "x\t" <> T.intercalate "\t" labels
+      dataLine x ys = T.pack (show x) <> "\t" <> T.intercalate "\t" (map (T.pack . show) ys)
+      dataLines = zipWith dataLine xs (transpose yss)
+      contents = T.unlines (firstLine : dataLines)
+
+  TIO.writeFile path contents
+
+writeResultsToDats :: Text -> EvalResults -> IO ()
+writeResultsToDats name (EvalResults _ results) = do
+  createDirectoryIfMissing True ("data/" <> T.unpack name)
+  forM_ results $ \(sname, series) ->
+    writeSeriesToDat (T.unpack ("data/" <> name <> "/" <> sname <> ".dat")) series
 
 plotResults :: FilePath -> EvalResults -> IO ()
 plotResults path (EvalResults name results) = do
