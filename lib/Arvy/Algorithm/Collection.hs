@@ -8,6 +8,7 @@ module Arvy.Algorithm.Collection
   , RingNodeState(..)
   , minWeight
   , inbetween
+  , inbetweenWeighted
   , module Data.Ratio
   , random
   , indexMeanScore
@@ -19,22 +20,23 @@ module Arvy.Algorithm.Collection
   ) where
 
 import           Arvy.Algorithm
+import           Arvy.Log
+import           Data.Array.Unboxed
+import           Data.Bifunctor
+import           Data.Foldable
+import           Data.IntMap                      (IntMap)
+import qualified Data.IntMap                      as IntMap
+import           Data.Maybe                       (fromMaybe)
+import           Data.MonoTraversable
+import qualified Data.NonNull                     as NN
+import           Data.Ord                         (comparing)
+import           Data.Random.Distribution.Uniform
+import           Data.Random.RVar
+import           Data.Ratio
+import qualified Data.Sequence                    as S
 import           Polysemy
-import           Polysemy.State
 import           Polysemy.RandomFu
-import Arvy.Log
-import Data.Foldable
-import Data.Ord (comparing)
-import qualified Data.Sequence as S
-import Data.Ratio
-import Data.Array.Unboxed
-import Data.Random.RVar
-import Data.Random.Distribution.Uniform
-import Data.MonoTraversable
-import Data.Bifunctor
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
-import Data.Maybe (fromMaybe)
+import           Polysemy.State
 
 newtype ArrowMessage i = ArrowMessage i deriving Show
 
@@ -174,7 +176,7 @@ inbetween ratio = GeneralArvy ArvySpec
           newK = k + 1
           (newF, newSeq) = if (newK - s) % newK < ratio
             then case S.viewl seq' of
-              S.EmptyL -> (i, S.empty)
+              S.EmptyL      -> (i, S.empty)
               fir S.:< rest -> (fir, rest S.|> i)
             else (forward f, seq' S.|> i)
       in return (f, InbetweenMessage newK newF newSeq)
@@ -184,26 +186,32 @@ inbetween ratio = GeneralArvy ArvySpec
   , arvyRunner = const raise
   }
 
---newtype WeightedInbetweenMessage i = WeightedInbetweenMessage (NonNull [(i, Double)]) deriving Show
---
----- | @'inbetweenWeighted' ratio@ Chooses the node that lies at @ratio@ inbetween the root node and the last node by weight,
----- where 0.0 means always choose the root node, 1.0 means always choose the last node
----- This is equivalent to 'inbetween' if run on a clique
---inbetweenWeighted :: forall s r . Show s => Double -> Arvy s r
---inbetweenWeighted ratio = arvy @WeightedInbetweenMessage @s ArvyInst
---  { arvyInitiate = \i _ -> return (WeightedInbetweenMessage (opoint (i, 0)))
---  , arvyTransmit = \msg@(WeightedInbetweenMessage ps@(head -> (comingFrom, total))) i _ -> do
---      newSucc <- select msg
---      -- The newTotal is the previous total plus the weight to the node we're coming from
---      newTotal <- (total+) <$> weightTo comingFrom
---      return (newSucc, WeightedInbetweenMessage ((i, newTotal) <| mapNonNull (first forward) ps))
---  , arvyReceive = \msg _ -> select msg
---  } where
---  select :: ArvySelector WeightedInbetweenMessage s r
---  select (WeightedInbetweenMessage ps@(head -> (_, total))) = return newSucc where
---    -- Find the first node that's less than ratio * total away, starting from the most recent node
---    -- Nothing can't happen because desired is always >= 0, and ps will always contain the 0 element at the end
---    Just (newSucc, _) = find ((<= total * ratio) . snd) ps
+newtype WeightedInbetweenMessage i = WeightedInbetweenMessage (NN.NonNull [(i, Double)]) deriving Show
+
+-- | @'inbetweenWeighted' ratio@ Chooses the node that lies at @ratio@ inbetween the root node and the last node by weight,
+-- where 0.0 means always choose the root node, 1.0 means always choose the last node
+-- This is equivalent to 'inbetween' if run on a clique
+inbetweenWeighted :: forall r . Double -> GeneralArvy r
+inbetweenWeighted ratio = GeneralArvy spec where
+  spec :: forall i . NodeIndex i => ArvySpec () i r
+  spec = ArvySpec
+    { arvyBehavior = behaviorType @(LocalWeights i ': r) ArvyBehavior
+      { arvyMakeRequest = \i _ -> return (WeightedInbetweenMessage (opoint (i, 0)))
+      , arvyForwardRequest = \msg@(WeightedInbetweenMessage ps@(NN.head -> (comingFrom, total))) i _ -> do
+          newSucc <- select msg
+          -- The newTotal is the previous total plus the weight to the node we're coming from
+          newTotal <- (total+) <$> weightTo comingFrom
+          return (newSucc, WeightedInbetweenMessage ((i, newTotal) NN.<| NN.mapNonNull (first forward) ps))
+      , arvyReceiveRequest = \msg _ -> select msg
+      }
+    , arvyInitState = \_ _ -> return ()
+    , arvyRunner = \weights -> reinterpret (weightHandler weights)
+    } where
+    select :: WeightedInbetweenMessage (Pred i) -> Sem (LocalWeights i ': r) (Pred i)
+    select (WeightedInbetweenMessage ps@(NN.head -> (_, total))) = return newSucc where
+      -- Find the first node that's less than ratio * total away, starting from the most recent node
+      -- Nothing can't happen because desired is always >= 0, and ps will always contain the 0 element at the end
+      Just (newSucc, _) = find ((<= total * ratio) . snd) (NN.toNullable ps)
 
 
 random :: forall r . Member RandomFu r => GeneralArvy r
@@ -266,7 +274,7 @@ logWeight w (IndexMean x n) = IndexMean (adjustedX * adjustedI) (n + 1) where
   adjustedI = w ** (1 / (n' + 1))
 
 getIndexScore :: IndexMean -> Maybe Double
-getIndexScore NoIndices = Nothing
+getIndexScore NoIndices       = Nothing
 getIndexScore (IndexMean x _) = Just x
 
 data IndexMeanType
@@ -307,7 +315,7 @@ indexMeanScore ty af = GeneralArvy spec where
     {-# INLINE edgePart #-}
     edgePart :: forall r' . Member (LocalWeights (Succ i)) r' => Succ i -> Sem r' Double
     edgePart = case ty of
-      HopIndexBased -> \_ -> return 1
+      HopIndexBased  -> \_ -> return 1
       WeightSumBased -> weightTo
 
 
@@ -327,7 +335,7 @@ indexMeanScore ty af = GeneralArvy spec where
 
   {-# INLINE getScore #-}
   getScore :: Double -> Maybe Double -> Double -> Double
-  getScore _ Nothing weight = weight
+  getScore _ Nothing weight       = weight
   getScore a (Just iScore) weight = weight ** a * iScore ** (1 - a)
 
 
@@ -387,7 +395,7 @@ data RecliqueConf = RecliqueConf
   -- ^ How much the distance increases with an additional level, should be > 1
   , recliqueLevels :: Int
   -- ^ How many levels there should be
-  , recliqueBase :: Int
+  , recliqueBase   :: Int
   -- ^ How many more nodes each level has
   } deriving (Show)
 
@@ -421,9 +429,9 @@ recliqueInitialState :: RecliqueConf -> Node -> Maybe Int
 recliqueInitialState _ 0 = Nothing
 recliqueInitialState conf@RecliqueConf { .. } node = rightmostZero $ reverse (recliqueLayers conf node) where
   rightmostZero :: [Int] -> Maybe Int
-  rightmostZero [] = Nothing
+  rightmostZero []     = Nothing
   rightmostZero (0:xs) = (+1) <$> rightmostZero xs
-  rightmostZero _ = Just 0
+  rightmostZero _      = Just 0
 
 
 recliqueSuccessor :: RecliqueConf -> Node -> Node
@@ -431,7 +439,7 @@ recliqueSuccessor conf node = recliqueUnlayers conf newLayers where
   layers = recliqueLayers conf node
   newLayers = reverse $ zeroLeftmost $ reverse layers
   zeroLeftmost :: [Int] -> [Int]
-  zeroLeftmost [] = []
+  zeroLeftmost []     = []
   zeroLeftmost (0:xs) = 0 : zeroLeftmost xs
   zeroLeftmost (_:xs) = 0 : xs
 
@@ -475,9 +483,9 @@ reclique = SpecializedArvy gen spec where
 
 type DynamicStarState i = UArray i Int
 data DynamicStarMessage i = DynamicStarMessage
-  { dynStarMsgRoot :: !i
+  { dynStarMsgRoot      :: !i
   , dynStarMsgRootCount :: !Int
-  , dynStarMsgBest :: !i
+  , dynStarMsgBest      :: !i
   , dynStarMsgBestScore :: !Double
   } deriving Show
 
@@ -498,7 +506,7 @@ dynamicStar = GeneralArvy spec where
           score <- getLocalScore
           let (newBest, newBestScore) = case dynStarMsgBestScore `compare` score of
                 GT -> (i, score)
-                _ -> (forward dynStarMsgBest, dynStarMsgBestScore)
+                _  -> (forward dynStarMsgBest, dynStarMsgBestScore)
           return ( dynStarMsgBest
                  , DynamicStarMessage (forward dynStarMsgRoot) dynStarMsgRootCount newBest newBestScore)
       , arvyReceiveRequest = \DynamicStarMessage { .. } _ -> do
