@@ -203,13 +203,13 @@ adversary = do
   writeResultsToDats "adversary" results
 
 ivyClique :: IO ()
-ivyClique = forM_ [3..6] runIt where
+ivyClique = forM_ [3..8] runIt where
   runIt :: Int -> IO ()
   runIt i = do
     results <- runM .@ runAsyncInIO $ runLogBySeverity Info (cmap messageText logTextStdout) $ runGenParams GenParams
       { genParamShared = SharedParams
         { sharedParamRandomSeed = 0
-        , sharedParamRequestCount = 100000
+        , sharedParamRequestCount = 1000000
         , sharedParamRequests = Requests.random
         , sharedParamEvals = [ evalTime
                             , evalHops
@@ -219,9 +219,8 @@ ivyClique = forM_ [3..6] runIt where
       , genParamNodeCount = i
       , genParamWeights = Weights.clique
       , genParamAlgs =
-        [
-          (Alg.ivy, Tree.shortestPairs),
-          (Alg.arrow, Tree.shortestPairs)
+        [ (Alg.arrow, Tree.shortestPairs)
+        , (Alg.ivy, Tree.shortestPairs)
         ]
       }
     writeResultsToDats ("low" <> tshow i) results
