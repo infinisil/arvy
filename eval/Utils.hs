@@ -2,30 +2,30 @@
 
 module Utils where
 
-import Polysemy
-import Polysemy.State
-import Data.Bifunctor
-import qualified Data.Random                   as R
-import qualified Data.Random.Internal.Source   as R
-import Polysemy.RandomFu
-import Data.Array.IArray
-import qualified Data.Tree as T
-import Data.Maybe
-import Arvy.Algorithm
-import Data.Array.MArray
-import Data.Array.Base
-import Control.Monad
-import qualified Data.IntMap as IntMap
-import Data.IntMap (IntMap)
-import qualified Data.IntSet as IntSet
-import Data.IntSet (IntSet)
-import qualified Data.Set as Set
-import Data.Set (Set)
-import Data.Random
-import Data.Word
-import qualified Data.Vector as V
-import System.Random.MWC
-import Evaluation.Types
+import           Arvy.Algorithm
+import           Control.Monad
+import           Data.Array.Base
+import           Data.Array.IArray
+import           Data.Array.MArray
+import           Data.Bifunctor
+import           Data.IntMap                 (IntMap)
+import qualified Data.IntMap                 as IntMap
+import           Data.IntSet                 (IntSet)
+import qualified Data.IntSet                 as IntSet
+import           Data.Maybe
+import           Data.Random
+import qualified Data.Random                 as R
+import qualified Data.Random.Internal.Source as R
+import           Data.Set                    (Set)
+import qualified Data.Set                    as Set
+import qualified Data.Tree                   as T
+import qualified Data.Vector                 as V
+import           Data.Word
+import           Evaluation.Types
+import           Polysemy
+import           Polysemy.RandomFu
+import           Polysemy.State
+import           System.Random.MWC
 
 type RootedTree = UArray Node Node
 
@@ -169,7 +169,7 @@ randomSetElement set = do
 
 -- | Run a RandomFu effect with a certain initial seed
 {-# INLINE runRandomSeed #-}
-runRandomSeed :: Members '[Lift IO] r => Word32 -> Sem (RandomFu ': r) a -> Sem r a
-runRandomSeed seed sem = do
-  gen <- sendM $ initialize (V.singleton seed)
+runRandomSeed :: Members '[Lift IO] r => Word32 -> Word32 -> Sem (RandomFu ': r) a -> Sem r a
+runRandomSeed seed shift sem = do
+  gen <- sendM $ initialize (V.singleton (seed + shift))
   runRandomSource' gen sem

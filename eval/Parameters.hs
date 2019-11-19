@@ -4,43 +4,43 @@
 
 module Parameters where
 
-import Arvy.Algorithm
-import Arvy.Local
-import Parameters.Requests
-import Parameters.Algorithm
-import Parameters.Weights
-import Parameters.Tree
-import Arvy.Log
-import qualified Data.Sequence as S
-import Data.NonNull hiding (last)
-import qualified Data.Text as T
+import           Arvy.Algorithm
+import           Arvy.Local
+import           Arvy.Log
+import           Data.NonNull             hiding (last)
+import qualified Data.Sequence            as S
+import qualified Data.Text                as T
+import           Parameters.Algorithm
+import           Parameters.Requests
+import           Parameters.Tree
+import           Parameters.Weights
 
-import Polysemy
-import GHC.Word
-import Conduit hiding (await)
-import Evaluation.Request
-import Evaluation.Types
-import qualified Data.Conduit.Combinators as C
-import Data.List
-import Data.Array.Unboxed
-import Polysemy.RandomFu
-import Utils
-import Polysemy.Async
+import           Conduit                  hiding (await)
 import qualified Control.Concurrent.Async as A
-import Data.Maybe (fromJust)
+import           Data.Array.Unboxed
+import qualified Data.Conduit.Combinators as C
+import           Data.List
+import           Data.Maybe               (fromJust)
+import           Evaluation.Request
+import           Evaluation.Types
+import           GHC.Word
+import           Polysemy
+import           Polysemy.Async
+import           Polysemy.RandomFu
+import           Utils
 
 data SharedParams r = SharedParams
-  { sharedParamRandomSeed :: Word32
+  { sharedParamRandomSeed   :: Word32
   , sharedParamRequestCount :: Int
-  , sharedParamRequests :: RequestsParameter r
-  , sharedParamEvals :: [Eval r]
+  , sharedParamRequests     :: RequestsParameter r
+  , sharedParamEvals        :: [Eval r]
   }
 
 data GenParams r = GenParams
-  { genParamShared :: SharedParams r
+  { genParamShared    :: SharedParams r
   , genParamNodeCount :: NodeCount
-  , genParamWeights :: WeightsParam r
-  , genParamAlgs :: [(GenAlgParam r, TreeParam r)]
+  , genParamWeights   :: WeightsParam r
+  , genParamAlgs      :: [(GenAlgParam r, TreeParam r)]
   }
 
 evalsConduit
@@ -72,7 +72,7 @@ runGenParams
   => GenParams (RandomFu ': r)
   -> Sem r EvalResults
 runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
-  weights <- runRand $ weightsGen genParamWeights genParamNodeCount
+  weights <- runRand 0 $ weightsGen genParamWeights genParamNodeCount
   asyncs <- mapM (runAlg weights) genParamAlgs
   series <- transpose <$> mapM await asyncs
   return $ EvalResults "TODO" $ zip
@@ -82,7 +82,8 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
     {-# INLINE runAlg #-}
     runAlg :: GraphWeights -> (GenAlgParam (RandomFu ': r), TreeParam (RandomFu ': r)) -> Sem r (A.Async [Series])
     runAlg weights (GenAlgParam name (GeneralArvy spec), TreeParam { .. }) = do
-      tree <- runRand $ treeGen genParamNodeCount weights
+      tree <- runRand 1 $ treeGen genParamNodeCount weights
+      lgDebug $ "Tree is " <> tshow tree
       let arvyData = ArvyData
             { arvyDataNodeCount = genParamNodeCount
             , arvyDataNodeData = \node -> ArvyNodeData
@@ -92,7 +93,7 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
               }
             }
 
-      (mutableTree, conduit) <- runRand $ runArvySpecLocal' @(S.Seq Int) arvyData spec
+      (mutableTree, conduit) <- runRand 2 $ runArvySpecLocal' @(S.Seq Int) arvyData spec
       let env = Env
             { envNodeCount = arvyDataNodeCount arvyData
             , envRequestCount = sharedParamRequestCount
@@ -100,10 +101,10 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
             , envTree = mutableTree
             }
           evals = evalsConduit name sharedParamEvals env
-      request <- runRand $ requestsGet sharedParamRequests env
+      request <- runRand 3 $ requestsGet sharedParamRequests env
       fmap (fmap fromJust)
         $ async
-        $ runRand
+        $ runRand 4
         $ runConduit
         $ C.replicateM sharedParamRequestCount request
           .| C.mapM (\node -> (node `ncons`) <$> conduit node)
@@ -111,7 +112,7 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
           .| evals
 
     {-# INLINE runRand #-}
-    runRand :: Sem (RandomFu ': r) x -> Sem r x
+    runRand :: Word32 -> Sem (RandomFu ': r) x -> Sem r x
     runRand = runRandomSeed sharedParamRandomSeed
 
 
@@ -119,9 +120,9 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
 
 
 data SpecParams p a r = SpecParams
-  { specParamShared :: SharedParams r
-  , specParamInit :: p
-  , specParamAlg :: SpecAlgParam p a r
+  { specParamShared  :: SharedParams r
+  , specParamInit    :: p
+  , specParamAlg     :: SpecAlgParam p a r
   , specParamGenAlgs :: [(GenAlgParam r, TreeParam r)]
   }
 
@@ -135,7 +136,7 @@ runSpecParams
 runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg = specAlg@SpecAlgParam { specAlg = SpecializedArvy generator _, .. }, .. } = do
 
   -- Generate the algorithm-specific arvy data
-  specArvyData <- runRand $ generator specParamInit
+  specArvyData <- runRand 0 $ generator specParamInit
 
   -- Run the specialized algorithm
   specAsync <- runAlg' specArvyData specAlg
@@ -157,7 +158,7 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
     runAlg' :: ArvyData a -> SpecAlgParam p a (RandomFu ': r) -> Sem r (A.Async [Series])
     runAlg' arvyData@ArvyData { .. } (SpecAlgParam name (SpecializedArvy _ spec)) = do
 
-      (mutableTree, conduit) <- runRand $ runArvySpecLocal' @(S.Seq Int) arvyData spec
+      (mutableTree, conduit) <- runRand 2 $ runArvySpecLocal' @(S.Seq Int) arvyData spec
       let env = Env
             { envNodeCount = arvyDataNodeCount
             , envRequestCount = sharedParamRequestCount
@@ -165,10 +166,10 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
             , envTree = mutableTree
             }
           evals = evalsConduit name sharedParamEvals env
-      request <- runRand $ requestsGet sharedParamRequests env
+      request <- runRand 3 $ requestsGet sharedParamRequests env
       fmap (fmap fromJust)
         $ async
-        $ runRand
+        $ runRand 4
         $ runConduit
         $ C.replicateM sharedParamRequestCount request
           .| C.mapM (\node -> (node `ncons`) <$> conduit node)
@@ -178,7 +179,7 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
     runAlg :: ArvyData a -> (GenAlgParam (RandomFu ': r), TreeParam (RandomFu ': r)) -> Sem r (A.Async [Series])
     runAlg dat@ArvyData { .. } (GenAlgParam name (GeneralArvy spec), TreeParam { .. }) = do
       let weights = getWeightsArray dat
-      tree <- runRand $ treeGen arvyDataNodeCount weights
+      tree <- runRand 1 $ treeGen arvyDataNodeCount weights
       let arvyData = ArvyData
             { arvyDataNodeCount = arvyDataNodeCount
             , arvyDataNodeData = \node -> ArvyNodeData
@@ -188,7 +189,7 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
               }
             }
 
-      (mutableTree, conduit) <- runRand $ runArvySpecLocal' @(S.Seq Int) arvyData spec
+      (mutableTree, conduit) <- runRand 2 $ runArvySpecLocal' @(S.Seq Int) arvyData spec
       let env = Env
             { envNodeCount = arvyDataNodeCount
             , envRequestCount = sharedParamRequestCount
@@ -196,10 +197,10 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
             , envTree = mutableTree
             }
           evals = evalsConduit name sharedParamEvals env
-      request <- runRand $ requestsGet sharedParamRequests env
+      request <- runRand 3 $ requestsGet sharedParamRequests env
       fmap (fmap fromJust)
         $ async
-        $ runRand
+        $ runRand 4
         $ runConduit
         $ C.replicateM sharedParamRequestCount request
           .| C.mapM (\node -> (node `ncons`) <$> conduit node)
@@ -207,5 +208,5 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
           .| evals
 
     {-# INLINE runRand #-}
-    runRand :: Sem (RandomFu ': r) x -> Sem r x
+    runRand :: Word32 -> Sem (RandomFu ': r) x -> Sem r x
     runRand = runRandomSeed sharedParamRandomSeed
