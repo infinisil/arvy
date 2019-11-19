@@ -850,7 +850,7 @@ While in this heuristic we only limit ourselves to these three parameters for si
 \label{fig:reclique-alg}
 \end{figure}
 
-\section{Fixed Ratio}
+\section{Fixed Ratio}\label{alg:fr}
 
 \paragraph{Hop-based}\label{alg:frh}
 
@@ -975,7 +975,7 @@ Justification is needed for the fact that the node $a_{k+1}$ selecting the new p
 
 Unfortunately this algorithm needs $\mathcal{O}(n^2)$ time for the calculation of $c_R(T_{a_i})$ in each node along the request path, making it very slow to run in comparison to other algorithms. Messages need to send $S$ and the $a_{i}$ with lowest $c_R(T_{a_{i}})$ (as an optimization), resulting in $\mathcal{O}(|S|)$ message size.
 
-\subsection{Non-converging Dynamic Star}
+\subsection{Non-converging Dynamic Star}\label{alg:ncdynstar}
 
 One slight problem with the Dynamic Star heuristic is that in general it eventually converges to a static tree. This is because as the total number of request increases, changes to $n_i^v$ matter less. After $R\in\mathbb{N}$ requests, another request can only cause a maximum change to $p_i^v$ of
 \begin{equation}
@@ -1077,7 +1077,7 @@ This means finding $c_R(T_c)$ for a single $c$ can be done in time $\mathcal{O}(
 
 This initial tree minimizes arguably most important measure for the Arrow algorithm: The average distance between all pairs of nodes. This is important because with uniformly random requests, every pair of nodes has the same chance of occurring subsequently in the request sequence. Consequently the average time to satisfy a request is the average distance between all pairs of nodes. See \autoref{tree-examples} for an example of a tree with these properties. Noticeable is that central nodes are forming and not all short edges are used.
 
-A way to calculate this minimum is by brute force search through all possible trees. However because there are as much as $n^{n-2}$ possible trees~\cite{Borchardt} in a graph of $n$ nodes, this is not practical for more than a couple nodes. A listing of all possible trees can be obtained by the $n^{n-2}$ Prüfer~\cite{Prufer} sequences, for each of which the total pair distance needs to be found which is of order $\mathcal{O}(n^2)$ (with an algorithm similar to the one described in the next paragraph), giving a total complexity of $\mathcal{O}(n^n)$. \TODO{mention how this is different from low-stretch trees}
+A way to calculate this minimum is by brute force search through all possible trees. However because there are as much as $n^{n-2}$ possible trees~\cite{Borchardt} in a graph of $n$ nodes, this is not practical for more than a couple nodes. A listing of all possible trees can be obtained by the $n^{n-2}$ Prüfer~\cite{Prufer} sequences, for each of which the total pair distance needs to be found which is of order $\mathcal{O}(n^2)$ (with an algorithm similar to the one described in the next paragraph), giving a total complexity of $\mathcal{O}(n^n)$. \TODO{mention how this is different from low-stretch trees}.
 
 
 \paragraph{Approximated Minimum Pair Distance Tree}\label{tree:ampd}
@@ -1563,7 +1563,7 @@ In this section we compare performances of different heuristics on uniformly ran
 
 We can see that Arrow has better performance than all other heuristics, although both the local pair distance minimizer and hop-based fixed ratio heuristics get close to it. Since we used the best star tree with Arrow, it also beats others in the number of hops needed per request. The mysterious \hyperref[alg:frh]{Hop-based Fixed Ratio} heuristic ends up only slightly worse than Arrow after a number of requests. Regarding Ivy, even though it constructs a local star on the request path, it doesn't do nearly as well as a global star in Arrow, but at least it's better than the local pair distance minimizer heuristic which seems to lack in regards to hop count, contrary to its time-based performance.
 
-\section{Adversarial requests}
+\section{Adversarial requests}\label{result:adversary}
 
 In this section we look at the performance of heuristics for \hyperref[req:adversary]{adversarial requests}. Here we include the \hyperref[alg:dynstar]{dynamic star} heuristic again, since it only converges to the best star tree if requests are uniformly random and therefore doesn't show the same behavior as Arrow with that as a starting tree. Our scenario is 1000 nodes with costs of uniformly random points in a 2-dimensional hypercube.
 
@@ -1751,6 +1751,16 @@ What stands out in this plot is the fact that the fixed ratio heuristic seems to
 From this we can hypothesize that the local pair minimizer heuristic seems to converge towards a tree satisfying the \hyperref[reclique-invariant]{recursive clique tree invariant} as the minimum spanning tree already does as well. This would explain why it performs this well for $\mathcal{C}_{time}$.
 
 \chapter{Summary}
+
+We found out that the \hyperref[tree:mpd]{minimum pair distance} tree is understandably the best initial tree to use for Arrow, however we only know how to find this tree in $\mathcal{O}(n^n)$ time, which is impractical for many nodes. For a scenario of uniformly random request and 2-dimensional uniformly random hypercube costs, the \hyperref[tree:star]{best star} tree turned out to be the next best initial tree for Arrow, which only needs $\mathcal{O}(n^2)$ time to be calculated. The \hyperref[tree:ampd]{approximated minimum pair distance} tree algorithm we devised turned out to be a worse tree to use in such scenarios, with worse performance and worse running time.
+
+Multiple new heuristics were explored, mainly on uniformly random requests on graph costs from uniformly random points in a 2-dimensional hypercube
+\begin{itemize}
+\item The \hyperref[alg:ecm]{edge cost minimizer} heuristic tries to minimize the total edge cost in the spanning tree, resulting in it converging to a minimum spanning tree. As a result this is the same as running Arrow on such a tree from the start.
+\item The \hyperref[alg:dynstar]{dynamic star} heuristic approximately measures the probability distribution of requests, which it uses to find a good star tree over time. Since on uniformly random requests this heuristic converges to the best star tree, Arrow can be used directly from the start in that case. However in \hyperref[req:adversary]{adversarial requests} this heuristic turned out to be the fastest one. Unfortunately due to it needing $\mathcal{O}(n^2)$ running time in every node this is one of the slowest algorithms to run. Another problem with this algorithm is the fact that the longer it runs, the less adaptive to changes it is. We discussed \hyperref[alg:ncdynstar]{non-converging} variants of this algorithm to remedy that.
+\item We found out that Ivy is better than Arrow on very small cliques of 3 and 4 nodes. We exploited this fact for the \hyperref[alg:reclique]{recursive clique} heuristic which is specialized for multi-level clique graphs. This resulted in it being the best known heuristic for such graphs. This at least means that Arvy heuristics that do change the tree can be better than Arrow. This heuristics idea can be extended much further to arbitrary nested graphs as well.
+\item We tested \hyperref[alg:fr]{fixed ratio} heuristics based on choosing nodes a fixed ratio along the request path. Surprisingly a \hyperref[alg:frh]{hop-based} version with parameter $f=\frac{3}{4}$ turned out to work well for unknown reason. This is especially remarkable since this heuristic does not do any decisions based on graph costs. In contrary, the \hyperref[alg:frc]{cost-based} versions had less success even.
+\end{itemize}
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}

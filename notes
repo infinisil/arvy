@@ -1,0 +1,25 @@
+- Recursive clique in last special titled section. Paragraph about not a general algorithm
+- Recursive clique weights last, more informal first
+- Chapter 4 after 5, in appendix or so
+- Get rid of small clique plots, replace with final value table
+- Less mysterious
+- Check out more plot for the fixed ratio thing to understand what is going on
+- Check out if there's a bug with the initial average time and such
+- Mention how local pair distance minimizer can be implemented with other scetion
+- Better variable name for reclique f
+- Move non-converging dynamic star to appendix, move end to beginning
+- Remove random tree construction
+- approx. thing calculation symetry
+- \! \cdot \! for the n^2 analyzi
+- Beginning section 5, get rid of bullet points
+- Related work
+  - All references about
+	- Other algorithms
+  - Fibonacci tree, lecture notes, website: courses -> principles of distributed computing -> shared objects, look at past emails from pankaj
+	- If too short, write about the references a bit
+Summary:
+  - General sentence in beginning
+	- No alg expls ?
+	- worse worse worse
+	- Investigate weirdness
+
