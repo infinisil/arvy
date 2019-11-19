@@ -19,7 +19,8 @@ let
       framed
       commath
       pgfplots
-      latexmk;
+      latexmk
+      numprint;
   };
 
 in pkgs.stdenv.mkDerivation {
