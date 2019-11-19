@@ -68,8 +68,8 @@ In this thesis we come up with new Arvy heuristics and measure their empirical p
 Arvy was introduced in \cite{Arvy} where it was also shown to be correct in asynchronous networks with concurrent requests in arbitrary networks. In \cite{Kuhn} it was shown that Arrow is $\mathcal{O}(\log D)$ competitive where $D$ is the diameter of the spanning tree it operates on. 
 
 \TODO{Ivy Fibonacci tree}
-\newpage
 
+\newpage
 \section{Model}\label{model}
 
 We consider a complete graph $G=(V,E)$ with $n$ vertices and $\binom{n}{2}$ edges.
@@ -120,6 +120,7 @@ With this in place we define performance in the following ways.
 %    \mathcal{C}_{ratio}(R) = \frac{1}{|R'|}\sum_{i=1}^{|R'|}\frac{c(A^{(i)})}{c(a^{(i)}_0,a^{(i)}_{l_i})}
 %  \end{equation}
 \end{itemize}
+
 \newpage
 \section{Arvy-class algorithms}
 
@@ -142,7 +143,6 @@ All of these are based on the idea of maintaining a rooted spanning tree over ti
     , auto
     }
 }
-\newpage
 \subsection{Arrow}
 \label{intro:arrow}
 
@@ -187,7 +187,7 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 \end{subfigure}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}
 \ContinuedFloat 
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
@@ -227,7 +227,6 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 \label{fig:arrow}
 \end{figure}
 
-\newpage
 \subsection{Ivy}
 \label{intro:ivy}
 
@@ -271,7 +270,10 @@ Ivy uses a different strategy for inverting the arrows, namely that every node $
 \end{tikzpicture}
 \caption{Node 3 forwards the request to node 4, then it sets its parent to node 2 since that's the node that sent the original request}
 \end{subfigure}
+\end{figure}
 
+\begin{figure}
+\ContinuedFloat
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}[arvy-expl]
@@ -314,7 +316,7 @@ Ivy uses a different strategy for inverting the arrows, namely that every node $
 
 Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i+1}$ that received a request to set their parent to any node the request already traveled through, so $parent(a_{i+1})\in\{a_{0},\dots,a_{i}\}$. If the last possible parent is chosen, this is equivalent to Arrow, while if the earliest possible parent is chosen this is equivalent to Ivy. See \autoref{fig:arvy} for an example where each node chooses a random new parent out of the available ones.
 
-\begin{figure}[]
+\begin{figure}[H]
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}[arvy-expl]
@@ -352,7 +354,10 @@ Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i
 \end{tikzpicture}
 \caption{Node 3 receives the request, forwards it and chooses the only possible new parent node 2}
 \end{subfigure}
+\end{figure}
 
+\begin{figure}
+\ContinuedFloat
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}[arvy-expl]
@@ -424,7 +429,6 @@ Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i
 \caption{Arvy example}
 \label{fig:arvy}
 \end{figure}
-
 
 \chapter{Algorithms}\label{algs}
 
@@ -498,6 +502,7 @@ Since algorithms have access to the edge costs, we should make use of them. A si
 \EndFunction
 \end{algorithmic}
 
+\newpage
 Notable properties of this algorithm include
 \begin{itemize}
 \item The total edge cost in the tree can only get smaller over time, since a previous edge between $a_k$ and $a_{k+1}$ can only be replaced with a shorter one, which will be the same edge when $c(a_k,a_{k+1})$ is the minimum already.
@@ -613,32 +618,7 @@ We can however devise a heuristic that minimizes pair distance in a local subgra
 As we'll see in \autoref{result:clique}, Ivy performs well on cliques of less than 5 nodes. 
 Taking advantage of this fact, we design a graph resembling a clique, but where each node can contain another clique within, and so on. See \autoref{fig:reclique} for an example with 2 levels of cliques and each level having a clique of 3 nodes. This resulting recursive clique graph allows running Ivy recursively, taking advantage of Ivy's performance in each recursion level, scaling to many more nodes.
 
-A recursive clique graph has a level count parameter $l$ representing the number of levels and a base parameter $b$ for the number of nodes in a clique on a single level. We call the nodes in all levels except the lowest one \textit{virtual}, because they only exist to group non-virtual nodes in lower levels together. The total number of nodes in such a graph is $b^l$. In addition, for defining costs between edges, we declare a parameter $f>1$ for the factor by which edge cost increases from a lower to a higher level. This factor represents how far apart nodes in higher levels are. We define nodes in a clique in the lowest level to have distance $1$ from each other. For arbitrary nodes we can define the cost as
-
-\begin{equation}
-c(u,v)=\begin{cases}
-0 & \text{if $u=v$} \\
-1 & \text{otherwise if $u$ and $v$ share the same lowest level} \\
-f & \text{otherwise if $u$ and $v$ share the same second-lowest level} \\
-f^2 & \text{otherwise if $u$ and $v$ share the same third-lowest level} \\
-\vdots & \\
-f^{l-1} & \text{otherwise, $u$ and $v$ are in different nodes of the highest level} \\
-\end{cases}
-\end{equation}
-
-When running a recursive Ivy algorithm on such a graph, the guiding rules are:
-\begin{enumerate}
-\item\label{reclique-invariant} The spanning tree needs to maintain the invariant that only at most one connection between all virtual nodes on a single level can exist. This ensures that if a request was made from within the virtual node where the token currently is at, the request path does not exit that virtual node. In addition this means there a request path can include at most $b-1$ edges of length $f^{l-1}$ from the most upper level (and similarly for lower levels), therefore limiting the number of long edges.
-\label{reclique-rule-conn}
-\item Connect to the earliest possible node in the request path. This ensures that the inverted arrows on the request path lead future requests to the root on the fastest way possible while still satisfying rule \ref{reclique-rule-conn}. This gives Ivy-like shortcut behavior on each level and across levels.
-\label{reclique-rule-early}
-\end{enumerate}
-
-See \autoref{fig:reclique-alg} for an example of how this algorithm behaves with these rules. Note that this algorithm is specialized to graphs with these specific costs. In order to potentially have good performance with this algorithm on arbitrary graph costs an algorithm for finding the best clique level assignment/clustering needs to be run.
-
-While in this heuristic we only limit ourselves to these three parameters for simplicity, this idea can be extended much further: Each level can contain arbitrary graphs and costs. As an example, with three nodes at the top-most level, the first node could contain a subgraph of a star, the second node a ring graph and the third node yet another nested graph. This then also calls for running different Arvy heuristics on each level, using whichever works best for that levels graph, making this a very flexible approach. In a realistic scenario, the top-most level can represent different data centers around the world, the level below different racks in the data center and the level below that different machines in a rack.
-
-\begin{figure}
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \coordinate (A) at (0:2);
@@ -676,8 +656,32 @@ While in this heuristic we only limit ourselves to these three parameters for si
 \label{fig:reclique}
 \end{figure}
 
+A recursive clique graph has a level count parameter $l$ representing the number of levels and a base parameter $b$ for the number of nodes in a clique on a single level. We call the nodes in all levels except the lowest one \textit{virtual}, because they only exist to group non-virtual nodes in lower levels together. The total number of nodes in such a graph is $b^l$. In addition, for defining costs between edges, we declare a parameter $f>1$ for the factor by which edge cost increases from a lower to a higher level. This factor represents how far apart nodes in higher levels are. We define nodes in a clique in the lowest level to have distance $1$ from each other. For arbitrary nodes we can define the cost as
 
-\begin{figure}
+\begin{equation}
+c(u,v)=\begin{cases}
+0 & \text{if $u=v$} \\
+1 & \text{otherwise if $u$ and $v$ share the same lowest level} \\
+f & \text{otherwise if $u$ and $v$ share the same second-lowest level} \\
+f^2 & \text{otherwise if $u$ and $v$ share the same third-lowest level} \\
+\vdots & \\
+f^{l-1} & \text{otherwise, $u$ and $v$ are in different nodes of the highest level} \\
+\end{cases}
+\end{equation}
+
+When running a recursive Ivy algorithm on such a graph, the guiding rules are:
+\begin{enumerate}
+\item\label{reclique-invariant} The spanning tree needs to maintain the invariant that only at most one connection between all virtual nodes on a single level can exist. This ensures that if a request was made from within the virtual node where the token currently is at, the request path does not exit that virtual node. In addition this means there a request path can include at most $b-1$ edges of length $f^{l-1}$ from the most upper level (and similarly for lower levels), therefore limiting the number of long edges.
+\label{reclique-rule-conn}
+\item Connect to the earliest possible node in the request path. This ensures that the inverted arrows on the request path lead future requests to the root on the fastest way possible while still satisfying rule \ref{reclique-rule-conn}. This gives Ivy-like shortcut behavior on each level and across levels.
+\label{reclique-rule-early}
+\end{enumerate}
+
+See \autoref{fig:reclique-alg} for an example of how this algorithm behaves with these rules. Note that this algorithm is specialized to graphs with these specific costs. In order to potentially have good performance with this algorithm on arbitrary graph costs an algorithm for finding the best clique level assignment/clustering needs to be run.
+
+While in this heuristic we only limit ourselves to these three parameters for simplicity, this idea can be extended much further: Each level can contain arbitrary graphs and costs. As an example, with three nodes at the top-most level, the first node could contain a subgraph of a star, the second node a ring graph and the third node yet another nested graph. This then also calls for running different Arvy heuristics on each level, using whichever works best for that levels graph, making this a very flexible approach. In a realistic scenario, the top-most level can represent different data centers around the world, the level below different racks in the data center and the level below that different machines in a rack.
+
+\begin{figure}[H]
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}
@@ -760,7 +764,10 @@ While in this heuristic we only limit ourselves to these three parameters for si
 \end{tikzpicture}
 \caption{In the new tree, $a_{0}$ makes a request for the token at $a_{2}$ in the same virtual node. As with normal Ivy, all nodes will connect back to the node $a_{0}$ who made the original request. Notice that since the request was made from the same virtual node where the token currently resides, the virtual node wasn't exited and no long edge was traversed}
 \end{subfigure}
+\end{figure}
 
+\begin{figure}
+\ContinuedFloat
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}
@@ -855,29 +862,7 @@ Another simple heuristic is one which chooses the node at a fixed ratio $0\leq f
 \EndFunction
 \end{algorithmic}
 
-\paragraph{Cost-based}\label{alg:frc}
-
-A possible variation of this heuristic doesn't use the ratio on the node counts, but on the edge costs instead. A request path $A_k=\{a_{0},a_{1},a_{2},\dots,a_{k}\}$ gets mapped to costs $c_i$ representing how far the request had to travel to get to node $a_i$. Formally these costs are defined as
-\begin{equation}
-c_i=\sum_{j=1}^ic(a_{j-1},a_{j})
-\end{equation}
-
-The last node whose $c_i$ is lower than or equal to $f\cdot c_k$ is then selected.
-
-\begin{algorithmic}
-\Function{SelectNewParent}{$A_k$}
-\State\Return $a_{i}$ with the maximum $i$ given the constraint $c_i\leq f\cdot c_k$ 
-\EndFunction
-\end{algorithmic}
-
-These heuristics have the following interesting properties:
-\begin{itemize}
-\item For $f=0$ they are equivalent to Ivy. Similarly with $f=1$ they are equivalent to Arrow.
-\item For $f=\frac{1}{m}, m\in\mathbb{N}$, the hop-based version builds a $m$-ary tree on the request path. See \autoref{fig:fpr} for an example of it building a binary tree with $m=2$.
-\item If the costs are the same for all edges, the cost-based version is equivalent to the hop-based one.
-\end{itemize}
-
-\begin{figure}
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 [bn/.style={circle,draw}
@@ -912,6 +897,28 @@ These heuristics have the following interesting properties:
 \label{fig:fpr}
 \end{figure}
 
+\paragraph{Cost-based}\label{alg:frc}
+
+A possible variation of this heuristic doesn't use the ratio on the node counts, but on the edge costs instead. A request path $A_k=\{a_{0},a_{1},a_{2},\dots,a_{k}\}$ gets mapped to costs $c_i$ representing how far the request had to travel to get to node $a_i$. Formally these costs are defined as
+\begin{equation}
+c_i=\sum_{j=1}^ic(a_{j-1},a_{j})
+\end{equation}
+
+The last node whose $c_i$ is lower than or equal to $f\cdot c_k$ is then selected.
+
+\begin{algorithmic}
+\Function{SelectNewParent}{$A_k$}
+\State\Return $a_{i}$ with the maximum $i$ given the constraint $c_i\leq f\cdot c_k$ 
+\EndFunction
+\end{algorithmic}
+
+These heuristics have the following interesting properties:
+\begin{itemize}
+\item For $f=0$ they are equivalent to Ivy. Similarly with $f=1$ they are equivalent to Arrow.
+\item For $f=\frac{1}{m}, m\in\mathbb{N}$, the hop-based version builds a $m$-ary tree on the request path. See \autoref{fig:fpr} for an example of it building a binary tree with $m=2$.
+\item If the costs are the same for all edges, the cost-based version is equivalent to the hop-based one.
+\end{itemize}
+
 \section{Dynamic Star}
 \label{alg:dynstar}
 
@@ -945,7 +952,7 @@ To implement this the idea is that each node $v$ maintains counts $n_i^v\in\math
 
 Depending on the choice of the subset $S$ of value updates to send, the information propagation of the true values in the network might be slower or faster. Generally the bigger $|S|$, the faster information propagates. Here are some interesting choices for $S$:
 \begin{itemize}
-\item When node $v$ makes a request for the token, it only sends along its own request count with $S=\{v\}$, while all nodes along the request path use this same $S$. Since the only way for the rest of the network to know the accurate request count of the requesting node is for it to send the updated value, this is one of the most reasonable single-element choices for $S$.
+\item When node $v$ makes a request for the token, it only sends along its own request count with $S=\{v\}$, while all nodes along the request path use this same $S$. Since the only way for the rest of the network to know the accurate request count of the requesting node is for it to send the updated value, this is one of the most reasonable single-element choices for $S$ and is the choice that will be used for our simulations.
 \item With every node forwarding all its values, we get $S=V$. Propagation of values is as fast as possible, but we also have $\mathcal{O}(n)$ complexity for the size of messages.
 \item Message size can be reduced by making $S$ a uniform random selection of $V$, with $|S|\ll|V|$. With many requests happening, information should still propagate rather quickly.
 \item An improved version of this is a random weighted selection, preferring $n_i^v$ that have been updated more recently.
@@ -1031,6 +1038,7 @@ c(u,v)=\norm{p_u-p_v}_2
 %c(u,v)=\text{length of shortest path from $u$ to $v$ in $G'$}
 %\end{equation}
 
+\newpage
 \section{Initial Trees}
 \label{initial-trees}
 
@@ -1217,7 +1225,6 @@ An Arvy heuristic is correct if nodes can only set their new parent to nodes tha
 
 One such trivial capability we'll need is that once we have some node index, we can forward that value via messages to other nodes. This makes sense to require, since some node $a_{k+1}$ can't know about the possible new parents $\{a_{0},\dots,a_{k}\}$ unless these nodes somehow forwarded their own indices along with the messages. In Haskell, this forwarding can be represented as a typeclass on two types $i_a$ and $i_b$, where $i_a$ represents a node index earlier in the request path than node index $i_b$. We will state that if you have a value of $i_a$ you can get a value of $i_b$, which can be done with a typeclass parametric on those types, holding a function for converting from $i_a$ to $i_b$. This typeclass is trivially implementable for all same types $i=i_a=i_b$, since forwarding will then simply be the identity function.
 
-\newpage
 \begin{minted}{haskell}
 -- | A class for node indices that can be forwarded between nodes
 class Forwardable ia ib where
