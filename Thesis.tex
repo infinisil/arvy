@@ -51,7 +51,7 @@ I thank my advisors Pankaj and András for the weekly discussions, which helped 
 
 
 \begin{abstract}
-In this thesis we look at different heuristics for the Arvy-class of algorithms for solving the distributed mutual exclusion problem, focusing on sequential requests. This includes the previously known algorithms Arrow and Ivy but many new ones as well. We will see that Arrow with a star tree is one of the best solutions in many cases. However we show that a new heuristic based on Ivy in a nested clique-like graph can have better performance still. In addition another new heuristic based on measuring request probabilities allows for better performance with adversarial requests. To evaluate the running time of Arvy heuristics, a flexible Haskell library was developed whose types guarantee correctness at compile time.
+In this thesis we look at different heuristics for the Arvy-class of algorithms for solving the distributed mutual exclusion problem, focusing on sequential requests. This includes the previously known algorithms Arrow and Ivy but many new ones as well. We will see that Arrow with a star tree is one of the best solutions in many cases. However we also show that a new heuristic specialized on nested clique-like graphs can still have better performance. In addition another new heuristic based on measuring request probabilities allows for better performance with adversarial requests. To evaluate the running time of Arvy heuristics, a flexible Haskell library was developed whose types guarantee correctness at compile time.
 \end{abstract}
 
 \tableofcontents
@@ -60,17 +60,18 @@ In this thesis we look at different heuristics for the Arvy-class of algorithms 
 
 \chapter{Introduction}
 
-In many areas of computing there are cases where a single resource has to be shared between multiple components, with only one of them being able to access it at a time. Components can request the resource at any time, after which they should receive it eventually. In a distributed setting an algorithm to solve this is called a distributed mutual exclusion algorithm or distributed directory protocol. A trivial solution is to dedicate a single node to be the center where all requests for the resource should go, with the disadvantage of a lot of traffic and contention for many concurrent requests. Better solutions to this problem include the spanning-tree-based Arrow (also known as Raymond's algorithm) and Ivy protocols, introduced in \cite{Ray} and \cite{Ivy} respectively. Both of these algorithms can be generalized to the Arvy algorithm, introduced in \cite{Arvy}, which allows for a wide range of different heuristics to be used for determining its behavior, while still guaranteeing correctness. There also exist other kinds of algorithms to solve this problem based on message broadcasting or quorums.
+In many areas of computing there are cases where a single resource has to be shared between multiple components, with only one of them allowed to access it at a time. Components can request the resource at any time, after which they should receive it eventually. In a distributed setting an algorithm to solve this is called a distributed mutual exclusion algorithm or distributed directory protocol. An easy solution is a home-base algorithm, where a single node is dedicated to handling all requests sequentially, with the disadvantage of a lot of traffic and contention for many concurrent requests. Better solutions to this problem include the spanning-tree-based Arrow (also known as Raymond's algorithm) and Ivy protocols. Both of these algorithms can be generalized to the Arvy~\cite{Arvy} algorithm, which allows for a wide range of different heuristics to be used for determining its behavior, while still guaranteeing correctness. There also exist other kinds of algorithms to solve this problem based on message broadcasting or quorums.
 
 In this thesis we come up with new Arvy heuristics and measure their empirical performance in a simulation of sequential requests.
 
 \section{Related Work}
 
-Arvy was introduced in \cite{Arvy} where it was also shown to be correct in asynchronous networks with concurrent requests in arbitrary topologies. In \cite{Kuhn} it was shown that Arrow is $\mathcal{O}(\log D)$ competitive where $D$ is the diameter of the spanning tree it operates on. 
+Raymond~\cite{Ray} originally introduced an Arrow algorithm where a radiating star tree was found to be the best topology. Simulations showed that randomly constructed trees have an average diameter of about $\log n$ which was also found to be a good approximation for the number of messages necessary for a request. Under heavy load however it was shown to only require about $4$ messages. Later Demmer and Herlihy~\cite{Arrow} independently developed the same algorithm. They analyzed its complexity for a minimum spanning tree and found it to be optimal within a factor of $\frac{1}{2}(1+stretch(G))$ where $stretch(G)$ measures how far from optimal a path through the minimum spanning tree can be. Kuhn and Wattenhofer~\cite{Kuhn} proved that Arrow is $\mathcal{O}(\log D)$-competitive, where $D$ is the diameter of the spanning tree it operates on. Herlihy and Warres~\cite{Tale} compared Arrow to a home-base algorithm and found Arrow to perform much better under load. Ghodselahi and Kuhn~\cite{Ghod} showed that the competitive ratio of the Arrow protocol is constant on certain tree topologies. Peleg and Reshef~\cite{Peleg} showed that Arrow on the best shortest-path tree has at most 2 times longer paths than in the graph.
 
-\TODO{Ivy Fibonacci tree}
+Ivy was introduced before Arrow by Li and Hudak~\cite{Ivy}. An amortized bound of $\mathcal{O}(\log n)$ for path reversal was shown by Ginat et~al.~\cite{Ginat} which is equivalently Ivy's number of messages per request. In~\cite{Distr} this bound was shown to be tight with a tree that requires $\log n$ many messages for every request in a specific request sequence.
 
-\newpage
+Arvy was newly introduced by Khanchandani and Wattenhofer~\cite{Arvy} where it was shown to be correct in asynchronous networks with concurrent requests in arbitrary topologies. Since Arvy generalizes both Arrow and Ivy, this proves their correctness as well. In addition they show an Arvy heuristic with constant competitive ratio on ring graphs.
+
 \section{Model}\label{model}
 
 We consider a complete graph $G=(V,E)$ with $n$ vertices and $\binom{n}{2}$ edges.
@@ -83,13 +84,13 @@ We consider a complete graph $G=(V,E)$ with $n$ vertices and $\binom{n}{2}$ edge
 \item The triangle inequality holds: $\forall u,v,w : c(u,w)\leq c(u,v)+c(v,w)$
 \end{itemize}
 
-As a reasonable constraint, a node can only query costs for edges to its neighbors. In a realistic scenario it's these costs that can be obtained and updated by doing regular pings to other nodes. While we don't consider changing costs in our model, there's no inherent reason the heuristic we describe can't work in such cases.
+As a reasonable constraint, a node can only query costs for edges to its neighbors. In a realistic scenario it's these costs that can be obtained and updated by doing regular pings to other nodes. While we don't consider changing costs in our model, there is no inherent reason the heuristics we describe can't work in such cases.
 
-\paragraph{Instantaneous Computations} In addition, every node can be considered a machine with the ability to execute arbitrary effectful code such as reading/writing state or generating randomness. We model execution to be instantaneous such that no time passes for computations in nodes. Therefore traversing graph edges are the only place to spend time on.
+\paragraph{Instantaneous Computations} In addition, every node is modeled as a machine with the ability to execute arbitrary effectful code such as reading/writing state or generating randomness. We model execution to be instantaneous such that no time passes during computations. Therefore traversing graph edges are the only place to spend time on.
 
-\paragraph{Sequential Requests} A major simplification we make is that nodes can only request the token sequentially. So only after the token has reached the requesting node, another node can make a request for it. Therefore requests can be represented as a series $R=\{r_1,r_2,\dots\},r_i\in V$ where $r_i$ encodes the $i$-th request originating from node $r_i$. While this series could be infinite, we let it be finite such that we can reason about it's total execution time.
+\paragraph{Sequential Requests} A major simplification we make is that nodes can only request the token sequentially. So only after the token has reached the requesting node, another node can issue another request. Therefore requests can be represented as a series $R=\{r_1,r_2,\dots\},r_i\in V$ where $r_i$ encodes the $i$-th request originating from node $r_i$. While this series could be infinite, we let it be finite such that we can reason about its total running time.
 
-\paragraph{Request Paths} In the type of algorithms we'll look at, when the $i$-th request is made by node $r_i$, the request travels along some path $A^{(i)}=\{a^{(i)}_0,a^{(i)}_1,\dots,a^{(i)}_{l_i}\}$ with $l_i=|A^{(i)}|-1$ being the index of the last node and also the number of messages that are being sent. The first node in this path $a^{(i)}_0=r_i$ is the node issuing the request, while the last one is currently holding the token. After the request was sent along this path, the token is then sent directly from $a^{(i)}_{l_i}$ to $a^{(i)}_0$ to satisfy the request. If the requesting node has the token already then $|A^{(i)}|=1$. It holds that $a^{(i)}_0=a^{(i+1)}_{l_{i+1}}$ for all $i\in\mathbb{N}$, meaning the node making a request in one request will be the last node in the request path of the following request.
+\paragraph{Request Paths} In the type of algorithms we will look at, when the $i$-th request is made by node $r_i$, the request travels along some path $A^{(i)}=\{a^{(i)}_0,a^{(i)}_1,\dots,a^{(i)}_{l_i}\}$ with $l_i=|A^{(i)}|-1$ being the index of the last node and also the number of messages that are being sent. The first node in this path $a^{(i)}_0=r_i$ is the node issuing the request, while the last one is currently holding the token. After the request was sent along this path, the token is then sent directly from $a^{(i)}_{l_i}$ to $a^{(i)}_0$ to fulfill the request. If the requesting node has the token already, then $|A^{(i)}|=1$. It holds that $a^{(i)}_0=a^{(i+1)}_{l_{i+1}}$ for all $i\in\mathbb{N}$, meaning the node making a request in one request will be the last node in the request path of the following request.
 
 \paragraph{Performance}\label{model-perf} In order to be able to talk about performance of such algorithms, we first define $c(A^{(i)})$ to be the cost of traversing request path $A^{(i)}$, which will be the sum of the costs of the edges it includes:
 \begin{equation}
@@ -101,18 +102,18 @@ For graph cost normalization we also define $c_{avg}$ to be the average cost of 
 c_{avg}=\frac{1}{|E|}\sum_{(u,v)\in E}c(u,v)
 \end{equation}
 
-With this in place we define performance in the following ways.
+With this in place we define performance as follows
 \begin{itemize}
 \item
-  Arguably the most important performance measure is the time it takes to satisfy the requests. For a single requests this includes the cost to traverse the request path as well as the cost to send the token back to the requesting node. However since the cost to send the token back does not change between different algorithms, we ignore it to get a simpler measure for comparison. To normalize the costs, we divide by $c_{avg}$, and to get a result over all requests $R$ we take the average over all individual requests. With this we get the definition for the average request time $\mathcal{C}_{time}$:
+  Arguably the most important performance measure for comparing different algorithms is the time it takes to satisfy the requests. For a single request this includes the cost to traverse the request path as well as the cost to send the token back to the requesting node. However since the cost to send the token back does not change between different algorithms, we ignore it to get a simpler measure for comparison. To normalize the costs, we divide by $c_{avg}$, and to get a result over all requests $R$ we take the average over all individual requests. With this we get the definition for the average request time $\mathcal{C}_{time}$:
   \begin{equation}
     \mathcal{C}_{time}(R) = \frac{1}{|R|}\sum_{i=1}^{|R|}\frac{c(A^{(i)})}{c_{avg}}
   \end{equation}
 
 \item
-  Another interesting measure is the number of messages being sent per request, also known as the hop count or message complexity. While this isn't very useful with the restrictions of instantaneous execution and sequential requests in our model, it can give us a sense of how well algorithms would do without them. We use the following definition for the average request hops $\mathcal{C}_{hops}$:
+  Another interesting measure is the number of messages being sent per request, also known as the hop count. While this isn't very useful with the restrictions of instantaneous execution and sequential requests in our model, it can give us a sense of how well algorithms would do without them. We use the following definition for the average request hops $\mathcal{C}_{hops}$:
   \begin{equation}
-    \mathcal{C}_{hops}(R) = \frac{1}{|R|}\sum_il_i
+    \mathcal{C}_{hops}(R) = \frac{1}{|R|}\sum_{i=1}^{|R|}l_i
   \end{equation}
 % We don't even use this ratio anywhere, maybe just not include it
 %\item
@@ -122,12 +123,11 @@ With this in place we define performance in the following ways.
 %  \end{equation}
 \end{itemize}
 
-\newpage
-\section{Arvy}
+\section{How Arvy Works}
 
 In this section we describe the Arrow and Ivy algorithms in detail, followed by the generalization to the Arvy-class of algorithms.
 
-All of these are based on the idea of maintaining a rooted spanning tree over time: Every node stores a pointer $parent : V \rightarrow V$ pointing to its parent in the tree, while the root node points to itself. When a (non-root) node $a_{0}$ needs the token, it sends a request message towards its parent $a_{1}=parent(a_{0})$. Then when node $a_{i}$ receives such a request, it forwards it to its own parent $a_{i+1}=parent(a_{i})$ and so on until the root $a_{l}$ containing the token is reached. This forms a request path $A=\{a_{0},a_{1},\dots,a_{l}\}$. The final node then finishes its own work with the token after which it gets sent directly to $a_{0}$ such that the request is fulfilled. Now to make this a functioning algorithm, the parent pointers along this request path need to be inverted in some way such that the rooted tree is restored. Such a heuristic for inverting the pointers is what differentiates Arvy algorithms from each other. We will now look at what heuristics Arrow, Ivy and Arvy use.
+All of these are based on the idea of maintaining a rooted spanning tree over time: Every node stores a pointer $parent : V \rightarrow V$ pointing to its parent in the tree, while the root node points to itself. When a (non-root) node $a_{0}$ needs the token, it sends a request message towards its parent $a_{1}=parent(a_{0})$. When node $a_{i}$ receives such a request, it forwards it to its own parent $a_{i+1}=parent(a_{i})$ and so on until the root $a_{l}$ containing the token is reached. This forms a request path $A=\{a_{0},a_{1},\dots,a_{l}\}$. The final node then finishes its own work with the token after which it gets sent directly to $a_{0}$ such that the request is fulfilled. Now to make this a functioning algorithm, the parent pointers along this request path need to be inverted in some way to restore the rooted tree. Such a heuristic for inverting the pointers is what differentiates Arvy algorithms from each other. We will now look at what heuristics Arrow, Ivy and Arvy in general use.
 
 \tikzset{
   arvy-expl/.style =
@@ -147,7 +147,7 @@ All of these are based on the idea of maintaining a rooted spanning tree over ti
 \subsection{Arrow}
 \label{intro:arrow}
 
-The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in that it just inverts the pointers along its path: When $a_{i+1}$ receives a request from $a_{i}$, it sets $parent(a_{i+1})=a_{i}$. See \autoref{fig:arrow} for a walk-through of a request with Arrow. Notable with Arrow is that it doesn't ever change the structure of the spanning tree, meaning that the initial tree is crucial for its performance.
+The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in that it just inverts the pointers along the request path: When $a_{i+1}$ receives a request from $a_{i}$, it sets $parent(a_{i+1})=a_{i}$. See \autoref{fig:arrow} for a walk-through of a request with Arrow. Notable with Arrow is that it doesn't ever change the structure of the spanning tree, meaning that the initial tree is crucial for its performance.
 
 \begin{figure}[H]
 \begin{subfigure}[t]{0.5\textwidth}
@@ -163,7 +163,7 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 \draw[e] (2) -- (3);
 \draw[e] (3) -- (4);
 \draw[e] (5) -- (4);
-\draw[e] (1) -- (3);
+\draw[e] (1) -- (4);
 \path (4) edge [loop below] (4);
 \end{tikzpicture}
 \caption{Node 2 needs the token which is currently at node 4, which is the root of the spanning tree}
@@ -180,16 +180,13 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 \draw[re] (2) -- node[below right=3pt and -20pt]{\scriptsize{request from 2}} (3);
 \draw[e] (3) -- (4);
 \draw[e] (5) -- (4);
-\draw[e] (1) -- (3);
+\draw[e] (1) -- (4);
 \path (4) edge [loop below] (4);
 \path (2) edge [loop above] (2);
 \end{tikzpicture}
 \caption{Node 2 sends a request towards its parent node 3 after which it sets its parent to itself. Temporarily there are multiple root nodes}
 \end{subfigure}
-\end{figure}
 
-\begin{figure}
-\ContinuedFloat 
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}[arvy-expl]
@@ -201,7 +198,7 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 \draw[e] (3) -- (2);
 \draw[re] (3) -- (4);
 \draw[e] (5) -- (4);
-\draw[e] (1) -- (3);
+\draw[e] (1) -- (4);
 \path (4) edge [loop below] (4);
 \path (2) edge [loop above] (2);
 \end{tikzpicture}
@@ -219,10 +216,10 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 \draw[e] (3) -- (2);
 \draw[e] (4) -- (3);
 \draw[e] (5) -- (4);
-\draw[e] (1) -- (3);
+\draw[e] (1) -- (4);
 \path (2) edge [loop above] (2);
 \end{tikzpicture}
-\caption{Node 4 receives the request, resulting in it sending the token back to the requesting node 2. Meanwhile it updates its parent to node 3 it received the request from. The rooted spanning tree is now restored}
+\caption{Node 4 receives the request, resulting in it sending the token back to the requesting node 2. Meanwhile it updates its parent to node 3 from which it received the request from. The rooted spanning tree is now restored}
 \end{subfigure}
 \caption{Arrow example}
 \label{fig:arrow}
@@ -231,7 +228,7 @@ The Arrow algorithm is the simplest way to maintain a rooted spanning tree, in t
 \subsection{Ivy}
 \label{intro:ivy}
 
-Ivy uses a different strategy for inverting the arrows, namely that every node $a_{i+1}$ receiving the request sets its new parent to the node that made the original request: $parent(a_{i+1})=a_{0}$. Therefore $a_{0}$ ends up being the center of a star consisting of all nodes along the request path. Intuitively this should give good performance since shortcuts to the root get created, which should allow future requests to find the root faster. \autoref{fig:ivy} shows an example of Ivy.
+Ivy uses a different strategy for inverting the arrows, namely that every node $a_{i+1}$ receiving the request sets its new parent to the node that made the request: $parent(a_{i+1})=a_{0}$. Therefore $a_{0}$ ends up being the center of a star consisting of all nodes along the request path. Intuitively this should give good performance since shortcuts to the new root node get created, which should allow future requests to find the token faster. \autoref{fig:ivy} shows an example of Ivy.
 
 \begin{figure}[H]
 \begin{subfigure}[t]{0.5\textwidth}
@@ -271,10 +268,7 @@ Ivy uses a different strategy for inverting the arrows, namely that every node $
 \end{tikzpicture}
 \caption{Node 3 forwards the request to node 4, then it sets its parent to node 2 since that's the node that sent the original request}
 \end{subfigure}
-\end{figure}
 
-\begin{figure}
-\ContinuedFloat
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}[arvy-expl]
@@ -290,7 +284,7 @@ Ivy uses a different strategy for inverting the arrows, namely that every node $
 \path (5) edge [loop above] (5);
 \path (2) edge [loop right] (2);
 \end{tikzpicture}
-\caption{Node 4 receives the request and forwards it further, then it sets its parent to node 2 as well for the same reason}
+\caption{Node 4 receives the request and forwards it further, then it sets its parent to node 2 as well since it's is the requesting node}
 \end{subfigure}
 \quad
 \begin{subfigure}[t]{0.5\textwidth}
@@ -307,15 +301,15 @@ Ivy uses a different strategy for inverting the arrows, namely that every node $
 \draw[e] (1) -- (4);
 \path (2) edge [loop right] (2);
 \end{tikzpicture}
-\caption{The request arrives at node 5 holding the token. It sends the token to the requesting node 2, then it sets the parent to node 2 as well. A star including all nodes in the request path is formed, centered around the requesting node}
+\caption{The request arrives at node 5 which is holding the token. It sends the token to the requesting node 2, then it sets the parent to node 2 as well. A star including all nodes in the request path is formed, centered around the requesting node}
 \end{subfigure}
 \caption{Ivy example}
 \label{fig:ivy}
 \end{figure}
 
-\subsection{Arvy}
+\subsection{General Arvy}
 
-Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i+1}$ that received a request to set their parent to any node the request already traveled through, so $parent(a_{i+1})\in\{a_{0},\dots,a_{i}\}$. If the last possible parent is chosen, this is equivalent to Arrow, while if the earliest possible parent is chosen this is equivalent to Ivy. See \autoref{fig:arvy} for an example where each node chooses a random new parent out of the available ones.
+Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i+1}$ that received a request to set their parent to any node the request already traveled through, so $parent(a_{i+1})\in\{a_{0},\dots,a_{i}\}$. In the case that the requesting node $a_0$ is selected, this is equivalent to Ivy. If the node from which the request was received from $a_i$ is chosen, this is equivalent to Arrow. Arvy therefore generalizes both Arrow and Ivy. See \autoref{fig:arvy} for an example where each node chooses a random new parent out of the available ones.
 
 \begin{figure}[H]
 \begin{subfigure}[t]{0.5\textwidth}
@@ -355,10 +349,7 @@ Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i
 \end{tikzpicture}
 \caption{Node 3 receives the request, forwards it and chooses the only possible new parent node 2}
 \end{subfigure}
-\end{figure}
 
-\begin{figure}
-\ContinuedFloat
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \begin{tikzpicture}[arvy-expl]
@@ -391,7 +382,7 @@ Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i
 \draw[e] (5) -- (3);
 \path (2) edge [loop right] (2);
 \end{tikzpicture}
-\caption{Node 5 receives the request for the token, making it send it to the requesting node 2. For selecting its new parent, it can choose between 2, 3 and 4, since all of those nodes lie on the request path, it chooses 3}
+\caption{Node 5 receives the request for the token, making it send it to the requesting node 2. For selecting its new parent, it can choose between 2, 3 and 4, since all of those nodes have been traveled through already, it chooses node 3}
 \end{subfigure}
 \caption{Arvy example}
 \label{fig:arvy}
@@ -399,7 +390,7 @@ Arvy is a class of algorithms generalizing Arrow and Ivy by allowing nodes $a_{i
 
 \chapter{Algorithms}\label{algs}
 
-This chapter describes all the Arvy algorithms to be tested. A simplified version of a general algorithm can be written as follows, which we'll be using in the following sections. Here we use $A_k=\{a_0,a_1,\dots,a_k\}$ to denote the nodes on the request path already traveled through, while $a_{k+1}$ is the node that needs to select a new parent out of $A_k$.
+This chapter describes all the Arvy heuristics to be tested. A simplified version of a general algorithm can be written as follows. Here we use $A_k=\{a_0,a_1,\dots,a_k\}$ to denote the nodes on the request path already traveled through, while $a_{k+1}$ is the node that needs to select a new parent out of $A_k$.
 
 \begin{algorithm}
 \caption{Arvy algorithm}
@@ -421,17 +412,16 @@ This chapter describes all the Arvy algorithms to be tested. A simplified versio
 \EndIf
 \State $parent(a_{k+1})\gets\;$\Call{SelectNewParent}{$A_k$}
 \EndFunction
-\Function{SelectNewParent}{$A_k$}
-\State\Return any node from $A_k$
-\EndFunction
 \end{algorithmic}
 \end{algorithm}
 
-All Arvy heuristics will have to define a concrete implementation of \textsc{SelectNewParent}.
+All Arvy heuristics will have to define an implementation of \textsc{SelectNewParent}.
 
 \section{Arrow}
 
-As already explained in \autoref{intro:arrow}, Arrow maintains the structure of the spanning tree by always selecting the most recent node as a new parent, therefore inverting the arrows.
+As already explained in \autoref{intro:arrow}, Arrow maintains the structure of the spanning tree by always selecting the most recent node as the new parent, therefore inverting the arrows.
+
+\newpage
 \begin{algorithmic}
 \Function{SelectNewParent}{$A_k$}
 \State\Return $a_k$
@@ -462,19 +452,18 @@ Not particularly interesting, but good as a reference point is a completely rand
 \section{Edge Cost Minimizer}
 \label{alg:ecm}
 
-Since algorithms have access to the edge costs, we should make use of them. A simple heuristic using them is one that always chooses the node with minimum edge cost as the new parent. In case there are multiple edges with the same cost, choose the last one of them. See \autoref{fig:ecm} for an example. Intuitively this heuristic should perform well since short paths make for short request paths.
+Since algorithms have access to the edge costs, we should make use of them. A simple heuristic using them is one that always chooses the node with minimum edge cost as the new parent, see \autoref{fig:ecm} for an example. Intuitively, this heuristic should perform well since short paths make for short request paths.
 \begin{algorithmic}
 \Function{SelectNewParent}{$A_k$}
 \State\Return$a_i$ such that $c(a_{k+1},a_{i}),i\in\{0,\dots,k\}$ is minimal, \\\qquad use highest $i$ for tie-breaking
 \EndFunction
 \end{algorithmic}
 
-\newpage
 Notable properties of this algorithm include
 \begin{itemize}
-\item The total edge cost in the tree can only get smaller over time, since a previous edge between $a_k$ and $a_{k+1}$ can only be replaced with a shorter one, which will be the same edge when $c(a_k,a_{k+1})$ is the minimum already.
-\item This in turn means that with a good enough distribution of nodes initiating requests, the tree will eventually converge to a minimum spanning tree, because that's the state of lowest possible total edge cost.
-\item Consequently, once the tree has converged, this algorithm behaves exactly the same as Arrow, which never changes the tree by design. Therefore to get the asymptotic behavior of this algorithm, one can simply start with a minimum spanning tree directly and run Arrow on it. This seems to imply that in general this heuristic isn't any more powerful than Arrow.
+\item The total edge cost in the tree can never get bigger, since a previous edge between $a_k$ and $a_{k+1}$ is also a candidate in the parent selection.
+\item This in turn means that with a good enough distribution of nodes initiating requests, the tree will eventually converge to a minimum spanning tree with which total edge cost is lowest
+\item Consequently, once the tree has converged, this algorithm behaves exactly the same as Arrow, which never changes the tree by design. Therefore to get the asymptotic behavior of this heuristic, one can simply start with a minimum spanning tree directly and run Arrow on it. This seems to imply that in general this heuristic isn't any more powerful than Arrow.
 \end{itemize}
 
 \begin{figure}
@@ -532,12 +521,12 @@ Notable properties of this algorithm include
 
 An even better measure to minimize is the total distance between all pairs of nodes in the spanning tree $T$, defined as
 \begin{equation}
-\mathcal{C}_{pairs}(T) = \sum_{u,v\in V, u\neq v}c_T(u,v)
+\mathcal{C}_{pairs}(T) = \sum_{u,v\in V, u<v}d_T(u,v)
 \end{equation}
 
-where $c_T(u,v)$ is the cost of the shortest path between nodes $u$ and $v$ in the tree. This directly corresponds to the performance of Arrow with uniformly random requests, since all pairs of nodes have the same probability of being used, meaning their distance in the tree contributes the same amount to the cost of an average request. In \autoref{tree:mpd} we discuss such minimal trees further. However to calculate this value, a global view of the graph costs in needed, which nodes do not have at runtime.
+where $d_T(u,v)$ is the cost of the shortest path between nodes $u$ and $v$ in the tree. This directly corresponds to the performance of Arrow with uniformly random requests, since all pairs of nodes have the same probability of being used, meaning their distance in the tree contributes the same amount to the cost of an average request. In \autoref{tree:mpd} we discuss such minimal trees further. However to calculate this value, a global view of the graph costs in needed, which nodes do not have at runtime.
 
-We can however devise a heuristic that minimizes pair distance as well as possible in a local subgraph consisting of only the nodes in the request path. Specifically when node $a_{k+1}$ needs to select a new parent node out of the candidates $A_k=\{a_{0},\dots,a_{k}\}$, it looks at the tree graph $T=(A_k,E')$ of nodes in the request path that was constructed from the parent selections of all previous nodes in the path. It then selects the node $a_{i}$ such that total pair distance is minimized, meaning $\mathcal{C}_{pairs}(T_i)$ is minimal with $T_i=(A_k\cup a_{k+1},E'\cup(a_{i},a_{k+1}))$ being the new spanning tree if node $i$ were to be selected. See \autoref{fig:lpm} for an example. An algorithm for computing this efficiently can work similar to the one to be described in \autoref{tree:ampd}.
+We can however devise a heuristic that minimizes pair distance as good as possible in a local subgraph consisting of only the nodes in the request path. Specifically when node $a_{k+1}$ needs to select a new parent node out of the candidates $A_k=\{a_{0},\dots,a_{k}\}$, it looks at the tree graph $T=(A_k,E')$ of nodes in the request path that was constructed from the parent selections of all previous nodes in the path. It then selects the node $a_{i}$ such that total pair distance is minimized, meaning $\mathcal{C}_{pairs}(T_i)$ is minimal with $T_i=(A_k\cup a_{k+1},E'\cup(a_{i},a_{k+1}))$ being the new spanning tree if node $i$ were to be selected. See \autoref{fig:lpm} for an example. An algorithm for computing this efficiently can work similar to the one to be described in \autoref{tree:ampd}.
 
 \begin{algorithmic}
 \Function{SelectNewParent}{$A_k$}
@@ -622,13 +611,13 @@ Another simple heuristic is one which chooses the node at a fixed ratio $t\in[0,
 \draw[be] (n5) -- (n2);
 \draw[be] (n6) -- (n2);
 \end{tikzpicture}
-\caption{Hop-based fixed ratio heuristic with a ratio of $\frac{1}{2}$ and a request path of 7 nodes. Node $a_{6}$ chooses $a_{\lfloor \frac{1}{2}\cdot 5 \rfloor}=a_{2}$ as its parent. A binary tree is created as a result.}
+\caption{Hop-based Fixed Ratio heuristic with a ratio of $\frac{1}{2}$ and a request path of 7 nodes. Node $a_{6}$ chooses $a_{\lfloor \frac{1}{2}\cdot 5 \rfloor}=a_{2}$ as its new parent. A binary tree is created as a result.}
 \label{fig:fpr}
 \end{figure}
 
 \paragraph{Cost-based}\label{alg:frc}
 
-A possible variation of this heuristic doesn't use the ratio on the node counts, but on the edge costs instead. A request path $A_k=\{a_{0},a_{1},a_{2},\dots,a_{k}\}$ gets mapped to costs $c_i$ representing how far the request had to travel to get to node $a_i$. Formally these costs are defined as
+A possible variation of this heuristic doesn't use the ratio on the node counts, but on the edge costs instead. A request path $A_k=\{a_{0},a_{1},a_{2},\dots,a_{k}\}$ gets mapped to costs $c_i$ representing how far the request had to travel to get to node $a_i$. These costs are defined as
 \begin{equation}
 c_i=\sum_{j=1}^ic(a_{j-1},a_{j})
 \end{equation}
@@ -644,14 +633,14 @@ The last node whose $c_i$ is lower than or equal to $t\cdot c_k$ is then selecte
 These heuristics have the following interesting properties:
 \begin{itemize}
 \item For $t=0$ they are equivalent to Ivy. Similarly with $t=1$ they are equivalent to Arrow.
-\item For $t=\frac{1}{m}, m\in\mathbb{N}$, the hop-based version builds a $m$-ary tree on the request path. See \autoref{fig:fpr} for an example of it building a binary tree with $m=2$.
-\item If the costs are the same for all edges, the cost-based version is equivalent to the hop-based one.
+\item For $t=\frac{1}{m}, m\in\mathbb{N}$, the hop-based version builds an $m$-ary tree on the request path. See \autoref{fig:fpr} for an example of it building a binary tree with $m=2$.
+\item If the costs are the same for all graph edges, the cost-based version is equivalent to the hop-based one.
 \end{itemize}
 
 \section{Dynamic Star}
 \label{alg:dynstar}
 
-To understand the Dynamic Star heuristic, we first look at the results from \cite{Peleg}, which for one is about finding a good tree to use for Arrow. A probability distribution $p_i, i\in V$ for each node making a request is given. Then the chance that a request travels from node $i$ to node $j$ is simply $p_ip_j$. Now let $d_T(i,j)$ be the cost to go from node $i$ to $j$ in some spanning tree $T$, similarly let $d_G(i,j)$ be the cost for the way from $i$ to $j$ by taking the shortest path in graph $G$. Then the expected cost of a single request in a tree and the graph respectively is
+To understand the Dynamic Star heuristic, we first look at the results from Peleg~\cite{Peleg}, which for one is about finding a good tree to use for Arrow. A probability distribution $p_i, i\in V$ for each node making a request is given. Then the chance that a request travels from node $i$ to node $j$ is simply $p_ip_j$. Now let $d_T(i,j)$ be the cost to go from node $i$ to $j$ in some spanning tree $T$, similarly let $d_G(i,j)$ be the cost for the way from $i$ to $j$ by taking the shortest path in graph $G$. Then the expected cost of a single request in a tree and the graph respectively is
 \begin{equation}
 \begin{split}
 c_R(T)\coloneqq & \sum_{i,j}p_ip_jd_T(i,j) \\
@@ -659,20 +648,20 @@ c_R(G)\coloneqq & \sum_{i,j}p_ip_jd_G(i,j) \\
 \end{split}
 \end{equation}
 
-Now let $T_c$ denote a shortest-path tree from center node $c$, meaning a tree for which every node $v$ has a shortest path to $c$, i.e. $d_{T_c}(c,v)=d_G(c,v)$. The paper then shows that the $T_c$ with lowest $c_R(T_c)$ is a 2-approximation of the tree with lowest possible $c_R$:
+Now let $T_c$ denote a shortest-path tree from center node $c$, meaning a tree for which every node $v$ has a shortest path to $c$, i.e. $d_{T_c}(c,v)=d_G(c,v)$. The paper then shows that the $T_c$ with lowest $c_R(T_c)$ is a 2-approximation of the costs in the graph:
 \begin{equation}
 c_R(T_c)\leq 2\cdot c_R(G)
 \end{equation}
 
-This means such a $T_c$ is a relatively good tree to use for Arrow, since the cost of the requests isn't much greater than the best possible path they could take. And since in our case we have a complete graph and metric costs, a shortest-path tree from node $c$ can simply be a star, connecting every other node to $c$ directly. With our complete graph weights $c:E\to\mathbb{N}^+$ this then reduces the calculation of $c_R(T_c)$ to
+This means such a $T_c$ is a relatively good tree to use for Arrow, since the cost of the requests isn't much greater than the best possible path they could take. And since in our case we have a complete graph and metric costs, a shortest-path tree from node $c$ can simply be a star, connecting every other node to $c$ directly. With our graph weights $c:E\to\mathbb{N}^+$ this then reduces the calculation of $c_R(T_c)$ to
 \begin{equation}
 \label{dynstarc}
 c_R(T_c)=\sum_{i,j}p_ip_j(c(i,c)+c(c,j))
 \end{equation}
 
-Now what this Dynamic Star heuristic does is it measures the distribution $p_i$ at runtime and dynamically adjusts the tree according to it, striving for a star. The fact that Arvy is a distributed algorithm however poses a problem, since nodes can't obtain a global view of the system to get accurate values for $p_i$, so we'll have to make do with every node $v$ having a local approximation $p_i^v$ of $p_i$.
+Now this Dynamic Star heuristic measures the distribution $p_i$ at runtime and dynamically adjusts the tree according to it, striving for a star. The fact that Arvy is a distributed algorithm however poses a problem, since nodes can't obtain a global view of the system to get accurate values for $p_i$, so we will have to make do with every node $v$ having a local approximation $p_i^v$ of $p_i$.
 
-To implement this the idea is that each node $v$ maintains counts $n_i^v\in\mathbb{N}_0$ of how many times each node $i$ made a request, initialized with all $0$. Because $v$ always knows how many requests it made itself, the value for $n_v^v$ is always accurate, while all others can be an outdated value. To update $n_i^v$ the following rules are used:
+To implement this, the idea is that each node $v$ maintains counts $n_i^v\in\mathbb{N}_0$ of how many times each node $i$ made a request, initialized with all $0$. Because $v$ always knows how many requests it made itself, the value for $n_v^v$ is always accurate, while all others might be outdated values. To update $n_i^v$, the following rules are used:
 \begin{enumerate}
 \item When node $v$ makes a request, set $n_v^v\gets n_v^v+1$
 \label{rule1}
@@ -682,8 +671,7 @@ To implement this the idea is that each node $v$ maintains counts $n_i^v\in\math
 Depending on the choice of the subset $S$ of value updates to send, the information propagation of the true values in the network might be slower or faster. Generally the bigger $|S|$, the faster information propagates. Here are some interesting choices for $S$:
 \begin{itemize}
 \item When node $v$ makes a request for the token, it only sends along its own request count with $S=\{v\}$, while all nodes along the request path use this same $S$. Since the only way for the rest of the network to know the accurate request count of the requesting node is for it to send the updated value, this is one of the most reasonable single-element choices for $S$ and is the choice that will be used for our simulations.
-\item With every node forwarding all its values, we get $S=V$. Propagation of values is as fast as possible, but we also have $\mathcal{O}(n)$ complexity for the size of messages.
-\item Message size can be reduced by making $S$ a random selection of $V$, with $|S|\ll|V|$. With many requests happening, information should still propagate rather quickly.
+\item With every node forwarding all its values, we get $S=V$. Propagation of values is as quick as possible, but we also have $\mathcal{O}(n)$ complexity for the size of messages.
 \end{itemize}
 
 Once such $n_i^v$ are known, the approximated request probabilities $p_i^v$ are then simply
@@ -699,38 +687,14 @@ With this we have everything in place for the heuristic to select a new parent o
 \EndFunction
 \end{algorithmic}
 
-Justification is needed for the fact that the node $a_{k+1}$ selecting the new parent seems to access costs not imminent to it with the calculation of all $c_R(T_{a_{i}})$, which was given as a restriction in \hyperref[model]{the model}. This can be circumvented by each node $a_{i}$ calculating $c_R(T_{a_{i}})$ locally when the request travels through it, which is allowed since in \autoref{dynstarc} only accesses costs next the center node $a_{i}$ (this wouldn't be possible for non-star shortest path trees). Then that value can get sent in the message to all subsequent nodes in the request path, which can then use this result for the selection of the minimum. Note however that this is not exactly the same as calculating all $c_R(T_{a_{i}})$ values in the final node in the request path, since values for $n_i^v$ will be different, but it's the best we can do.
+Justification is needed for the fact that node $a_{k+1}$ selecting a new parent seems to access costs not imminent to it with the calculation of values $c_R(T_{a_{i}})$, which was given as a restriction in \hyperref[model]{the model}. This can be circumvented by each node $a_{i}$ calculating $c_R(T_{a_{i}})$ locally when the request travels through it, which is allowed since in \autoref{dynstarc} uses only costs next to the center node $a_{i}$ (this only works for star-shaped shortest path trees). Then that value can get sent in the message to all subsequent nodes in the request path, which can then use this result for the selection of the minimum. Note however that this is not exactly the same as calculating all $c_R(T_{a_{i}})$ values in the final node in the request path, since values for $n_i^v$ will be different, but it's the best we can do.
 
-Unfortunately this algorithm needs $\mathcal{O}(n^2)$ time for the calculation of $c_R(T_{a_i})$ in each node along the request path, making it very slow to run in comparison to other algorithms. Messages need to send $S$ and the $a_{i}$ with lowest $c_R(T_{a_{i}})$ (as an optimization), resulting in $\mathcal{O}(|S|)$ message size.
-
-\subsection{Non-converging Dynamic Star}\label{alg:ncdynstar}
-
-One slight problem with the Dynamic Star heuristic is that in general it eventually converges to a static tree. This is because as the total number of request increases, changes to $n_i^v$ matter less. After $R\in\mathbb{N}$ requests, another request can only cause a maximum change to $p_i^v$ of
-\begin{equation}
-\begin{split}
-\left|p_i^v-p_i^{'v}\right| = & \left|\frac{n_i^v}{\sum_jn_j^v}-\frac{n_i^{'v}}{\sum_jn_j^{'v}}\right| = \left|\frac{n_i^v}{R}-\frac{n_i^v+\{0,1\}}{R+1}\right| \\
-= & \left|\frac{n_i^vR+n_i^v-n_i^vR+\{0,1\}R}{R(R+1)}\right| = \frac{\left|n_i^v-\{0,1\}R\right|}{R(R+1)} \\
-\leq & \frac{R}{R(R+1)}=\frac{1}{R+1}\to_{R\to\infty} 0
-\end{split}
-\end{equation}
-
-where $\{0,1\}$ is $1$ or $0$ depending on whether $n_i^v$ was incremented or not.
-
-This is a problem because it means the longer a system runs, the less it's adapting to changes in the probability pattern. If after $10^{100}$ requests a request-controlling adversary shows up, it could exploit this practically static tree by constantly bouncing requests between nodes with a slow connection. If this were to happen in the beginning, it wouldn't be a problem as the heuristic could adapt to this by choosing a better star center quickly. This means the algorithm's behavior is dependent on how long it has been running.
-
-An idea to solve this problem is to give less weight to older requests, which can be done in multiple ways:
-\begin{itemize}
-\item After every increment of $n_i^v$ by one, all counts get decreased by a constant factor: $\forall i:n_i^v\gets \alpha\cdot n_i^v$ with $0<\alpha<1$. If this was a global view this would work well, since after $R$ requests an original contribution to $n_i^{global}$ of $1$ would be reduced to $\alpha^R$, implementing an exponential weight falloff. However since this isn't a global view, it won't work as well, because depending on the propagation speed with $|S|$, the $n_i^v$ will be more outdated, resulting in old requests having more weight than they would have in a global view.
-\item A slight improvement over this can be achieved: For each message sent from $v$, the total amount of requests known $\sum_jn_j^v$ is sent along as well. When received by $u$, it's possible for it to calculate the difference of known requests $d\coloneqq\sum_jn_j^v-\sum_jn_j^u$. This means all $n_i^u$ are about that many requests more in the past than $n_i^v$, so an update is done on them to compensate for this: $\forall i:n_i^u\gets\alpha^d\cdot n_i^u$. This is better because the multiplication with $\alpha$ doesn't depend on the selection of $|S|$ anymore, resulting in older values being more accurately weighed.
-\item With the requirement of nodes having a synchronized clock it's possible to improve on this: Every fixed time step, all counts in all nodes get decreased by the factor: $\forall i:n_i^v\gets \alpha\cdot n_i^v$. This is now an accurate time-based exponential falloff, independent of both the propagation speed and the request pattern.
-\end{itemize}
-
-This heuristic might work well in practice to guard against spontaneous adversaries, but for simplicity we will assume a uniform request pattern. Therefore we will not further evaluate this non-converging Dynamic Star heuristic.
+Unfortunately this heuristic needs $\mathcal{O}(n^2)$ time for the calculation of $c_R(T_{a_i})$ in each node along the request path, making it very slow to run in comparison to others. Messages only need to send $S$ and the $a_{i}$ with lowest $c_R(T_{a_{i}})$, resulting in $\mathcal{O}(|S|)$ message size. Note that this heuristic converges to a static tree over time, which can be a problem with non-uniform request patterns. While this isn't focus of this thesis, we have included some remedies for this in \autoref{alg:ncdynstar}.
 
 \section{Graph-specific: Recursive Clique}
 \label{alg:reclique}
 
-While all previous heuristics work on arbitrary graph costs, in this section we describe a specialized one to work well on specific graphs only. As we will see in \autoref{result:clique}, Ivy has good performance on cliques of less than 5 nodes. Taking advantage of this fact, we design a graph resembling a clique, but where each node can contain another clique within, and so on. See \autoref{fig:reclique} for an example with 2 levels of cliques and each level having 3 nodes. This resulting recursive clique graph allows running Ivy on each level separately, enabling us to scale the beneficial performance from less than 5 nodes to many more.
+While all previous heuristics work on arbitrary graph costs, in this section we describe a specialized one to work well on specific graphs only. As we will see in \autoref{result:clique}, Ivy has good performance on cliques of less than 5 nodes. Taking advantage of this fact, we design a graph resembling a clique, but where each node can contain another clique within, and so on. See \autoref{fig:reclique} for an example with 2 levels of cliques and each level having 3 nodes. This resulting recursive clique graph allows running Ivy on each level individually, enabling us to scale the beneficial performance from less than 5 nodes to many more.
 
 A recursive clique graph has a level count parameter $l$ representing the number of clique levels and a base parameter $b$ for the number of nodes in a clique on a single level. We use the nodes in the lowest level cliques as our graph nodes and call nodes in higher levels \textit{group nodes} since they group together graph nodes in lower levels. This gives us a total graph node count of $b^l$. To indicate that graph nodes in the same lower level are closer to each other, we define the costs in the layer above to be $\eta>1$ times higher. Edges in the lowest level are defined to have cost $1$, edges in the second-lowest layer then have cost $\eta$, for the next level $\eta^2$, and so on, up to edges in the top-most layer having cost $\eta^{l-1}$.
 
@@ -783,14 +747,14 @@ A recursive clique graph has a level count parameter $l$ representing the number
 
 When running a recursive Ivy algorithm on such a graph, the guiding rules for selecting new parents are as follows:
 \begin{enumerate}
-\item\label{reclique-invariant} The spanning tree needs to maintain the invariant that only at most one edge can exist between all group nodes on a single level. This ensures that if both the requesting graph node and the one holding the token are in the same group node, the request path does not exit that group node. In addition this means that a request path can include at most $b-1$ edges of length $\eta^{l-1}$ from the most upper level (and similarly for lower levels), therefore limiting the number of long edges.
-\item If multiple graph nodes on the request path satisfy the first rule, choose the earliest possible one of them as the new parent. This ensures that the inverted arrows on the request path lead future requests to the root on the fastest way possible, giving Ivy-like shortcut behavior on each level and across levels too.
+\item\label{reclique-invariant} The spanning tree needs to maintain the invariant that only at most one edge can exist between all group nodes in a single clique. This ensures that if both the requesting graph node and the one holding the token are in the same group node, the request path does not exit that group node. In addition this means that a request path can include at most $b-1$ edges of length $\eta^{l-1}$ from the most upper level (and similarly for lower levels), therefore limiting the number of long edges.
+\item If multiple graph nodes on the request path satisfy the first rule, choose the earliest possible one of them as the new parent. This ensures that the inverted arrows on the request path lead future requests to the root on the fastest way possible, giving Ivy-like shortcut behavior on each clique and across levels.
 \label{reclique-rule-early}
 \end{enumerate}
 
 See \autoref{fig:reclique-alg} for an example of how this heuristic behaves with these rules.
 
-While in this heuristic we only limit ourselves to these three parameters for simplicity, this idea can be extended much further: Each level can contain arbitrary graphs. As an example, with three group nodes at the top-most level, the first group node could contain a star graph, the second one a ring graph and the third one yet another nested graph. This then also calls for running different Arvy heuristics on each level, using whichever works best for the respective graph, making this a very flexible approach.
+While we only limit ourselves to three parameters for simplicity, this idea can be extended much further: Each level can contain arbitrary graphs. As an example, with three group nodes at the top-most level, the first group node could contain a star graph, the second one a ring graph and the third one yet another nested graph. This then also calls for running different Arvy heuristics on each graph, using whichever works best for the respective costs, making this a very flexible approach.
 
 \begin{figure}[H]
 \begin{subfigure}[t]{0.5\textwidth}
@@ -831,7 +795,7 @@ While in this heuristic we only limit ourselves to these three parameters for si
 \node[right=0 of AA] {\scriptsize{$a_{2}$}};
 
 \end{tikzpicture}
-\caption{The tree we start with satisfies the \hyperref[reclique-invariant]{tree invariant}, since between all three virtual nodes there is only at most one connection. The first node $a_{0}$ on the request path makes a request for the token which lies at root node $a_{2}$. $a_{2}$ will invert its arrow to point to $a_{0}$ with a long edge, which the invariant allows because the previous long edge $(a_{1},a_{2})$ is discarded when the request traverses it}
+\caption{The tree we start with satisfies the \hyperref[reclique-invariant]{tree invariant}, since between all pairs of three group nodes there is only at most one connection. The first graph node $a_{0}$ on the request path makes a request for the token which lies at root node $a_{2}$. $a_{2}$ will invert its arrow to point to $a_{0}$ with a long edge, which the invariant allows because the previous long edge $(a_{1},a_{2})$ is discarded when the request traverses it}
 \label{fig:reclique-alg-a}
 \end{subfigure}
 \quad
@@ -873,7 +837,7 @@ While in this heuristic we only limit ourselves to these three parameters for si
 \node[left=0 of CC] {\scriptsize{$a_{2}$}};
 
 \end{tikzpicture}
-\caption{In the new tree, $a_{0}$ makes a request for the token at $a_{2}$ in the same virtual node. As with normal Ivy, all nodes will connect back to the node $a_{0}$ who made the original request. Notice that since the request was made from the same virtual node where the token currently resides, the virtual node wasn't exited and no long edge was traversed}
+\caption{In the new tree, $a_{0}$ makes a request for the token at $a_{2}$ in the same group node. As with normal Ivy, all request path nodes will connect back to $a_{0}$ who made the original request. Notice that since the request was made from the same group node where the token currently resides, the group node wasn't exited and no long edge was traversed}
 \end{subfigure}
 
 \begin{subfigure}[t]{0.5\textwidth}
@@ -916,7 +880,7 @@ While in this heuristic we only limit ourselves to these three parameters for si
 \node[above=0 of CB] {\scriptsize{$a_{4}$}};
 
 \end{tikzpicture}
-\caption{The request path has two long edges, invoking the Ivy behavior on the upper level: $a_{3}$ will create a shortcut connection back to $a_{0}$. Then when $a_{4}$ receives the request, the rules disallow it from connecting back to $a_{0}$ as well, since this would lead to multiple edges between virtual nodes. Therefore $a_{4}$ has to connect back to $a_{3}$}
+\caption{With a new request, the request path has two long edges, invoking the Ivy behavior on the upper level: $a_{3}$ will create a shortcut connection back to $a_{0}$. Then when $a_{4}$ receives the request, the rules disallow it from connecting back to $a_{0}$ as well, since this would lead to multiple edges between the same two group nodes. Therefore $a_{4}$ has to connect back to $a_{3}$}
 \end{subfigure}
 \quad
 \begin{subfigure}[t]{0.5\textwidth}
@@ -954,7 +918,7 @@ While in this heuristic we only limit ourselves to these three parameters for si
 \end{tikzpicture}
 \caption{The resulting tree still only has $2$ long edges due to how the rules were enforced}
 \end{subfigure}
-\caption{Example of Recursive Clique heuristic on a recursive clique graph with parameters $l=2$ and $b=3$}
+\caption{Example of the Recursive Clique heuristic on a recursive clique graph with parameters $l=2$ and $b=3$}
 \label{fig:reclique-alg}
 \end{figure}
 
@@ -965,6 +929,16 @@ The performance of an Arvy algorithm depends not only on the algorithm itself, b
 \section{Graph Costs}
 \label{graph-costs}
 
+%\paragraph{Ring} This cost function is based on a ring with unit costs as the underlying graph.
+%\begin{equation}
+%c(u,v)\equiv|u-v|\;(\bmod\;n)
+%\end{equation}
+
+\paragraph{Uniformly Random $d$-dimensional Hypercube}\label{costs:cube} These costs model uniformly random points $p_i:[0,1]^d$ in a $d$-dimensional hypercube, using the euclidean distance between them as the cost. We will be using $d=2$ in our evaluations.
+\begin{equation}
+c(u,v)=\norm{p_u-p_v}_2
+\end{equation}
+
 \paragraph{Clique}\label{costs:clique} This is a cost function based on an underlying graph where all nodes are connected to each other with a unit cost.
 \begin{equation}
 c(u,v)=
@@ -974,15 +948,6 @@ c(u,v)=
 \end{cases}
 \end{equation}
 
-%\paragraph{Ring} This cost function is based on a ring with unit costs as the underlying graph.
-%\begin{equation}
-%c(u,v)\equiv|u-v|\;(\bmod\;n)
-%\end{equation}
-
-\paragraph{Uniformly Random $d$-dimensional Hypercube}\label{costs:cube} These costs model uniformly random points $p_i:[0,1]^d$ in a $d$-dimensional hypercube, using the euclidean distance between them as the cost.
-\begin{equation}
-c(u,v)=\norm{p_u-p_v}_2
-\end{equation}
 
 \paragraph{Recursive Clique} These costs are given by the specialized graph of the Recursive Clique heuristic, see \autoref{alg:reclique}.
 
@@ -997,32 +962,20 @@ c(u,v)=\norm{p_u-p_v}_2
 %c(u,v)=\text{length of shortest path from $u$ to $v$ in $G'$}
 %\end{equation}
 
-\newpage
 \section{Initial Trees}
 \label{initial-trees}
 
 \paragraph{Minimum Spanning Tree}\label{tree:mst}
 
-The minimum spanning tree (MST) is the tree with lowest total edge cost. See \autoref{tree-examples} for an example of such a tree.
+The minimum spanning tree is a tree with lowest total edge cost. See \autoref{tree-examples} for an example of such a tree.
 
 \paragraph{Uniformly Random Tree}\label{tree:random}
 
-A uniformly random tree out of all possible trees. An algorithm for generating such a tree is as follows:
-
-\begin{enumerate}
-\item Select a random root node $r\gets_{u.a.r.}V$
-\item Define $S=\{r\}$ to be the set of all nodes already included in the tree
-\item Select a random node already in the tree $u\gets_{u.a.r.}S$
-\label{random-tree-goto}
-\item Select a random node not yet in the tree $v\gets_{u.a.r.}V\setminus S$
-\item Output edge $(u,v)$ as part of the resulting tree
-\item Set $S\gets S\cup\{v\}$
-\item Unless $S=V$, go to \hyperref[random-tree-goto]{Step \ref{random-tree-goto}}
-\end{enumerate}
+A uniformly random tree out of all possible trees.
 
 \paragraph{Best Star Tree}\label{tree:star}
 
-As we learned in \autoref{alg:dynstar}, the shortest-path tree with minimum $c_R(T_c)$ for some center node $c$ has at most two times longer paths than direct paths in the graph. By assuming uniformly random requests with $p_i=\frac{1}{n}$ for all nodes $i$, we can use this to generate an initial tree without knowing the request distribution. This also simplifies the calculation for $c_R(T_c)$ to
+As we learned in \autoref{alg:dynstar}, the shortest-path tree with minimum $c_R(T_c)$ for some center node $c$ has at most two times longer paths than in the graph itself. By assuming uniformly random requests with $p_i=\frac{1}{n}$ for all nodes $i$, we can use this to generate an initial tree and use it for unknown request distributions. This also simplifies the calculation of $c_R(T_c)$ to
 \begin{equation}
 \begin{split}
 c_R(T_c)&=\sum_{i,j}\frac{1}{n}\frac{1}{n}(c(i,c)+c(c,j))=\frac{1}{n^2}\sum_{i,j}c(i,c)+\frac{1}{n^2}\sum_{i,j}c(c,j) \\
@@ -1030,60 +983,55 @@ c_R(T_c)&=\sum_{i,j}\frac{1}{n}\frac{1}{n}(c(i,c)+c(c,j))=\frac{1}{n^2}\sum_{i,j
 \end{split}
 \end{equation}
 
-This means finding $c_R(T_c)$ for a single $c$ can be done in time $\mathcal{O}(n)$ and for finding the best $c$ with smallest $c_R(T_c)$ only $\mathcal{O}(n^2)$ is needed. See \autoref{tree-examples} for an example of such a tree.
+This means finding $c_R(T_c)$ for a single $c$ can be done in time $\mathcal{O}(n)$, and for finding the best $c$ with smallest $c_R(T_c)$ only $\mathcal{O}(n^2)$ time is needed. See \autoref{tree-examples} for an example of such a tree.
 
 \paragraph{Minimum Pair Distance Tree}\label{tree:mpd}
 
-This initial tree minimizes arguably most important measure for the Arrow algorithm: The average distance between all pairs of nodes. This is important because with uniformly random requests, every pair of nodes has the same chance of occurring subsequently in the request sequence. Consequently the average time to satisfy a request is the average distance between all pairs of nodes. See \autoref{tree-examples} for an example of a tree with these properties. Noticeable is that central nodes are forming and not all short edges are used.
+This initial tree minimizes the arguably most important measure for the Arrow algorithm: The average distance between all pairs of nodes. This is important because with uniformly random requests, every pair of nodes has the same chance of occurring subsequently in the request sequence. Consequently the average time to satisfy a request is the average distance between all pairs of nodes. See \autoref{tree-examples} for an example of a tree that minimizes this. Noticeable is that central nodes are forming and not all short edges are used.
 
-A way to calculate this minimum is by brute force search through all possible trees. However because there are as much as $n^{n-2}$ possible trees~\cite{Borchardt} in a graph of $n$ nodes, this is not practical for more than a couple nodes. A listing of all possible trees can be obtained by the $n^{n-2}$ Prüfer~\cite{Prufer} sequences, for each of which the total pair distance needs to be found which is of order $\mathcal{O}(n^2)$ (with an algorithm similar to the one described in the next paragraph), giving a total complexity of $\mathcal{O}(n^n)$. \TODO{mention how this is different from low-stretch trees}.
-
+A way to calculate this minimum is by brute force search through all possible trees, which can be done with the Prüfer~\cite{Prufer} sequences. Finding the total pair distance for a single tree can then be done with an algorithm similar to the one described in the next paragraph. However because there are as much as $n^{n-2}$ possible trees~\cite{Borchardt} and finding the total pair distance takes $\mathcal{O}(n^2)$ time, this gives a total running time of $\mathcal{O}(n^n)$, which is not practical for more than a few nodes. It is very much possible for there to exist a faster algorithm for finding such a tree.
 
 \paragraph{Approximated Minimum Pair Distance Tree}\label{tree:ampd}
 
-Because calculating the actual minimum pair distance tree is impractical, we describe an algorithm that constructs a tree in $\mathcal{O}(n^3)$ time that tries to minimize total pair distance as well as possible. First let $c_T(u, v)$ denote the distance of the shortest path from $u$ to $v$ in a tree graph $T=(V',E')$ of nodes $V'\subset V$ and edges $E'\subset E$. Then let $\mathcal{C}_{pairs}(T)$ denote the total distance between all pairs of nodes in $T$.
+Alternatively, we describe an algorithm that constructs a tree in $\mathcal{O}(n^3)$ time that tries to minimize total pair distance as well as possible. First let $d_T(u, v)$ denote the distance of the shortest path from $u$ to $v$ in a tree graph $T=(V',E')$ of nodes $V'\subset V$ and edges $E'\subset E$. Then let $\mathcal{C}_{pairs}(T)$ denote the total distance between all pairs of nodes in $T$.
 \begin{equation}
-\mathcal{C}_{pairs}(T) = \sum_{u,v\in V'}c_T(u,v)
+\mathcal{C}_{pairs}(T) = \sum_{u,v\in V'}d_T(u,v)
 \end{equation}
 
 The algorithm is based on the idea of connecting nodes one-by-one to the tree, in every step choosing the node and a connecting edge that minimizes the total pair distance. We do this efficiently by maintaining a data structure that allows querying the increase of total pair distance for a node and edge in constant time.
 
-Let $V'$ be the set of nodes currently included in the tree. $V'$ gets initialized to $\{r\}$ where $r$ is an arbitrarily chosen node. Our data structure then encompasses an array $p:V'\to\mathbb{R}$, where $p(v)$ stores the total distance from node $v$ to all other nodes in the current tree. In addition, a two-dimensional array $d_R:(V',V')\to\mathbb{R}$ is needed, where $d_R(u,v)$ stores the shortest distance in the tree between nodes $u$ and $v$.
+Let $V'$ be the set of nodes currently included in the tree. Our data structure then encompasses an array $s:V'\to\mathbb{R}$, where $s(v)$ stores the total distance from node $v$ to all other nodes in the current tree. In addition, we store $d_T:(V',V')\to\mathbb{R}$ in a two-dimensional array.
 \begin{equation}
 \begin{split}
-p(v)=&\sum_{i\in V'}c_T(i,v) \\
-d_R(u,v)=&\;c_T(u,v)\\
+s(v)=&\sum_{i\in V'}d_T(i,v) \\
 \end{split}
 \end{equation}
 
 Now if node $v\in V\setminus V'$ and edge $(u,v)$ with $u\in V'$ were to get added to the tree to get $T'=T\cup(\{v\}, \{(u,v)\})$, the total pair distance increases only by the new pairs from $v$ to all nodes in $V'$. With our data structure we can calculate this increase in constant time:
 \begin{equation}
 \begin{split}
-\mathcal{C}_{pairs}(T')-\mathcal{C}_{pairs}(T)&=2\sum_{i\in V'}c_{T'}(i, v)\\
-&=2\sum_{i\in V'}\left(c_T(i,u)+c(u,v)\right) \\
-&=2\left(\sum_{i\in V'}c_T(i,u)+|V'|\cdot c(u,v)\right)\\
-&=2\left(p(u)+|V'|\cdot c(u,v)\right) \\
+\mathcal{C}_{pairs}(T')-\mathcal{C}_{pairs}(T)&=2\sum_{i\in V'}d_{T'}(i, v)\\
+&=2\sum_{i\in V'}\left(d_T(i,u)+c(u,v)\right) \\
+&=2\left(\sum_{i\in V'}d_T(i,u)+|V'|\cdot c(u,v)\right)\\
+&=2\left(s(u)+|V'|\cdot c(u,v)\right) \\
 \end{split}
 \end{equation}
 
-Then after this new node $v$ and edge $(u,v)$ is added to the tree we need to update our data structure, which we can do in linear time:
-\begin{itemize}
-\item The total distance from $v$ to all other nodes $p(v)$ is just the total distance to all other nodes from $u$, plus the new edge once for every node: $p(v)\gets p(u)+|V'|\cdot c(u,v)$
-\item For all other nodes, $p$ needs to be increased by the shortest path to $v$, which is just the shortest path to $u$ plus the cost of the edge $(u,v)$: $p(i)\gets p(i)+d_R(i,u)+c(u,v)$ for all $i\in V'$
-\item Also the shortest path from all nodes to $v$ gets initialized to the shortest path to $u$ plus the cost of the edge $(u,v)$: $d_R(i,v)\gets d_R(i,u)+c(u,v)$ for all $i\in V'$
-\item Similarly the shortest path from $v$ to all nodes: $d_R(v,i)\gets c(v,u)+d_R(u,i)$ for all $i\in V'$
-\end{itemize}
-
-As a result, our algorithm looks as follows:
+Our algorithm then looks as follows:
 \begin{enumerate}
-\item Set $V'=\{r\}$ for an arbitrary node $r\in V$ and initialize the data structure with $p(r)=0$ and $d_R(r,r)=0$
-\item Add the edge $(u,v)$ ($u\in V'$ and $v\in V\setminus V'$) which increases the total pair distance by the minimum to the resulting tree, by choosing the minimum value for $2\left(p(u)+|V'|\cdot c(u,v)\right)$ between all candidates
+\item Set $V'=\{r\}$ for an arbitrary node $r\in V$ and initialize the data structure with $s(r)=0$ and $d_T(r,r)=0$
+\item Among all nodes $v\in V\setminus V'$ not yet in the tree and nodes $u\in V'$ already in the tree, select the pair $(u,v)$ that increase total pair distance minimally when this edge is added, by calculating $2\left(s(u)+|V'|\cdot c(u,v)\right)$ for all of them.
 \label{approxStep}
-\item Update $p$ and $d_R$ with the new node and edge
+\item Update $s$ and $d_T$ as follows:
+  \begin{enumerate}
+  \item The total distance from the new node $v$ to all other nodes is just the total distance to all other nodes from the node $u$ it was connected to, plus the new edge once for every node: $s(v)\gets s(u)+|V'|\cdot c(u,v)$
+  \item For all other nodes, $s$ needs to be increased by the shortest path to $v$, which is just the shortest path to $u$ plus the cost of the edge $(u,v)$: $s(i)\gets s(i)+d_T(i,u)+c(u,v)$ for all $i\in V'$
+  \item The shortest path from all nodes to $v$ gets initialized to the shortest path to $u$ plus the cost of the edge $(u,v)$: $d_T(i,v)\gets d_T(i,u)+c(u,v)$ for all $i\in V'$. The same for the the shortest path from $v$ to all nodes.
+  \end{enumerate}
 \item Unless $V'=V$, go to \hyperref[approxStep]{step \ref{approxStep}}
 \end{enumerate}
 
-Because the tree gets one more node in every iteration, the sequence for the number of edges between tree and non-tree nodes is $1\cdot n,\;2\cdot(n-1),\;3\cdot(n-2),\;\dots,\;(n-1)\cdot2,\;n\cdot1$. Every iteration therefore takes $\mathcal{O}(n^2)$ time to find the edge minimizing additional pair distance and another $\mathcal{O}(n)$ to update the data structure. The total complexity of this algorithm is therefore $\mathcal{O}(n\cdot(n^2+n))=\mathcal{O}(n^3)$. See \autoref{tree-examples} for an example of a tree constructed with this algorithm.
+Because the tree gets one more node in every iteration, the sequence for the number of edges between tree and non-tree nodes is $1\cdot n,\;2\cdot(n-1),\;3\cdot(n-2),\;\dots,\;(n-1)\cdot2,\;n\cdot1$. Every iteration therefore needs $\mathcal{O}(n^2)$ time to find the edge minimizing additional pair distance and another $\mathcal{O}(n)$ to update the data structure. The total complexity of this algorithm is therefore $\mathcal{O}(n\cdot(n^2+n))=\mathcal{O}(n^3)$. See \autoref{tree-examples} for an example of a tree constructed with this algorithm.
 
 \begin{figure}
 \centering
@@ -1139,7 +1087,7 @@ Because the tree gets one more node in every iteration, the sequence for the num
 \draw[thick] (6) -- (8);
 \draw[thick] (7) -- (8);
 \draw[thick] (9) -- (8);
-\nextgroupplot[title=Minimum pair distance tree]
+\nextgroupplot[title=Minimum Pair Distance tree]
 \treenodes
 \draw[thick] (0) -- (7);
 \draw[thick] (1) -- (9);
@@ -1150,7 +1098,7 @@ Because the tree gets one more node in every iteration, the sequence for the num
 \draw[thick] (6) -- (8);
 \draw[thick] (7) -- (8);
 \draw[thick] (9) -- (8);
-\nextgroupplot[title=Approximated minimum pair distance tree]
+\nextgroupplot[title=Approximated Minimum Pair Distance tree]
 \treenodes
 \draw[thick] (1) -- (9);
 \draw[thick] (2) -- (7);
@@ -1163,7 +1111,7 @@ Because the tree gets one more node in every iteration, the sequence for the num
 \draw[thick] (9) -- (8);
 \end{groupplot}
 \end{tikzpicture}
-\caption{Different trees on a 10-node graph of uniformly random points in the unit square. }
+\caption{Different trees on a 10-node graph of uniformly random points in the unit square. Notable is that the Approximated Minimum Pair Distance tree is very similar to the Minimum Pair Distance tree}
 \label{tree-examples}
 \end{figure}
 
@@ -1172,11 +1120,11 @@ Because the tree gets one more node in every iteration, the sequence for the num
 
 \paragraph{Uniformly Random Requests}\label{req:random} This request sequence distributes requests uniformly at random across all nodes. The request probability for each node $v$ is therefore $p_v=\frac{1}{n}$, independent of previous requests.
 
-\paragraph{Adversarial Requests}\label{req:adversary} This request sequence represents an adversary that can control which nodes make requests while being able to inspect the current tree. For selecting a new request it selects the node furthest away by cost from the token in the current spanning tree.
+\paragraph{Adversarial Requests}\label{req:adversary} This request sequence represents an adversary that can control which nodes issue requests, while being able to inspect the current tree. For selecting a node to request from next, it chooses the one furthest away by cost from the token in the current spanning tree.
 
 \chapter{Results}
 
-In this chapter we simulate Arvy algorithms on different \textit{scenarios} to see how they perform. A scenario consists of the number of nodes, what graph costs to use (see \autoref{graph-costs}) and the request sequence (see \autoref{request-sequences}). We will focus on \hyperref[costs:cube]{uniformly random 2-dimensional hypercube} costs since it provides interesting and realistic values, even for a low number of nodes.
+In this chapter we simulate Arvy algorithms on different \textit{scenarios} to see how well they perform. A scenario consists of the number of nodes in the graph, what edge costs to use (see \autoref{graph-costs}) and the sequence of requests (see \autoref{request-sequences}). We will focus on \hyperref[costs:cube]{uniformly random 2-dimensional hypercube} costs since it provides interesting and realistic values, even for a low number of nodes.
 
 We then run different Arvy algorithms from \autoref{algs} with different initial trees on such scenarios and compare them against each other. Initial trees are described in \autoref{initial-trees}. Since all heuristics except Arrow change the tree structure, we run them with a uniformly random initial tree as a neutral choice. Only for Arrow itself we vary the initial tree to find the best one to use.
 
@@ -1196,7 +1144,7 @@ For evaluating how well heuristics perform we look at the measures defined in \a
   },
   legend cell align = left,
   legend image post style = {
-    line width = 3pt,
+    line width = 2pt,
   },
   width=0.9\textwidth,
   height=0.5\textwidth,
@@ -1217,10 +1165,13 @@ For evaluating how well heuristics perform we look at the measures defined in \a
   },
 }
 
-\newpage
-\section{Best Initial Trees for Arrow}\label{result:trees}
+\section{Preliminary Results}
 
-For this evaluation we run Arrow on different initial trees to see how well they perform. We use only 10 nodes such that we can compute the \hyperref[tree:mpd]{minimum pair distance tree} in reasonable time. For graph costs we use uniformly random points from a 2-dimensional hypercube and we will use uniformly random requests. First we look at how the average time to satisfy requests changes over time:
+In goal of this section is to reduce the number of possible combinations of heuristics, initial trees and other parameters. In particular we want to see which tree works best for Arrow, confirm whether certain algorithms converge to a static tree and find a good value for $t$ in the Fixed Ratio heuristics.
+
+\subsection{Best Initial Trees for Arrow}\label{result:trees}
+
+For this evaluation we run Arrow on different initial trees to see how well they perform. We use only 10 nodes such that we can compute the \hyperref[tree:mpd]{Minimum Pair Distance tree} in reasonable time. For graph costs we use uniformly random points from a 2-dimensional hypercube and we will use uniformly random requests. First we look at how the average time to satisfy requests changes over time:
 
 \begin{tikzpicture}
 \centering
@@ -1235,15 +1186,15 @@ For this evaluation we run Arrow on different initial trees to see how well they
 \addplot table [y={arrow-mst}] {\data};
 \addlegendentry {Minimum spanning tree}
 \addplot table [y={arrow-shortpairs}] {\data};
-\addlegendentry {Approx. min. pair dist. tree}
+\addlegendentry {\hyperref[tree:ampd]{Approx. min. pair dist.} tree}
 \addplot table [y={arrow-star}] {\data};
-\addlegendentry {Best star tree}
+\addlegendentry {\hyperref[tree:star]{Best star} tree}
 \addplot table [y={arrow-shortestpairs}] {\data};
-\addlegendentry {Min. pair dist. tree}
+\addlegendentry {\hyperref[tree:mpd]{Min. pair dist.} tree}
 \end{axis}
 \end{tikzpicture}
 
-Not surprisingly, the tree minimizing pair distance outperforms every other tree. However due to its running time of $\mathcal{O}(n^n)$ it won't be very practical for more nodes. Interestingly the next best one is the best star tree with only a running time of $\mathcal{O}(n^2)$, followed closely by the approximated minimum pair distance tree with runtime $\mathcal{O}(n^3)$. The minimum spanning tree comes next with a slightly worse time. Understandably, a completely random tree is not a good tree to use for low average request time. Conclusively we will use the best star tree for future performance evaluations of Arrow on this scenario. Now let's also look at the number of hops for each of them:
+Not surprisingly, the tree minimizing pair distance outperforms every other tree. However due to our algorithm for this tree construction having a running time of $\mathcal{O}(n^n)$, we can't use it for more nodes. Interestingly, the next best one is the best star tree with only a running time of $\mathcal{O}(n^2)$, followed closely by the Approximated Minimum Pair Distance tree with running time of $\mathcal{O}(n^3)$. From the plot we can also see that a completely random tree is understandably not a good tree to use for low average request time. Conclusively we will use the best star tree for future performance evaluations of Arrow for random requests. Now let's also look at the number of hops for each of them:
 
 \begin{tikzpicture}
 \centering
@@ -1258,21 +1209,21 @@ Not surprisingly, the tree minimizing pair distance outperforms every other tree
 \addplot table [y={arrow-mst}] {\data};
 \addlegendentry {Minimum spanning tree}
 \addplot table [y={arrow-shortpairs}] {\data};
-\addlegendentry {Approx. min. pair dist. tree}
+\addlegendentry {\hyperref[tree:ampd]{Approx. min. pair dist.} tree}
 \addplot table [y={arrow-star}] {\data};
-\addlegendentry {Best star tree}
+\addlegendentry {\hyperref[tree:star]{Best star} tree}
 \addplot table [y={arrow-shortestpairs}] {\data};
-\addlegendentry {Min. pair dist. tree}
+\addlegendentry {\hyperref[tree:mpd]{Min. pair dist.} tree}
 \end{axis}
 \end{tikzpicture}
 
-As one would expect from trees it has a very low hop count. This value is lower than $2$ because nodes can make requests when they have the token already, giving a hop count of $0$, and the center node always has a hop count $\leq 1$. Interestingly the random tree tree has a decently low hop count.
+As one would expect from stars trees, they have a very low hop count. This value is lower than $2$ because nodes can make requests when they have the token already, giving a hop count of $0$, and the center node always has a hop count $\leq 1$. Interestingly, the random tree has a decently low hop count.
 
-Note that while this is only the result for a single random seed with only 10 nodes, the results are similar for other configurations. Also since in this case the tree never changes, it would be possible to calculate accurate expectations for these measures without having to rely on a simulation.
+Note that while this is only the result for a single random seed with only 10 nodes, the results are similar for other configurations. Also, since in this case the tree never changes, it would be possible to calculate accurate expectations for these measures without having to rely on a simulation.
 
-\section{Tree Convergence}\label{result:convergence}
+\subsection{Tree Convergence}\label{result:convergence}
 
-In this section we look at the behavior of heuristics in regards to the tree they end up with after many uniformly random requests. To get a feeling for the tree evolution we look at the trees average tree edge cost. We use only $100$ nodes since the Dynamic Star heuristic is quite slow to run. For edge costs we use uniformly random points in a 2-dimensional hypercube. In addition to looking at the average tree edge cost, we also plot some fixed baselines for known trees. This includes one for the minimum spanning tree, one for the best star tree, and one for a uniformly random tree. All algorithms initially start with a completely random tree.
+In this section we look at the behavior of heuristics in regards to the tree they end up with after many uniformly random requests. To get a feeling for how the tree changes over time, we look at its average edge cost. We use only $100$ nodes, since the Dynamic Star heuristic is quite slow to run. For edge costs we use uniformly random points in a 2-dimensional hypercube. In addition to looking at the average tree edge cost, we also plot some fixed baselines for known trees. This includes one for the minimum spanning tree, one for the best star tree, and one for a uniformly random tree. All algorithms initially start with a completely random tree.
 
 \begin{tikzpicture}
 \centering
@@ -1282,20 +1233,20 @@ In this section we look at the behavior of heuristics in regards to the tree the
   cycle list = { [samples of colormap=8] },
 ]
 \pgfplotstableread{data/converging/treeWeight.dat}{\data}
-\addplot table [y={arrow-random}] {\data};
+\addplot+[dashed] table [y={arrow-random}] {\data};
 \addlegendentry {Uniformly random tree}
-\addplot table [y={arrow-star}] {\data};
+\addplot+[dashed] table [y={arrow-star}] {\data};
 \addlegendentry {Best star tree}
-\addplot table [y={arrow-mst}] {\data};
+\addplot+[dashed] table [y={arrow-mst}] {\data};
 \addlegendentry {Min. sp. tree}
 \addplot table [y={random-random}] {\data};
-\addlegendentry {Random}
+\addlegendentry {Random heuristic}
 \addplot table [y={ivy-random}] {\data};
 \addlegendentry {Ivy}
 \addplot table [y={dynamicStar-random}] {\data};
-\addlegendentry {\hyperref[alg:dynstar]{Dynamic star}}
+\addlegendentry {\hyperref[alg:dynstar]{Dynamic Star}}
 \addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local pair dist. min.}}
+\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
 \addplot table [y={minWeight-random}] {\data};
 \addlegendentry {\hyperref[alg:ecm]{Edge cost min.}}
 \end{axis}
@@ -1303,17 +1254,17 @@ In this section we look at the behavior of heuristics in regards to the tree the
 
 What we can see from this plot:
 \begin{itemize}
-\item The dynamic star heuristic converges to the best star tree, indicated by their lines merging into one. The fact that the line does not jitter in the end indicates a converged tree. This makes sense since they both optimize for a minimal $c_R(T_c)$ with a uniform request distribution. Only with very bad luck of a lot of requests to the same nodes in a row it is possible for it to stray from a best star tree, getting more improbable the longer it runs.
-\item The edge cost minimizer heuristic as expected converges to the minimum spanning tree, as already predicted in \autoref{alg:ecm}. Here we can directly see how this algorithm only ever decreases tree edge costs, indicated by its line monotonically decreasing until it reaches the lowest possible state of the minimum spanning tree.
-\item The Ivy algorithm seems to continuously have a tree with high edge costs, in the same range as a completely random tree. This makes more or less sense since Ivy does not look at edge costs at all when selecting new parent nodes. The same happens for the random heuristic in this plot.
-\item Interestingly, the local pair distance minimizer heuristic seems to go towards a rather low average edge cost with no known baseline tree in that region.
+\item The Dynamic Star heuristic converges to the best star tree, indicated by their lines merging into one. This makes sense, since they both optimize for a minimal $c_R(T_c)$ with a uniform request distribution.
+\item As already predicted in \autoref{alg:ecm}, the Edge Cost Minimizer heuristic converges to the minimum spanning tree. Here we can directly see how this algorithm only ever decreases tree edge costs, indicated by its line monotonically decreasing until it reaches the lowest possible state of the minimum spanning tree.
+\item The Ivy algorithm seems to continuously have a tree with high edge costs, in the same range as a completely random tree. This makes more or less sense since Ivy does not look at edge costs at all when selecting new parent nodes. The same happens for the random heuristic.
+\item Interestingly, the Local Pair Distance Minimizer heuristic seems to go towards a rather low average edge cost with no known baseline tree in that region.
 \end{itemize}
 
-From this we conclude that the eventual behavior of the dynamic star and edge cost minimizer heuristics can be achieved by simply using Arrow on the best star tree and the minimum spanning tree respectively. Therefore we don't further look at these heuristics.
+From this we conclude that for random requests, the eventual behavior of the Dynamic Star and Edge Cost Minimizer heuristics can be achieved by simply using Arrow on the best star tree and the minimum spanning tree respectively. Therefore we don't further look at these heuristics in such a scenario.
 
-\section{Fixed Ratio Heuristics}
+\subsection{Fixed Ratio Heuristics}
 
-Here we look at the fixed ratio class of algorithms, both hop-based and weight-based ones, with different values for the ratio $t$, including $t=0$ for Ivy and $t=1$ for Arrow, and steps of $\frac{1}{8}$ between them. We will be using 1000 nodes with uniformly random 2-dimensional hypercube costs and uniformly random requests. We will be using Arrow with the best star tree as a baseline. All fixed ratio algorithms will start with a completely random tree.
+Here we look at the Fixed Ratio class of heuristics, both hop-based and weight-based ones, with different values for the ratio $t$, including $t=0$ for Ivy and $t=1$ for Arrow, with steps of $\frac{1}{8}$ between them. We will be using 1000 nodes with uniformly random 2-dimensional hypercube costs and uniformly random requests. We will be using Arrow with the best star tree as a baseline. All Fixed Ratio algorithms will start with a completely random tree.
 
 \begin{tikzpicture}
 \centering
@@ -1324,10 +1275,10 @@ Here we look at the fixed ratio class of algorithms, both hop-based and weight-b
   legend columns = 5,
 ]
 \pgfplotstableread{data/ratio/time.dat}{\data}
-\addplot table [y={arrow-star}] {\data};
+\addplot+[dashed] table [y={arrow-star}] {\data};
 \addlegendentry {Best star Arrow}
 \addplot table [y={inbetween-0-1-random}] {\data};
-\addlegendentry {$t=\frac{0}{8}$ (Ivy)}
+\addlegendentry {$t=0$ (Ivy)}
 \addplot table [y={inbetween-1-8-random}] {\data};
 \addlegendentry {$t=\frac{1}{8}$}
 \addplot table [y={inbetween-1-4-random}] {\data};
@@ -1343,11 +1294,11 @@ Here we look at the fixed ratio class of algorithms, both hop-based and weight-b
 \addplot table [y={inbetween-7-8-random}] {\data};
 \addlegendentry {$t=\frac{7}{8}$}
 \addplot table [y={inbetween-1-1-random}] {\data};
-\addlegendentry {$t=\frac{8}{8}$ (Arrow)}
+\addlegendentry {$t=1$ (Arrow)}
 \end{axis}
 \end{tikzpicture}
 
-From this we can see that generally, the lower the ratio, the lower average request time. This is somewhat explainable by seeing that with a lower ratio more shortcuts are created. However for some reason ratios around $t=\frac{6}{8}$ seem to converge to some average request time lower than all others. So mysteriously $t=\frac{6}{8}=\frac{3}{4}$ with the hop-based fixed ratio heuristic is not too bad of an algorithm to use for this scenario \TODO{explanation? Maybe look at this with different number of nodes, different graph weights}. We now also look at the weight-based fixed ratio heuristics:
+From this we can see that this heuristic is weaker than both Ivy and Arrow with the best star for all values of $t$. Noticeable is that generally the higher the ratio, the worse is the performance. One exception from this is Arrow with $t=1$, which doesn't change its initial random tree. The fact that the lines for ratios $\frac{5}{8}$, $\frac{6}{8}$ and $\frac{7}{8}$ are above the Arrow line indicates to us that such high ratios produce a tree even worse for performance than a completely random tree. We conclude that the hop-based Fixed Ratio algorithm is not worth looking into further. Instead we will try the weight-based version:
 
 \begin{tikzpicture}
 \centering
@@ -1358,10 +1309,10 @@ From this we can see that generally, the lower the ratio, the lower average requ
   legend columns = 5,
 ]
 \pgfplotstableread{data/ratio2/time.dat}{\data}
-\addplot table [y={arrow-star}] {\data};
+\addplot+[dashed] table [y={arrow-star}] {\data};
 \addlegendentry {Best star Arrow}
 \addplot table [y={inbetween2-0.0-random}] {\data};
-\addlegendentry {$t=\frac{0}{8}$ (Ivy)}
+\addlegendentry {$t=0$ (Ivy)}
 \addplot table [y={inbetween2-0.125-random}] {\data};
 \addlegendentry {$t=\frac{1}{8}$}
 \addplot table [y={inbetween2-0.25-random}] {\data};
@@ -1377,22 +1328,27 @@ From this we can see that generally, the lower the ratio, the lower average requ
 \addplot table [y={inbetween2-0.875-random}] {\data};
 \addlegendentry {$t=\frac{7}{8}$}
 \addplot table [y={inbetween2-1.0-random}] {\data};
-\addlegendentry {$t=\frac{8}{8}$ (Arrow)}
+\addlegendentry {$t=1$ (Arrow)}
 \end{axis}
 \end{tikzpicture}
 
-With an initial look, the anomalies from the previous plot are not present anymore. However they now appear in the opposite direction: The ratios around $t=\frac{3}{4}$ are all \textit{above} the highest ratio, giving a performance ordering from best to worst of $\frac{0}{8}, \frac{1}{8}, \frac{2}{8}, \frac{3}{8}, \frac{8}{8}, \frac{4}{8}, \frac{5}{8}, \frac{6}{8}, \frac{7}{8}$. This is very peculiar and we can't explain the reason for this yet.
+We are seeing very much a comparable pattern. We conclude that such Fixed Ratio heuristics are not fit for this task. This is perhaps surprising, since combining Arrow and Ivy in this way is very natural.
 
-\section{Best Heuristics}\label{result:algs}
+\section{Best Heuristics}
 
-In this section we compare performances of different heuristics on uniformly random requests, ignoring the ones whose eventual behavior can be achieved with Arrow on a specific tree (this includes the \hyperref[alg:dynstar]{Dynamic Star} and \hyperref[alg:ecm]{Edge Cost Minimizer} heuristics). We will again be using uniformly random points in a 2-dimensional hypercube.
+In this section we evaluate heuristics to find the best ones for different request sequences.
+
+\subsection{Random Requests}\label{result:algs}
+
+In this section we compare performances of different heuristics on uniformly random requests, ignoring the ones whose eventual behavior can be achieved with Arrow on a specific tree as discovered in \autoref{result:convergence} (this includes the \hyperref[alg:dynstar]{Dynamic Star} and \hyperref[alg:ecm]{Edge Cost Minimizer} heuristics). We will again be using uniformly random points in a 2-dimensional hypercube. We use 1000 nodes.
+
 
 \begin{tikzpicture}
 \centering
 \begin{groupplot}[
   ylabel = \evalHops,
-  xmax = 100000,
-  cycle list = { [samples of colormap=4] },
+  xmax = 1000000,
+  cycle list = { [samples of colormap=3] },
   legend columns = 2,
   group style = {
     group size = 1 by 2,
@@ -1408,23 +1364,20 @@ In this section we compare performances of different heuristics on uniformly ran
 \addlegendentry {Ivy}
 \addplot table [y={localMinPairs-random}] {\data};
 \addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
-\addplot table [y={inbetween-3-4-random}] {\data};
-\addlegendentry {\hyperref[alg:frh]{Hop-based fixed ratio} with $t=\frac{3}{4}$}
 
 \nextgroupplot[ylabel=\evalHops]
 \pgfplotstableread{data/algs/hops.dat}{\data}
 \addplot table [y={arrow-star}] {\data};
 \addplot table [y={ivy-random}] {\data};
 \addplot table [y={localMinPairs-random}] {\data};
-\addplot table [y={inbetween-3-4-random}] {\data};
 \end{groupplot}
 \end{tikzpicture}
 
-We can see that Arrow has better performance than all other heuristics, although both the local pair distance minimizer and hop-based fixed ratio heuristics get close to it. Since we used the best star tree with Arrow, it also beats others in the number of hops needed per request. The mysterious \hyperref[alg:frh]{hop-based fixed ratio} heuristic ends up only slightly worse than Arrow after a number of requests. Regarding Ivy, even though it constructs a local star on the request path, it doesn't do nearly as well as a global star in Arrow, but at least it's better than the local pair distance minimizer heuristic which seems to lack in regards to hop count, contrary to its time-based performance.
+We can see that Arrow has better performance than all other heuristics, although the Local Pair Distance Minimizer heuristic gets close to it. Since we used the best star tree with Arrow, it also beats others in the number of hops needed per request. Even though Ivy constructs a local star on the request path, it doesn't come close to Arrow's low number of hop counts on its global star. Perhaps unsurprisingly, Ivy has lower hop count than the Local Pair Distance Minimizer heuristic, contrary to its time-based performance. Curious is the seemingly-monotonous increase in request hops from $10^4$ to $10^6$, associated with a very slight increase in request time for which we don't have an explanation.
 
-\section{Adversarial requests}\label{result:adversary}
+\subsection{Adversarial Requests}\label{result:adversary}
 
-In this section we look at the performance of heuristics for \hyperref[req:adversary]{adversarial requests}. Here we include the \hyperref[alg:dynstar]{dynamic star} heuristic again, since it only converges to the best star tree if requests are uniformly random and therefore doesn't show the same behavior as Arrow with that as a starting tree. Our scenario is 1000 nodes with costs of uniformly random points in a 2-dimensional hypercube.
+In this section we look at the performance of heuristics for \hyperref[req:adversary]{adversarial requests}. Here we include the \hyperref[alg:dynstar]{Dynamic Star} heuristic again, since it only converges to the best star tree if requests are uniformly random and therefore doesn't show the same behavior as Arrow with that as a starting tree. Because again the Dynamic Star heuristic is rather slow to execute we only use 100 nodes. Costs are uniformly random points in a 2-dimensional hypercube.
 
 \begin{tikzpicture}
 \centering
@@ -1445,28 +1398,29 @@ In this section we look at the performance of heuristics for \hyperref[req:adver
 \addplot table [y={ivy-random}] {\data};
 \addlegendentry {Ivy}
 \addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local pair dist. min.}}
-\addplot table [y={inbetween-3-4-random}] {\data};
-\addlegendentry {\hyperref[alg:frh]{Hop-based fixed ratio} with $t=\frac{3}{4}$}
+\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
 \addplot table [y={dynamicStar-random}] {\data};
-\addlegendentry {\hyperref[alg:dynstar]{Dynamic star}}
+\addlegendentry {\hyperref[alg:dynstar]{Dynamic Star}}
 
 \nextgroupplot[ylabel=\evalHops]
 \pgfplotstableread{data/adversary/hops.dat}{\data}
 \addplot table [y={arrow-star}] {\data};
 \addplot table [y={ivy-random}] {\data};
 \addplot table [y={localMinPairs-random}] {\data};
-\addplot table [y={inbetween-3-4-random}] {\data};
 \addplot table [y={dynamicStar-random}] {\data};
 \end{groupplot}
 \end{tikzpicture}
 
-In this adversarial request case, the dynamic star heuristic seems to win out as the only heuristic that adapts its behavior based on request probabilities. Apparently it can go towards tree that doesn't allow such adversarial exploitation. Amazingly the fixed ratio algorithm is second place, followed by the local pair distance minimizer heuristic, which performs not too bad even with a high hop count. Perhaps by surprise, Ivy is the worst algorithm in this ranking.
+In this adversarial request case, the Dynamic Star heuristic seems to win out as the only heuristic that adapts its behavior based on request probabilities. Seemingly it tends towards a star that allows the least possible exploitation by an adversary. In particular it appears that after about $10^{2.5}$ requests it had enough request distribution samples to find a good star center, which got accepted quickly. Arrow with the best star is decent as well, although the best star is apparently not the best one to use in an adversarial case. The Local Pair Distance Minimizer heuristic is in third place, performing not too bad even with the highest hop count. Very peculiar is the sudden change of behavior regarding hop count at around $10^{3.5}$.
 
-\section{Ivy in Small Cliques}
+\section{Special Graphs}
+
+In this section we focus on evaluating heuristics that work well on special graphs.
+
+\subsection{Ivy in Small Cliques}
 \label{result:clique}
 
-The fact that Arrow with the best star tree seems to have been the best heuristic on uniformly random requests so far gives the impression that perhaps Arrow can't be beaten at all. In this section we construct a counterexample by looking at Ivy in a clique with a low number of nodes (3 to 8 nodes). We compare Ivy with Arrow on the \hyperref[tree:mpd]{minimum pair distance tree}. After $10^6$ requests the values for $\mathcal{C}_{time}$ are
+The fact that Arrow with the best star tree seems to have been the best heuristic on uniformly random requests so far gives the impression that perhaps Arrow can't be beaten at all. In this section we construct a counterexample by looking at Ivy in a clique with a low number of nodes. We compare Ivy with Arrow on the \hyperref[tree:mpd]{Minimum Pair Distance} tree, since that is the best possible tree to use according to \autoref{result:trees}. After simulating $10^6$ requests, the values for $\mathcal{C}_{time}$ are
 
 \begin{center}
 \npdecimalsign{.}
@@ -1490,21 +1444,21 @@ The fact that Arrow with the best star tree seems to have been the best heuristi
 \end{tabular}
 \end{center}
 
-Here we can see that Ivy is in fact better than Arrow in this scenario with 3 or 4 nodes, but not with 5 (very closely) or more. This pattern is expected to continue into higher node counts. The worse performance for higher node counts is explainable with what we've discovered in \autoref{result:convergence}: Ivy maintains a mostly random tree throughout, which as we've seen in \autoref{result:algs} leads to rather poor performance in comparison to Arrow. It is perhaps surprising that this doesn't hold for node counts of 3 and 4. For 3 nodes this is however easy to see since all requests paths with two hops in Ivy mean that the next request is guaranteed to be satisfied in one hop due to the shortcut behavior. With Arrow however this is not the case because all two-hop request paths can be followed by another two-hop request path in the other direction, since the tree structure is maintained. This beneficial short-cutting effect of Ivy seems to outweigh the tree randomization for 4 nodes as well, which makes sense since the number of trees is so low that they can't be randomized much.
+Here we can see that Ivy is in fact better than Arrow in this scenario with 3 or 4 nodes, but not with 5 (very closely) or more. This pattern is expected to continue into higher node counts. The worse performance for higher node counts is explainable with what we've discovered in \autoref{result:convergence}: Ivy maintains a mostly random tree throughout, which as we've seen in \autoref{result:algs} leads to rather poor performance in comparison to Arrow. It is perhaps surprising that this doesn't hold for node counts of 3 and 4. For 3 nodes this is however easy to see, since all requests paths with two hops in Ivy mean that the next request is guaranteed to be fulfilled in one hop due to the shortcut behavior. With Arrow however this is not the case because all two-hop request paths can be followed by another two-hop request path in the other direction, since the tree structure is maintained. This beneficial short-cutting effect of Ivy seems to outweigh the tree randomization for 4 nodes as well, which makes sense since the number of trees is so low that they can't be randomized much.
 
-\section{Recursive Clique}
+\subsection{Recursive Clique}
 
-In this section we will measure the performance of the \hyperref[alg:reclique]{recursive clique} heuristic with the hopes of it being the best heuristic to use for the type of graph it was made for. We use the parameters $l=6$, $b=3$ and $f=5$, meaning 6 levels of 3-node cliques for a total of $l^b=6^3=729$ nodes, with a cost of $f^{l-1}=5^{6-1}=3125$ between nodes in the highest level clique. We will use uniformly random requests.
+In this section we will measure the performance of the \hyperref[alg:reclique]{Recursive Clique} heuristic with the hopes of it being the best heuristic to use for the type of graph it was made for. We use the parameters $l=6$, $b=3$ and $\eta=5$, meaning 6 levels of 3-node cliques for a total of $l^b=6^3=729$ nodes, with a cost of $\eta^{l-1}=5^{6-1}=3125$ between nodes in the highest level clique. We will use uniformly random requests.
 
-We compare the performance to the usual heuristics of best star Arrow, \hyperref[alg:lpm]{local pair minimizer}, \hyperref[alg:frh]{hop-based fixed ratio} and Ivy. However we will add another contestant, namely Arrow starting with a minimum spanning tree. This is because a minimum spanning tree on such a recursive clique graph directly corresponds to a tree satisfying the \hyperref[reclique-invariant]{invariant} needed for recursive cliques heuristic, meaning there can be at most one edge between virtual nodes on the same layer, which is also beneficial to Arrow for the same reason it's beneficial to the recursive clique heuristic.
+We compare the performance to the usual heuristics of best star Arrow, \hyperref[alg:lpm]{Local Pair Distance Minimizer} and Ivy. However we will add another contestant: Arrow starting with a minimum spanning tree. This is because a minimum spanning tree on such a recursive clique graph directly corresponds to a tree satisfying the \hyperref[reclique-invariant]{invariant} needed for the Recursive Clique heuristic, meaning there can be at most one edge between group nodes on the same layer, which is also beneficial to Arrow for the same reason it's beneficial to the Recursive Clique heuristic.
 
-We first look at the average request time:
+We look at the average request time:
 
 \begin{tikzpicture}
 \begin{groupplot}[
   ylabel = \evalTime,
   xmax = 1000000,
-  cycle list = { [samples of colormap=6] },
+  cycle list = { [samples of colormap=5] },
   small,
   group style = {
     group size = 2 by 1,
@@ -1515,17 +1469,15 @@ We first look at the average request time:
 \pgfplotstableread{data/reclique/time.dat}{\data}
 \nextgroupplot[legend to name={CommonLegend}]
 \addplot table [y={reclique}] {\data};
-\addlegendentry {\hyperref[alg:reclique]{Recursive clique}}
+\addlegendentry {\hyperref[alg:reclique]{Recursive Clique}}
 \addplot table [y={arrow-star}] {\data};
 \addlegendentry {Best star Arrow}
-\addplot table [y={inbetween-3-4-random}] {\data};
-\addlegendentry {\hyperref[alg:frh]{Hop-based Fixed Ratio} with $t=\frac{3}{4}$}
-\addplot table [y={ivy-random}] {\data};
-\addlegendentry {Ivy}
 \addplot table [y={arrow-mst}] {\data};
 \addlegendentry {Min. sp. tree Arrow}
 \addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local pair minimizer}}
+\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
 \node (t) at (axis cs:1000000,2.4) {};
 \node (b) at (axis cs:1000000,1.5) {};
 \draw[thick,red,dashed] (axis cs:100000,2.4) rectangle (axis cs:1000000,1.5);
@@ -1533,7 +1485,6 @@ We first look at the average request time:
 \nextgroupplot[xmin=100000,ymin=1.5,ymax=2.4]
 \addplot table [y={reclique}] {\data};
 \addplot table [y={arrow-star}] {\data};
-\addplot table [y={inbetween-3-4-random}] {\data};
 \addplot table [y={arrow-mst}] {\data};
 \addplot table [y={localMinPairs-random}] {\data};
 \end{groupplot}
@@ -1542,72 +1493,28 @@ We first look at the average request time:
 \draw[red,thick,dashed] (b) -- (group c2r1.south west);
 \end{tikzpicture}
 
-Sure enough, the recursive clique heuristic wins over all others. The beneficial shortcut behavior of Ivy in 3-cliques is unsurprisingly maintained with multiple levels of cliques. We can also see that in this case Arrow with a minimum spanning tree does indeed perform better than Arrow on the best star tree. Ivy is the worst heuristic in this scenario, which makes sense as a random tree will have plenty of long edges. The mysterious fixed ratio heuristic maintains its decent performance as well. The local pair minimizer heuristic seems to converge towards the performance of a minimum spanning tree. We now also look at the average request hops for these heuristics:
-
-\begin{tikzpicture}
-\begin{axis}[
-  ylabel = \evalHops,
-  xmax = 1000000,
-  cycle list = { [samples of colormap=6] },
-]
-\pgfplotstableread{data/reclique/hops.dat}{\data}
-\addplot table [y={reclique}] {\data};
-\addlegendentry {\hyperref[alg:reclique]{Recursive clique}}
-\addplot table [y={arrow-star}] {\data};
-\addlegendentry {Best star Arrow}
-\addplot table [y={inbetween-3-4-random}] {\data};
-\addlegendentry {\hyperref[alg:frh]{Hop-based Fixed Ratio} with $t=\frac{3}{4}$}
-\addplot table [y={ivy-random}] {\data};
-\addlegendentry {Ivy}
-\addplot table [y={arrow-mst}] {\data};
-\addlegendentry {Min. sp. tree Arrow}
-\addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local pair minimizer}}
-\end{axis}
-\end{tikzpicture}
-
-What stands out in this plot is the fact that the fixed ratio heuristic seems to converge towards an average hop count of 2, which is the range of a star tree. We further look at the average tree edge distance:
-
-\begin{tikzpicture}
-\begin{axis}[
-  ylabel = \evalEdges,
-  xmax = 1000000,
-  cycle list = { [samples of colormap=6] },
-]
-\pgfplotstableread{data/reclique/treeWeight.dat}{\data}
-\addplot+[dashed,shorten <=3] table [y={reclique}] {\data};
-\addlegendentry {\hyperref[alg:reclique]{Recursive clique}}
-\addplot table [y={arrow-star}] {\data};
-\addlegendentry {Best star Arrow}
-\addplot table [y={inbetween-3-4-random}] {\data};
-\addlegendentry {\hyperref[alg:frh]{Hop-based Fixed Ratio} with $t=\frac{3}{4}$}
-\addplot table [y={ivy-random}] {\data};
-\addlegendentry {Ivy}
-\addplot+[dashed] table [y={arrow-mst}] {\data};
-\addlegendentry {Min. sp. tree Arrow}
-\addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local pair minimizer}}
-\end{axis}
-\end{tikzpicture}
-
-From this we can hypothesize that the local pair minimizer heuristic seems to converge towards a tree satisfying the \hyperref[reclique-invariant]{recursive clique tree invariant} as the minimum spanning tree already does as well. This would explain why it performs this well for $\mathcal{C}_{time}$.
+Sure enough, the Recursive Clique heuristic wins over all others. The beneficial shortcut behavior of Ivy in 3-cliques is unsurprisingly maintained with multiple levels of cliques. We can also see that in this case, Arrow with a minimum spanning tree does indeed perform better than Arrow on the best star tree. Ivy is the worst heuristic in this scenario, which makes sense, since a tree constructed with Ivy can have a lot of long edges. The Local Pair Distance Minimizer heuristic seems to converge towards the performance of Arrow on the best star.
 
 \chapter{Summary}
 
-We found out that the \hyperref[tree:mpd]{minimum pair distance} tree is understandably the best initial tree to use for Arrow, however we only know how to find this tree in $\mathcal{O}(n^n)$ time, which is impractical for many nodes. For a scenario of uniformly random request and 2-dimensional uniformly random hypercube costs, the \hyperref[tree:star]{best star} tree turned out to be the next best initial tree for Arrow, which only needs $\mathcal{O}(n^2)$ time to be calculated. The \hyperref[tree:ampd]{approximated minimum pair distance} tree algorithm we devised turned out to be a worse tree to use in such scenarios, with worse performance and worse running time.
+In this thesis we devised some new Arvy heuristics and compared their performance. We also looked at what trees are best suited for Arrow.
 
-Multiple new heuristics were explored, mainly on uniformly random requests on graph costs from uniformly random points in a 2-dimensional hypercube
+With uniformly random request sequences and 2-dimensional uniformly random hypercube costs, the \hyperref[tree:mpd]{Minimum Pair Distance} tree was found to be the best initial tree to use for Arrow. However the only algorithm we know of to construct such a tree takes $\mathcal{O}(n^n)$ time, which is impractical for many nodes. The \hyperref[tree:star]{best star} tree turned out to be the next best tree for Arrow, only needing $\mathcal{O}(n^2)$ time to be constructed. The \hyperref[tree:ampd]{Approximated Minimum Pair Distance} tree algorithm we devised turned out to be a worse tree to use in such scenarios.
+
+Multiple new heuristics were explored:
 \begin{itemize}
-\item The \hyperref[alg:ecm]{edge cost minimizer} heuristic tries to minimize the total edge cost in the spanning tree, resulting in it converging to a minimum spanning tree. As a result this is the same as running Arrow on such a tree from the start.
-\item The \hyperref[alg:dynstar]{dynamic star} heuristic approximately measures the probability distribution of requests, which it uses to find a good star tree over time. Since on uniformly random requests this heuristic converges to the best star tree, Arrow can be used directly from the start in that case. However in \hyperref[req:adversary]{adversarial requests} this heuristic turned out to be the fastest one. Unfortunately due to it needing $\mathcal{O}(n^2)$ running time in every node this is one of the slowest algorithms to run. Another problem with this algorithm is the fact that the longer it runs, the less adaptive to changes it is. We discussed \hyperref[alg:ncdynstar]{non-converging} variants of this algorithm to remedy that.
-\item We found out that Ivy is better than Arrow on very small cliques of 3 and 4 nodes. We exploited this fact for the \hyperref[alg:reclique]{recursive clique} heuristic which is specialized for multi-level clique graphs. This resulted in it being the best known heuristic for such graphs. This at least means that Arvy heuristics that do change the tree can be better than Arrow. This heuristics idea can be extended much further to arbitrary nested graphs as well.
-\item We tested \hyperref[alg:fr]{fixed ratio} heuristics based on choosing nodes a fixed ratio along the request path. Surprisingly a \hyperref[alg:frh]{hop-based} version with parameter $t=\frac{3}{4}$ turned out to work well for unknown reason. This is especially remarkable since this heuristic does not do any decisions based on graph costs. In contrary, the \hyperref[alg:frc]{cost-based} versions had less success even.
+\item The \hyperref[alg:ecm]{Edge Cost Minimizer} heuristic converges to Arrow with a minimum spanning tree.
+\item The \hyperref[alg:lpm]{Local Pair Distance Minimizer} heuristic shows great potential in many cases.
+\item The \hyperref[alg:dynstar]{Dynamic Star} heuristic is the same as Arrow with a best star tree for uniformly random requests. However in \hyperref[req:adversary]{adversarial requests}, this heuristic turned out to be the best one to use. Unfortunately due to it needing $\mathcal{O}(n^2)$ running time in every node along the request path, this is one of the slowest heuristics to run.
+\item We found that Ivy is better than Arrow on very small cliques of 3 and 4 nodes. We exploited this fact for the \hyperref[alg:reclique]{Recursive Clique} heuristic, which showed great performance on the special graphs it was designed for. The idea can be extended much further to arbitrary nested graphs as well.
+\item We tested \hyperref[alg:fr]{Fixed Ratio} heuristics based on choosing nodes a fixed ratio along the request path. Running the simulations made it clear that such an algorithm performs really poorly, with ratios near $1$ even worse than Arrow on a random tree.
 \end{itemize}
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 
 \appendix
+
 
 \chapter{Implementation Notes}
 
@@ -1617,7 +1524,7 @@ As part of this thesis, a Haskell library for writing and testing Arvy heuristic
 
 An Arvy heuristic is correct if nodes can only set their new parent to nodes that were previously visited on the request path. With each node being referenced as an integer, this would be a problem, because a node $a_{k+1}$ could simply set $parent(a_{k+1})=0$ even though it might very well be the case that $0\notin A_k=\{a_{0},\dots,a_{k}\}$, which would be an invalid choice. So instead of representing nodes as integers, we represent them as some arbitrary type with certain capabilities that reflect it being part of the request path. In particular such types will not be constructible on their own.
 
-One such trivial capability we'll need is that once we have some node index, we can forward that value via messages to other nodes. This makes sense to require, since some node $a_{k+1}$ can't know about the possible new parents $\{a_{0},\dots,a_{k}\}$ unless these nodes somehow forwarded their own indices along with the messages. In Haskell, this forwarding can be represented as a typeclass on two types $i_a$ and $i_b$, where $i_a$ represents a node index earlier in the request path than node index $i_b$. We will state that if you have a value of $i_a$ you can get a value of $i_b$, which can be done with a typeclass parametric on those types, holding a function for converting from $i_a$ to $i_b$. This typeclass is trivially implementable for all same types $i=i_a=i_b$, since forwarding will then simply be the identity function.
+One such trivial capability we will need is that once we have some node index, we can forward that value via messages to other nodes. This makes sense to require, since some node $a_{k+1}$ can't know about the possible new parents $\{a_{0},\dots,a_{k}\}$ unless these nodes somehow forwarded their own indices along with the messages. In Haskell, this forwarding can be represented as a typeclass on two types $i_a$ and $i_b$, where $i_a$ represents a node index earlier in the request path than node index $i_b$. We will state that if you have a value of $i_a$ you can get a value of $i_b$, which can be done with a typeclass parametric on those types, holding a function for converting from $i_a$ to $i_b$. This typeclass is trivially implementable for all same types $i=i_a=i_b$, since forwarding will then simply be the identity function.
 
 \begin{minted}{haskell}
 -- | A class for node indices that can be forwarded between nodes
@@ -1652,6 +1559,8 @@ instance NodeIndex Node where
   type Pred Node = Node
   type Succ Node = Node
 \end{minted}
+
+
 
 \section{Arvy Heuristic Abstraction}
 
@@ -1696,13 +1605,35 @@ data ArvyBehavior i msg r = ArvyBehavior
   }
 \end{minted}
 
-This succinct-yet-complicated type includes a lot of information. As an overview, when a node makes a request for the token, $\texttt{arvyMakeRequest}$ is called, which generates a message to be sent to the nodes parent. Then when a message arrives at a node, depending on whether it has the token or not, the functions $\texttt{arvyReceiveRequest}$ or $\texttt{arvyForwardRequest}$ are called respectively, the latter of which then needs to generate another message for forwarding. Function $\texttt{arvyForwardRequest}$ is the most interesting one since it has to handle both receiving and sending a message, so we'll look more closely at its type signature.
+This succinct-yet-complicated type includes a lot of information. As an overview, when a node makes a request for the token, $\texttt{arvyMakeRequest}$ is called, which generates a message to be sent to the nodes parent. Then when a message arrives at a node, depending on whether it has the token or not, the functions $\texttt{arvyReceiveRequest}$ or $\texttt{arvyForwardRequest}$ are called respectively, the latter of which then needs to generate another message for forwarding. Function $\texttt{arvyForwardRequest}$ is the most interesting one since it has to handle both receiving and sending a message, so we will look more closely at its type signature.
 
 For one it says that nodes receive messages of type $\texttt{msg (Pred i)}$ whose values can only include node indices of predecessors to the current node in the request path. It then needs to return a value of $\texttt{Pred i}$ as the new parent for the current node. With the way node indices are defined in the previous section, the only possible values to return are ones received from the message. This means to select a new parent, nodes have to decode the message which will contain node indices given by past nodes, then return one of them.
 
 In addition, the function receives values $\texttt{i}$ and $\texttt{Succ i}$ representing the current node index and the current nodes parent respectively. In addition to the new parent node to select, the function also needs to return a $\texttt{msg i}$ representing the message to be forwarded. The $\texttt{msg}$ type being parametrized by $\texttt{i}$ enforces that this message can only contain node indices to previous nodes (since all previous node indices $\texttt{Pred i}$ can be forwarded to $\texttt{i}$) or the current node (which is of type $\texttt{i}$ already). $\texttt{Succ i}$ however can't be sent in the message because there's no way to convert it to type $\texttt{i}$.
 
 Functions $\texttt{arvyMakeRequest}$ and $\texttt{arvyReceiveRequest}$ are special cases of $\texttt{arvyForwardRequest}$. The former is special in that a node making a request does not receive any message and it doesn't need to select a new parent since it becomes the root. The latter is special in that the final root node receiving the request doesn't have a parent and doesn't need to forward a message. Having separate functions for these greatly simplifies the code.
+
+\chapter{Non-converging Dynamic Star}\label{alg:ncdynstar}
+
+In section \autoref{alg:dynstar} we introduced the Dynamic Star heuristic, which eventually converges to a static tree. This is because as the total number of request increases, changes to $n_i^v$ matter less. After $R\in\mathbb{N}$ requests, another request can only cause a maximum change to $p_i^v$ of
+\begin{equation}
+\begin{split}
+\left|p_i^v-p_i^{'v}\right| = & \left|\frac{n_i^v}{\sum_jn_j^v}-\frac{n_i^{'v}}{\sum_jn_j^{'v}}\right| = \left|\frac{n_i^v}{R}-\frac{n_i^v+\{0,1\}}{R+1}\right| \\
+= & \left|\frac{n_i^vR+n_i^v-n_i^vR+\{0,1\}R}{R(R+1)}\right| = \frac{\left|n_i^v-\{0,1\}R\right|}{R(R+1)} \\
+\leq & \frac{R}{R(R+1)}=\frac{1}{R+1}\to_{R\to\infty} 0
+\end{split}
+\end{equation}
+
+where $\{0,1\}$ is $1$ or $0$ depending on whether $n_i^v$ was incremented or not.
+
+This is problematic because it means the longer a system runs, the less it's adapting to changes in the probability pattern. If after $10^{100}$ requests a request-controlling adversary shows up, it could exploit this practically static tree by constantly bouncing requests between nodes with a slow connection. If this were to happen in the beginning, it wouldn't be a problem as the heuristic could adapt to this by choosing a better star center quickly. This means the algorithm's behavior is dependent on how long it has been running. In this thesis we only look at uniform request patterns where this does not happen, but here we will shortly discuss a remedy for this.
+
+An idea to solve this problem is to give less weight to older requests, which can be done in multiple ways:
+\begin{itemize}
+\item After every increment of $n_i^v$ by one, all counts get decreased by a constant factor: $\forall i:n_i^v\gets \alpha\cdot n_i^v$ with $0<\alpha<1$. If this was a global view this would work well, since after $R$ requests an original contribution to $n_i^{global}$ of $1$ would be reduced to $\alpha^R$, implementing an exponential weight falloff. However since this isn't a global view, it won't work as well, because depending on the propagation speed with $|S|$, the $n_i^v$ will be more outdated, resulting in old requests having more weight than they would have in a global view.
+\item A slight improvement over this can be achieved: For each message sent from $v$, the total amount of requests known $\sum_jn_j^v$ is sent along as well. When received by $u$, it's possible for it to calculate the difference of known requests $d\coloneqq\sum_jn_j^v-\sum_jn_j^u$. This means all $n_i^u$ are about that many requests more in the past than $n_i^v$, so an update is done on them to compensate for this: $\forall i:n_i^u\gets\alpha^d\cdot n_i^u$. This is better because the multiplication with $\alpha$ doesn't depend on the selection of $|S|$ anymore, resulting in older values being more accurately weighed.
+\item With the requirement of nodes having a synchronized clock it's possible to improve on this: Every fixed time step, all counts in all nodes get decreased by the factor: $\forall i:n_i^v\gets \alpha\cdot n_i^v$. This is now an accurate time-based exponential falloff, independent of both the propagation speed and the request pattern.
+\end{itemize}
 
 
 \end{document}
