@@ -66,7 +66,7 @@ In this thesis we come up with new Arvy heuristics and measure their empirical p
 
 \section{Related Work}
 
-Raymond~\cite{Ray} originally introduced an Arrow algorithm where a radiating star tree was found to be the best topology. Simulations showed that randomly constructed trees have an average diameter of about $\log n$ which was also found to be a good approximation for the number of messages necessary for a request. Under heavy load however it was shown to only require about $4$ messages. Later Demmer and Herlihy~\cite{Arrow} independently developed the same algorithm. They analyzed its complexity for a minimum spanning tree and found it to be optimal within a factor of $\frac{1}{2}(1+stretch(G))$ where $stretch(G)$ measures how far from optimal a path through the minimum spanning tree can be. Kuhn and Wattenhofer~\cite{Kuhn} proved that Arrow is $\mathcal{O}(\log D)$-competitive, where $D$ is the diameter of the spanning tree it operates on. Herlihy and Warres~\cite{Tale} compared Arrow to a home-base algorithm and found Arrow to perform much better under load. Ghodselahi and Kuhn~\cite{Ghod} showed that the competitive ratio of the Arrow protocol is constant on certain tree topologies. Peleg and Reshef~\cite{Peleg} showed that Arrow on the best shortest-path tree has at most 2 times longer paths than in the graph.
+Raymond~\cite{Ray} originally introduced an Arrow algorithm where a radiating star tree was found to be the best topology. Simulations showed that randomly constructed trees have an average diameter of about $\log n$ which was also found to be a good approximation for the number of messages necessary for a request. Under heavy load however it was shown to only require about $4$ messages. Later Demmer and Herlihy~\cite{Arrow} independently developed the same algorithm. They analyzed its complexity for a minimum spanning tree and found it to be optimal within a factor of $\frac{1}{2}(1+\text{MST-stretch}(G))$. Kuhn and Wattenhofer~\cite{Kuhn} proved that Arrow is $\mathcal{O}(\log D)$-competitive, where $D$ is the diameter of the spanning tree it operates on. Herlihy and Warres~\cite{Tale} compared Arrow to a home-base algorithm and found Arrow to perform much better under load. Ghodselahi and Kuhn~\cite{Ghod} showed that the competitive ratio of the Arrow protocol is constant on certain tree topologies. Peleg and Reshef~\cite{Peleg} showed that Arrow on the best shortest-path tree has at most 2 times longer paths than in the graph.
 
 Ivy was introduced before Arrow by Li and Hudak~\cite{Ivy}. An amortized bound of $\mathcal{O}(\log n)$ for path reversal was shown by Ginat et~al.~\cite{Ginat} which is equivalently Ivy's number of messages per request. In~\cite{Distr} this bound was shown to be tight with a tree that requires $\log n$ many messages for every request in a specific request sequence.
 
@@ -526,7 +526,7 @@ An even better measure to minimize is the total distance between all pairs of no
 
 where $d_T(u,v)$ is the cost of the shortest path between nodes $u$ and $v$ in the tree. This directly corresponds to the performance of Arrow with uniformly random requests, since all pairs of nodes have the same probability of being used, meaning their distance in the tree contributes the same amount to the cost of an average request. In \autoref{tree:mpd} we discuss such minimal trees further. However to calculate this value, a global view of the graph costs in needed, which nodes do not have at runtime.
 
-We can however devise a heuristic that minimizes pair distance as good as possible in a local subgraph consisting of only the nodes in the request path. Specifically when node $a_{k+1}$ needs to select a new parent node out of the candidates $A_k=\{a_{0},\dots,a_{k}\}$, it looks at the tree graph $T=(A_k,E')$ of nodes in the request path that was constructed from the parent selections of all previous nodes in the path. It then selects the node $a_{i}$ such that total pair distance is minimized, meaning $\mathcal{C}_{pairs}(T_i)$ is minimal with $T_i=(A_k\cup a_{k+1},E'\cup(a_{i},a_{k+1}))$ being the new spanning tree if node $i$ were to be selected. See \autoref{fig:lpm} for an example. An algorithm for computing this efficiently can work similar to the one to be described in \autoref{tree:ampd}.
+We can however devise a heuristic that minimizes pair distance as good as possible in a local subgraph consisting of only the nodes in the request path. Specifically when node $a_{k+1}$ needs to select a new parent node out of the candidates $A_k=\{a_{0},\dots,a_{k}\}$, it looks at the tree graph $T=(A_k,E')$ of nodes in the request path that was constructed from the parent selections of all previous nodes in the path. It then selects the node $a_{i}$ such that total pair distance is minimized, meaning $\mathcal{C}_{pairs}(T_i)$ is minimal with $T_i=(A_k\cup a_{k+1},E'\cup(a_{i},a_{k+1}))$ being the new spanning tree if node $i$ were to be selected. See \autoref{fig:lpm} for an example. This minimum can indeed be calculated efficiently. The main ideas of this calculation are described later in \autoref{tree:ampd}, which discusses an iterative tree initialization algorithm.
 
 \begin{algorithmic}
 \Function{SelectNewParent}{$A_k$}
@@ -1195,7 +1195,7 @@ For this evaluation we run Arrow on different initial trees to see how well they
 \end{axis}
 \end{tikzpicture}
 
-Not surprisingly, the tree minimizing pair distance outperforms every other tree. However due to our algorithm for this tree construction having a running time of $\mathcal{O}(n^n)$, we can't use it for more nodes. Interestingly, the next best one is the best star tree with only a running time of $\mathcal{O}(n^2)$, followed closely by the Approximated Minimum Pair Distance tree with running time of $\mathcal{O}(n^3)$. From the plot we can also see that a completely random tree is understandably not a good tree to use for low average request time. Conclusively we will use the best star tree for future performance evaluations of Arrow for random requests. Now let's also look at the number of hops for each of them:
+Not surprisingly, the tree minimizing pair distance outperforms every other tree. Unfortunately our algorithm for constructing this tree needs impractical $\mathcal{O}(n^n)$ time. Interestingly, the next best one is the best star tree with only a running time of $\mathcal{O}(n^2)$, followed closely by the Approximated Minimum Pair Distance tree with running time of $\mathcal{O}(n^3)$. From the plot we can also see that a completely random tree is understandably not a good tree to use for low average request time. Conclusively we will use the best star tree for future performance evaluations of Arrow for random requests. Now let's also look at the number of hops for each of them:
 
 \begin{tikzpicture}
 \centering
@@ -1343,7 +1343,6 @@ In this section we evaluate heuristics to find the best ones for different reque
 
 In this section we compare performances of different heuristics on uniformly random requests, ignoring the ones whose eventual behavior can be achieved with Arrow on a specific tree as discovered in \autoref{result:convergence} (this includes the \hyperref[alg:dynstar]{Dynamic Star} and \hyperref[alg:ecm]{Edge Cost Minimizer} heuristics). We will again be using uniformly random points in a 2-dimensional hypercube. We use 1000 nodes.
 
-
 \begin{tikzpicture}
 \centering
 \begin{groupplot}[
@@ -1374,7 +1373,9 @@ In this section we compare performances of different heuristics on uniformly ran
 \end{groupplot}
 \end{tikzpicture}
 
-We can see that Arrow has better performance than all other heuristics, although the Local Pair Distance Minimizer heuristic gets close to it. Since we used the best star tree with Arrow, it also beats others in the number of hops needed per request. Even though Ivy constructs a local star on the request path, it doesn't come close to Arrow's low number of hop counts on its global star. Perhaps unsurprisingly, Ivy has lower hop count than the Local Pair Distance Minimizer heuristic, contrary to its time-based performance. Curious is the seemingly-monotonous increase in request hops from $10^4$ to $10^6$, associated with a very slight increase in request time for which we don't have an explanation.
+In the main plot for the average request time, we can see that Arrow clearly performs better than the other heuristics, although the Local Pair Distance Minimizer gets close to it. Ivy however is far off.
+
+Arrow with a star tree also naturally has a lower hop count than others. Even though Ivy builds a local star on the request path, it does not come close to a global star. Noticeable is that the Local Pair Distance Minimizer heuristic has a higher average hop count than Ivy even though it performs much better time-wise. This shows that the number of hops can have very little to do with request time. Curious is the seemingly-monotonous increase in request hops from $10^4$ to $10^6$, associated with a very slight increase in request time, for which we don't have an explanation.
 
 \subsection{Adversarial Requests}\label{result:adversary}
 
