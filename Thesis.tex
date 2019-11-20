@@ -66,7 +66,7 @@ In this thesis we come up with new Arvy heuristics and measure their empirical p
 
 \section{Related Work}
 
-Raymond~\cite{Ray} originally introduced an Arrow algorithm where a radiating star tree was found to be the best topology. Simulations showed that randomly constructed trees have an average diameter of about $\log n$ which was also found to be a good approximation for the number of messages necessary for a request. Under heavy load however it was shown to only require about $4$ messages. Later Demmer and Herlihy~\cite{Arrow} independently developed the same algorithm. They analyzed its complexity for a minimum spanning tree and found it to be optimal within a factor of $\frac{1}{2}(1+\text{MST-stretch}(G))$. Kuhn and Wattenhofer~\cite{Kuhn} proved that Arrow is $\mathcal{O}(\log D)$-competitive, where $D$ is the diameter of the spanning tree it operates on. Herlihy and Warres~\cite{Tale} compared Arrow to a home-base algorithm and found Arrow to perform much better under load. Ghodselahi and Kuhn~\cite{Ghod} showed that the competitive ratio of the Arrow protocol is constant on certain tree topologies. Peleg and Reshef~\cite{Peleg} showed that Arrow on the best shortest-path tree has at most 2 times longer paths than in the graph.
+Raymond~\cite{Ray} originally introduced an Arrow algorithm where a radiating star tree was found to be the best topology. Simulations showed that randomly constructed trees have an average diameter of about $\log n$ which was also found to be a good approximation for the number of messages necessary for a request. Under heavy load however it was shown to only require about $4$ messages. Also for random trees, R{\'e}nyi and Szekeres~\cite{Height} showed the expected tree height from an arbitrary root node to be about $\sqrt{2n\pi}$. Later Demmer and Herlihy~\cite{Arrow} independently developed the same Arrow algorithm. They analyzed its complexity for a minimum spanning tree and found it to be optimal within a factor of $\frac{1}{2}(1+\text{MST-stretch}(G))$. Kuhn and Wattenhofer~\cite{Kuhn} proved that Arrow is $\mathcal{O}(\log D)$-competitive, where $D$ is the diameter of the spanning tree it operates on. Herlihy and Warres~\cite{Tale} compared Arrow to a home-base algorithm and found Arrow to perform much better under load. Ghodselahi and Kuhn~\cite{Ghod} showed that the competitive ratio of the Arrow protocol is constant on certain tree topologies. Peleg and Reshef~\cite{Peleg} showed that Arrow on the best shortest-path tree has at most 2 times longer paths than in the graph.
 
 Ivy was introduced before Arrow by Li and Hudak~\cite{Ivy}. An amortized bound of $\mathcal{O}(\log n)$ for path reversal was shown by Ginat et~al.~\cite{Ginat} which is equivalently Ivy's number of messages per request. In~\cite{Distr} this bound was shown to be tight with a tree that requires $\log n$ many messages for every request in a specific request sequence.
 
@@ -663,6 +663,8 @@ c_R(T_c)=\sum_{i,j}p_ip_j(c(i,c)+c(c,j))
 Now this Dynamic Star heuristic measures the distribution $p_i$ at runtime and dynamically adjusts the tree according to it, striving for a star. The fact that Arvy is a distributed algorithm however poses a problem, since nodes can't obtain a global view of the system to get accurate values for $p_i$, so we will have to make do with every node $v$ having a local approximation $p_i^v$ of $p_i$.
 
 To implement this, the idea is that each node $v$ maintains counts $n_i^v\in\mathbb{N}_0$ of how many times each node $i$ made a request, initialized with all $0$. Because $v$ always knows how many requests it made itself, the value for $n_v^v$ is always accurate, while all others might be outdated values. To update $n_i^v$, the following rules are used:
+
+\newpage
 \begin{enumerate}
 \item When node $v$ makes a request, set $n_v^v\gets n_v^v+1$
 \label{rule1}
@@ -748,7 +750,7 @@ A recursive clique graph has a level count parameter $l$ representing the number
 
 When running a recursive Ivy algorithm on such a graph, the guiding rules for selecting new parents are as follows:
 \begin{enumerate}
-\item\label{reclique-invariant} The spanning tree needs to maintain the invariant that only at most one edge can exist between all group nodes in a single clique. This ensures that if both the requesting graph node and the one holding the token are in the same group node, the request path does not exit that group node. In addition this means that a request path can include at most $b-1$ edges of length $\eta^{l-1}$ from the most upper level (and similarly for lower levels), therefore limiting the number of long edges.
+\item\label{reclique-invariant} The spanning tree needs to maintain the invariant that only at most one edge can exist between two group nodes in a single clique. This ensures that if both the requesting graph node and the one holding the token are in the same group node, the request path does not exit that group node. In addition this means that a request path can include at most $b-1$ edges of length $\eta^{l-1}$ from the most upper level (and similarly for lower levels), therefore limiting the number of long edges.
 \item If multiple graph nodes on the request path satisfy the first rule, choose the earliest possible one of them as the new parent. This ensures that the inverted arrows on the request path lead future requests to the root on the fastest way possible, giving Ivy-like shortcut behavior on each clique and across levels.
 \label{reclique-rule-early}
 \end{enumerate}
@@ -1125,7 +1127,7 @@ Because the tree gets one more node in every iteration, the sequence for the num
 
 \chapter{Results}
 
-In this chapter we simulate Arvy algorithms on different \textit{scenarios} to see how well they perform. A scenario consists of the number of nodes in the graph, what edge costs to use (see \autoref{graph-costs}) and the sequence of requests (see \autoref{request-sequences}). We will focus on \hyperref[costs:cube]{uniformly random 2-dimensional hypercube} costs since it provides interesting and realistic values, even for a low number of nodes.
+In this chapter we simulate Arvy algorithms on different \textit{scenarios} to see how well they perform. A scenario consists of the number of nodes in the graph, what edge costs to use (see \autoref{graph-costs}) and the sequence of requests (see \autoref{request-sequences}). We will focus on \hyperref[costs:cube]{uniformly random 2-dimensional hypercube} costs since it provides interesting and realistic values, even for a low number of nodes. Similarly we will mostly use uniformly random request sequences.
 
 We then run different Arvy algorithms from \autoref{algs} with different initial trees on such scenarios and compare them against each other. Initial trees are described in \autoref{initial-trees}. Since all heuristics except Arrow change the tree structure, we run them with a uniformly random initial tree as a neutral choice. Only for Arrow itself we vary the initial tree to find the best one to use.
 
@@ -1168,7 +1170,7 @@ For evaluating how well heuristics perform we look at the measures defined in \a
 
 \section{Preliminary Results}
 
-In goal of this section is to reduce the number of possible combinations of heuristics, initial trees and other parameters. In particular we want to see which tree works best for Arrow, confirm whether certain algorithms converge to a static tree and find a good value for $t$ in the Fixed Ratio heuristics.
+The goal of this section is to reduce the number of possible combinations of heuristics, initial trees and other parameters. In particular we want to see which tree works best for Arrow, confirm whether certain algorithms converge to a static tree and find a good value for $t$ in the Fixed Ratio heuristics.
 
 \subsection{Best Initial Trees for Arrow}\label{result:trees}
 
@@ -1195,7 +1197,7 @@ For this evaluation we run Arrow on different initial trees to see how well they
 \end{axis}
 \end{tikzpicture}
 
-Not surprisingly, the tree minimizing pair distance outperforms every other tree. Unfortunately our algorithm for constructing this tree needs impractical $\mathcal{O}(n^n)$ time. Interestingly, the next best one is the best star tree with only a running time of $\mathcal{O}(n^2)$, followed closely by the Approximated Minimum Pair Distance tree with running time of $\mathcal{O}(n^3)$. From the plot we can also see that a completely random tree is understandably not a good tree to use for low average request time. Conclusively we will use the best star tree for future performance evaluations of Arrow for random requests. Now let's also look at the number of hops for each of them:
+Not surprisingly, the tree minimizing pair distance outperforms every other tree. Unfortunately our algorithm for constructing this tree needs impractical $\mathcal{O}(n^n)$ time. Interestingly, the next best one is the best star tree with only a running time of $\mathcal{O}(n^2)$, followed closely by the Approximated Minimum Pair Distance tree with running time of $\mathcal{O}(n^3)$. From the plot we can also see that a completely random tree is understandably not a good tree to use for low average request time. Conclusively we will use the best star tree for future performance evaluations of Arrow for random requests. Now let's also look at the number of hops for each of them.
 
 \begin{tikzpicture}
 \centering
@@ -1218,7 +1220,7 @@ Not surprisingly, the tree minimizing pair distance outperforms every other tree
 \end{axis}
 \end{tikzpicture}
 
-As one would expect from stars trees, they have a very low hop count. This value is lower than $2$ because nodes can make requests when they have the token already, giving a hop count of $0$, and the center node always has a hop count $\leq 1$. Interestingly, the random tree has a decently low hop count.
+As one would expect from stars trees, they have a very low hop count. This value is lower than $2$ because nodes can make requests when they have the token already, giving a hop count of $0$, and the center node always has a hop count $\leq 1$. Interestingly, the random tree has a decently low hop count, which is related to the results in~\cite{Ray, Height}.
 
 Note that while this is only the result for a single random seed with only 10 nodes, the results are similar for other configurations. Also, since in this case the tree never changes, it would be possible to calculate accurate expectations for these measures without having to rely on a simulation.
 
@@ -1506,8 +1508,8 @@ With uniformly random request sequences and 2-dimensional uniformly random hyper
 Multiple new heuristics were explored:
 \begin{itemize}
 \item The \hyperref[alg:ecm]{Edge Cost Minimizer} heuristic converges to Arrow with a minimum spanning tree.
-\item The \hyperref[alg:lpm]{Local Pair Distance Minimizer} heuristic shows great potential in many cases.
-\item The \hyperref[alg:dynstar]{Dynamic Star} heuristic is the same as Arrow with a best star tree for uniformly random requests. However in \hyperref[req:adversary]{adversarial requests}, this heuristic turned out to be the best one to use. Unfortunately due to it needing $\mathcal{O}(n^2)$ running time in every node along the request path, this is one of the slowest heuristics to run.
+\item The \hyperref[alg:lpm]{Local Pair Distance Minimizer} heuristic shows great potential with both uniformly random and adversarial requests.
+\item The \hyperref[alg:dynstar]{Dynamic Star} heuristic is the same as Arrow with a best star tree for uniformly random requests. However in \hyperref[req:adversary]{adversarial requests}, this heuristic turned out to be the best one to use. Unfortunately due to it needing $\mathcal{O}(n^2)$ running time in every node along the request path, this is a very slow heuristic to run in comparison to others.
 \item We found that Ivy is better than Arrow on very small cliques of 3 and 4 nodes. We exploited this fact for the \hyperref[alg:reclique]{Recursive Clique} heuristic, which showed great performance on the special graphs it was designed for. The idea can be extended much further to arbitrary nested graphs as well.
 \item We tested \hyperref[alg:fr]{Fixed Ratio} heuristics based on choosing nodes a fixed ratio along the request path. Running the simulations made it clear that such an algorithm performs really poorly, with ratios near $1$ even worse than Arrow on a random tree.
 \end{itemize}
