@@ -21,13 +21,14 @@ import           Prelude
 
 main :: IO ()
 main = do
-  --trees
-  --ratio2
-  --ratio3
-  --algs
+  trees
+  ratio
+  ratio2
+  algs
   adversary
-  --ivyClique
-  --recliqueProg
+  ivyClique
+  recliqueProg
+  converging
   return ()
 
 trees :: IO ()
@@ -56,6 +57,8 @@ trees = do
     }
   writeResultsToDats "trees" results
 
+-- Put 0.52140543316472 into the arrow-random column
+-- https://math.stackexchange.com/questions/1254129/average-distance-between-two-random-points-in-a-square
 converging :: IO ()
 converging = do
   results <- runM .@ runAsyncInIO
@@ -158,7 +161,7 @@ algs = do
     $ runGenParams GenParams
     { genParamShared = SharedParams
       { sharedParamRandomSeed = 0
-      , sharedParamRequestCount = 100000
+      , sharedParamRequestCount = 1000000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalTime
                            , evalRatio
@@ -248,6 +251,7 @@ recliqueProg = do
     , specParamGenAlgs =
       [ (Alg.ivy, Tree.random)
       , (Alg.arrow, Tree.bestStar)
+      , (Alg.arrow, Tree.mst)
       , (Alg.localMinPairs, Tree.random)
       , (Alg.inbetween (3 % 4), Tree.random)
       ]
