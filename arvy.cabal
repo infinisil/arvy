@@ -120,6 +120,18 @@ executable arvy
                      , filepath
                      , co-log
 
+executable arvy-demo
+  import:              defaults
+  hs-source-dirs:      demo
+  main-is:             Main.hs
+  build-depends:       base ^>=4.12.0.0
+                     , arvy
+                     , gloss
+                     , arvy-eval
+                     , array
+                     , containers
+                     , lens
+
 test-suite arvy-lib-tests
   import:              defaults
   other-modules:       RunArvySpec
