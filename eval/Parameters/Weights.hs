@@ -11,34 +11,36 @@ module Parameters.Weights
   , ErdosProb(..)
   , erdosRenyi
   , shortestPathWeights
+  , randomPoints
+  , pointWeights
   ) where
 
-import Arvy.Algorithm
-import Evaluation.Types
-import Utils
-import Arvy.Log
+import           Arvy.Algorithm
+import           Arvy.Log
+import           Evaluation.Types
+import           Utils
 
-import Polysemy
-import Polysemy.RandomFu
-import qualified Algebra.Graph.Class as G
-import qualified Algebra.Graph.AdjacencyIntMap as GA
-import Data.Array.IArray (elems)
-import Control.Monad
-import Data.List (foldl')
-import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
-import Data.IntMultiSet (IntMultiSet)
-import qualified Data.IntMultiSet as IntMultiSet
-import Data.Random.Distribution.Uniform
-import Data.Array.MArray
-import Data.Array.ST
-import Data.Array.Unboxed
-import qualified Data.Array as A
-import Data.Text (Text)
+import qualified Algebra.Graph.AdjacencyIntMap    as GA
+import qualified Algebra.Graph.Class              as G
+import           Control.Monad
+import qualified Data.Array                       as A
+import           Data.Array.IArray                (elems)
+import           Data.Array.MArray
+import           Data.Array.ST
+import           Data.Array.Unboxed
+import           Data.IntMultiSet                 (IntMultiSet)
+import qualified Data.IntMultiSet                 as IntMultiSet
+import           Data.IntSet                      (IntSet)
+import qualified Data.IntSet                      as IntSet
+import           Data.List                        (foldl')
+import           Data.Random.Distribution.Uniform
+import           Data.Text                        (Text)
+import           Polysemy
+import           Polysemy.RandomFu
 
 data WeightsParam r = WeightsParam
   { weightsName :: Text
-  , weightsGen :: NodeCount -> Sem r GraphWeights
+  , weightsGen  :: NodeCount -> Sem r GraphWeights
   }
 
 -- TODO: Does this really not use any additional storage?
@@ -87,27 +89,35 @@ clique = WeightsParam
         ]
   }
 
+type Dim = Int
+
+randomPoints :: Member RandomFu r => Int -> Dim -> Sem r (Array Int (UArray Dim Double))
+randomPoints count dim = A.listArray (0, count - 1) <$> replicateM count randomPoint where
+  -- | Selects a uniformly distributed random point in a multi-dimensional unit-hypercube
+  randomPoint :: Member RandomFu r => Sem r (UArray Int Double)
+  randomPoint = listArray (0, dim - 1) <$> replicateM dim (sampleRVar doubleStdUniform)
+
+pointWeights :: Int -> Dim -> Array Int (UArray Dim Double) -> GraphWeights
+pointWeights count dim points = array ((0, 0), (count - 1, count - 1))
+  [ ((u, v), distance (points ! u) (points ! v))
+  | u <- [0 .. count - 1]
+  , v <- [0 .. count - 1]
+  ] where
+
+  -- | Multi-dimensional L2-distance
+  distance :: UArray Dim Double -> UArray Dim Double -> Double
+  distance x y = sqrt $ sum
+    [ (x ! d - y ! d) ** 2
+    | d <- [0 .. dim - 1] ]
+
 -- | Should contain the N-dimensional point for each node, distance between them can be calculated on the fly, tree can be anything
 unitEuclidian :: Member RandomFu r => Int -> WeightsParam r
 unitEuclidian dim = WeightsParam
   { weightsName = "uniform" <> tshow dim
   , weightsGen = \n -> do
-      points <- A.listArray (0, n - 1) <$> replicateM n randomPoint
-      return $ array ((0, 0), (n - 1, n - 1))
-        [ ((u, v), distance (points ! u) (points ! v))
-        | u <- [0 .. n - 1]
-        , v <- [0 .. n - 1]
-        ]
-  } where
-  -- | Selects a uniformly distributed random point in a multi-dimensional unit-hypercube
-  randomPoint :: Member RandomFu r => Sem r (UArray Int Double)
-  randomPoint = listArray (0, dim - 1) <$> replicateM dim (sampleRVar doubleStdUniform)
-
-  -- | Multi-dimensional L2-distance
-  distance :: UArray Int Double -> UArray Int Double -> Double
-  distance x y = sqrt $ sum
-    [ (x ! d - y ! d) ** 2
-    | d <- [0 .. dim - 1] ]
+      points <- randomPoints n dim
+      return $ pointWeights n dim points
+  }
 
 
 newtype ErdosProb
