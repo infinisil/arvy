@@ -2,14 +2,9 @@
 {-# LANGUAGE ViewPatterns    #-}
 module Main where
 
-{-
-TODO:
-- Make arrows point to node circle edge instead of center
-- Implement auto random requests (by pressing r)
--}
-
 import           Arvy.Algorithm
 import           Arvy.Algorithm.Collection
+import           Arvy.Log
 import           Control.Applicative
 import           Control.Lens
 import           Data.Array.Unboxed
@@ -17,18 +12,34 @@ import           Data.Bifunctor
 import           Data.Either
 import           Data.List
 import           Data.Maybe
-import           Data.Ord                             (comparing)
+import           Data.Ord                         (comparing)
+import           Data.Random.Distribution.Uniform
 import           Evaluation.Types
 import           GHC.Float
 import           Graphics.Gloss
-import           Graphics.Gloss.Data.ViewPort
 import           Graphics.Gloss.Geometry.Angle
-import           Graphics.Gloss.Interface.IO.Interact
-import qualified Parameters.Tree                      as Tree
-import qualified Parameters.Weights                   as Weights
+import           Graphics.Gloss.Interface.IO.Game
+import qualified Parameters.Tree                  as Tree
+import qualified Parameters.Weights               as Weights
 import           Polysemy
+import           Polysemy.RandomFu
 import           Polysemy.State
 import           Utils
+
+n :: Int
+n = 500
+
+size :: Float
+size = 0.1 / sqrt (fromIntegral n)
+
+alg :: GeneralArvy '[Log]
+alg = dynamicStar
+
+reqsPerSec :: Float
+reqsPerSec = 4
+
+tree :: Member RandomFu r => Tree.TreeParam r
+tree = Tree.mst
 
 data Message p = Message
   { _sender   :: Node
@@ -75,10 +86,15 @@ data PendingMessages msg = PendingMessages
 
 makeLenses ''PendingMessages
 
+data Mode = Interactive
+          | Automatic Float
+
 data DrawState msg s = DrawState
   { _nodeStates      :: Array Node (NodeState s)
   , _pendingMessages :: PendingMessages msg
   , _viewSize        :: (Int, Int)
+  , _mode            :: Mode
+  , _speed           :: Float
   }
 
 makeLenses ''DrawState
@@ -96,12 +112,13 @@ draw points state@DrawState { .. } = convert $ nodes <> messages where
   convert = scale square square . translate (-0.5) (-0.5)
 
   nodes :: Picture
-  nodes = mconcat $ map (uncurry drawNode) (assocs _nodeStates)
+  nodes = mconcat arrowPics <> mconcat nodePics where
+    (nodePics, arrowPics) = unzip $ map (uncurry drawNode) (assocs _nodeStates)
 
   moveToPoint :: Point -> Picture -> Picture
   moveToPoint = uncurry translate
 
-  tip = scale 0.004 0.004 $ polygon [(0,0), (2,-1), (2,1)]
+  tip = scale size size $ polygon [(1,0), (3,-1), (3,1)]
 
   drawArrow :: Node -> Node -> Picture
   drawArrow fromNode toNode = line [x, y] <> arrowTip where
@@ -111,21 +128,21 @@ draw points state@DrawState { .. } = convert $ nodes <> messages where
     angle = radToDeg (normalizeAngle (atan2 (x1 - x2) (y1 - y2))) - 90
     arrowTip = moveToPoint y $ rotate angle tip
 
-  drawNode :: Node -> NodeState s -> Picture
+  drawNode :: Node -> NodeState s -> (Picture, Picture)
   drawNode node NodeState { _tokenState = token } = go token where
-    dot = moveToPoint (points ! node) $ circleSolid 0.004
-    go :: TokenState -> Picture
-    go HasToken                 = color green dot
-    go WantsToken               = color red dot
-    go (ManyWantToken parent _) = drawArrow node parent <> color red dot
-    go (Idle parent)            = drawArrow node parent <> dot
+    dot = moveToPoint (points ! node) $ circleSolid size
+    go :: TokenState -> (Picture, Picture)
+    go HasToken                 = (color green dot, mempty)
+    go WantsToken               = (color red dot, mempty)
+    go (ManyWantToken parent _) = (color red dot, drawArrow node parent)
+    go (Idle parent)            = (dot, drawArrow node parent)
 
   messages :: Picture
   messages = color blue (mconcat (map drawMessage (state ^. pendingMessages . requestMessages)))
     <> maybe mempty (color green . drawMessage) (state ^. pendingMessages . tokenMessage)
 
   drawMessage :: Message p -> Picture
-  drawMessage Message { .. } = translate x y $ circleSolid 0.004 where
+  drawMessage Message { .. } = translate x y $ circleSolid size where
     (x1, y1) = points ! _sender
     (x2, y2) = points ! _receiver
 
@@ -234,11 +251,11 @@ passTime weights PendingMessages { .. } dt = (PendingMessages stillPendingReques
     where newProgress = _progress + dt / messageDistance weights msg
 
 main :: IO ()
-main = runAlg minWeight
+main = runAlg alg
 
-runAlg :: GeneralArvy '[] -> IO ()
+runAlg :: GeneralArvy '[Log] -> IO ()
 runAlg (GeneralArvy spec) = runSpec spec where
-  runSpec :: ArvySpec () Node '[] -> IO ()
+  runSpec :: ArvySpec () Node '[Log] -> IO ()
   runSpec ArvySpec { .. } = runBehavior arvyBehavior arvyInitState arvyRunner
 
 
@@ -250,24 +267,25 @@ nearest (squareSize -> square) points (clickx, clicky) = near where
   dist :: Point -> Float
   dist (x1, y1) = (x1 - x) ** 2 + (y1 - y) ** 2
 
+randomNode :: IO Node
+randomNode = runM $ runRandomIO $ sampleRVar (integralUniform 0 (n - 1))
 
 runBehavior
   :: forall msg s r'
    . ArvyBehavior Node msg r'
-  -> (NodeCount -> ArvyNodeData () -> Sem '[] s)
-  -> (forall x . UArray Node Weight -> Sem r' x -> Sem '[State s] x)
+  -> (NodeCount -> ArvyNodeData () -> Sem '[Log] s)
+  -> (forall x . UArray Node Weight -> Sem r' x -> Sem '[State s, Log] x)
   -> IO ()
 runBehavior behavior initState runner = do
 
-  let n = 1000
-      seed = 0
+  let seed = 1
 
   pointsRaw <- runM $ runRandomSeed seed 0 $ Weights.randomPoints n 2
 
   let weights = Weights.pointWeights n 2 pointsRaw
       points = amap (\arr -> (double2Float $ arr ! 0, double2Float $ arr ! 1)) pointsRaw
 
-  initialTree <- runM $ runRandomSeed seed 1 $ Tree.treeGen Tree.ring n weights
+  initialTree <- runM $ runRandomSeed seed 1 $ Tree.treeGen tree n weights
 
 
   let initialDrawState = DrawState
@@ -276,7 +294,7 @@ runBehavior behavior initState runner = do
             { _tokenState = if parent == node
               then HasToken
               else Idle parent
-            , _algState = run $ initState n (ArvyNodeData parent (\u -> weights ! (node, u)) ())
+            , _algState = run $ runTraceLog $ initState n (ArvyNodeData parent (\u -> weights ! (node, u)) ())
             }
           | node <- [0..n-1]
           , let parent = initialTree ! node
@@ -286,19 +304,25 @@ runBehavior behavior initState runner = do
           , _tokenMessage = Nothing
           }
         , _viewSize = (1, 1)
+        , _mode = Interactive
+        , _speed = 1
         }
 
   let
 
-      runit :: forall x . Node -> Sem r' x -> Sem '[State s] x
+      runit :: forall x . Node -> Sem r' x -> Sem '[State s, Log] x
       runit node = runner $ listArray (0, n-1) [ weights ! (node, end) | end <- [0..n-1]]
 
-      handle :: Event -> DrawState msg s -> DrawState msg s
-      handle (EventKey (MouseButton LeftButton) Down (Modifiers Up Up Up) (x, y)) state =
-        processEvent node MakeRequest state
-        where node = nearest state points (x, y)
-      handle (EventResize newSize) state = state & viewSize .~ newSize
-      handle _ state = state
+      handle :: Event -> DrawState msg s -> IO (DrawState msg s)
+      handle (EventKey (MouseButton LeftButton) Down _ click) state =
+        return $ processEvent node MakeRequest state
+        where node = nearest state points click
+      handle (EventKey (MouseButton WheelUp) _ _ _) state = return $ state & speed *~ 1.1
+      handle (EventKey (MouseButton WheelDown) _ _ _) state = return $ state & speed //~ 1.1
+      handle (EventKey (Char 'i') Down _ _) state = return $ state & mode .~ Interactive
+      handle (EventKey (Char 'r') Down _ _) state = return $ state & mode .~ Automatic 0.0
+      handle (EventResize newSize) state = return $ state & viewSize .~ newSize
+      handle _ state = return state
 
       processEvent ::  Node -> NodeEvent msg -> DrawState msg s -> DrawState msg s
       processEvent node event state = state
@@ -307,16 +331,24 @@ runBehavior behavior initState runner = do
         & pendingMessages . tokenMessage %~ (<|> mTokMsg)
         where
           NodeState { .. }  = (state ^. nodeStates) ! node
-          (newAlgState, (newTokenState, mReqMsg, mTokMsg)) = run $ runState _algState $ nodeStateTransition behavior (runit node) node _tokenState event
+          (newAlgState, (newTokenState, mReqMsg, mTokMsg)) = run $ runTraceLog $ runState _algState $ nodeStateTransition behavior (runit node) node _tokenState event
 
-      speed :: Float
-      speed = 10
-
-      step :: Float -> DrawState msg s -> DrawState msg s
-      step dt state = state
-        & pendingMessages .~ stillPending
-        & \initialState -> foldl (\oldState (node, event) -> processEvent node event oldState) initialState events
+      step :: Float -> DrawState msg s -> IO (DrawState msg s)
+      step dt' state = do
+        let newState = state
+              & pendingMessages .~ stillPending
+              & \initialState -> foldl (\oldState (node, event) -> processEvent node event oldState) initialState events
+        case state ^. mode of
+          Interactive -> return newState
+          Automatic left -> if left <= 0 then do
+              node <- randomNode
+              return $ processEvent node MakeRequest newState
+                { _mode = Automatic (1 / reqsPerSec) }
+            else
+              return $ newState
+                { _mode = Automatic (left - dt) }
         where
-        (stillPending, events) = passTime weights (state ^. pendingMessages) (dt * speed)
+        dt = dt' * state ^. speed
+        (stillPending, events) = passTime weights (state ^. pendingMessages) dt
 
-  play FullScreen white 100 initialDrawState (draw points) handle step
+  playIO FullScreen white 100 initialDrawState (return . draw points) handle step

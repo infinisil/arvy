@@ -131,6 +131,8 @@ executable arvy-demo
                      , array
                      , containers
                      , lens
+                     , random-fu
+                     , polysemy-RandomFu
 
 test-suite arvy-lib-tests
   import:              defaults
