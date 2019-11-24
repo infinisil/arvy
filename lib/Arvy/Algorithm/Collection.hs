@@ -164,27 +164,21 @@ ring = SpecializedArvy generator spec where
     , arvyRunner = const id
     }
 
-data InbetweenMessage i = InbetweenMessage Int i (S.Seq i) deriving (Functor, Show)
-
+newtype InbetweenMessage i = InbetweenMessage (S.Seq i) deriving (Functor, Show)
 
 inbetween :: forall r . Ratio Int -> GeneralArvy r
 inbetween ratio = GeneralArvy ArvySpec
   { arvyBehavior = behaviorType @r ArvyBehavior
-    { arvyMakeRequest = \i _ -> return (InbetweenMessage 1 i S.empty)
-    , arvyForwardRequest = \(InbetweenMessage k f (fmap forward -> seq')) i _ ->
-      let s = S.length seq' + 1
-          newK = k + 1
-          (newF, newSeq) = if (newK - s) % newK < ratio
-            then case S.viewl seq' of
-              S.EmptyL      -> (i, S.empty)
-              fir S.:< rest -> (fir, rest S.|> i)
-            else (forward f, seq' S.|> i)
-      in return (f, InbetweenMessage newK newF newSeq)
-    , arvyReceiveRequest = \(InbetweenMessage _ f _) _ -> return f
+    { arvyMakeRequest = \i _ -> return (InbetweenMessage (S.singleton i))
+    , arvyForwardRequest = \(InbetweenMessage seq') i _ ->
+      return (select seq', InbetweenMessage (fmap forward seq' S.|> i))
+    , arvyReceiveRequest = \(InbetweenMessage seq') _ -> return (select seq')
     }
   , arvyInitState = \_ _ -> return ()
   , arvyRunner = const raise
-  }
+  } where
+  select :: S.Seq a -> a
+  select s = s `S.index` floor (fromIntegral (S.length s - 1) * ratio)
 
 newtype WeightedInbetweenMessage i = WeightedInbetweenMessage (NN.NonNull [(i, Double)]) deriving Show
 
