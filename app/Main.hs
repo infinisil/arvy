@@ -166,6 +166,7 @@ algs = do
       , sharedParamEvals = [ evalTime
                            , evalRatio
                            , evalHops
+                           , evalTreeEdgeDist
                            ]
       }
     , genParamNodeCount = 1000
@@ -174,7 +175,6 @@ algs = do
       [ (Alg.arrow, Tree.bestStar)
       , (Alg.ivy, Tree.random)
       , (Alg.localMinPairs, Tree.random)
-      , (Alg.inbetween (3 % 4), Tree.random)
       ]
     }
   writeResultsToDats "algs" results
@@ -199,6 +199,7 @@ adversary = do
       [ (Alg.arrow, Tree.bestStar)
       , (Alg.ivy, Tree.random)
       , (Alg.localMinPairs, Tree.random)
+      , (Alg.minWeight, Tree.random)
       , (Alg.inbetween (3 % 4), Tree.random)
       , (Alg.dynamicStar, Tree.random)
       ]
