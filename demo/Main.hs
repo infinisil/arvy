@@ -3,7 +3,6 @@
 module Main where
 
 import           Arvy.Algorithm
-import           Arvy.Algorithm.Collection
 import           Arvy.Log
 import           Control.Applicative
 import           Control.Lens
@@ -19,27 +18,13 @@ import           GHC.Float
 import           Graphics.Gloss
 import           Graphics.Gloss.Geometry.Angle
 import           Graphics.Gloss.Interface.IO.Game
+import           Opts
 import qualified Parameters.Tree                  as Tree
 import qualified Parameters.Weights               as Weights
 import           Polysemy
 import           Polysemy.RandomFu
 import           Polysemy.State
 import           Utils
-
-n :: Int
-n = 500
-
-size :: Float
-size = 0.1 / sqrt (fromIntegral n)
-
-alg :: GeneralArvy '[Log]
-alg = dynamicStar
-
-reqsPerSec :: Float
-reqsPerSec = 4
-
-tree :: Member RandomFu r => Tree.TreeParam r
-tree = Tree.mst
 
 data Message p = Message
   { _sender   :: Node
@@ -107,6 +92,8 @@ type Points = Array Int Point
 draw :: Points -> DrawState msg s -> Picture
 draw points state@DrawState { .. } = convert $ nodes <> messages where
   square = squareSize state
+
+  size = 0.1 / sqrt (fromIntegral (rangeSize $ bounds points))
 
   convert :: Picture -> Picture
   convert = scale square square . translate (-0.5) (-0.5)
@@ -251,12 +238,14 @@ passTime weights PendingMessages { .. } dt = (PendingMessages stillPendingReques
     where newProgress = _progress + dt / messageDistance weights msg
 
 main :: IO ()
-main = runAlg alg
+main = do
+  opts <- getOptions
+  runAlg opts
 
-runAlg :: GeneralArvy '[Log] -> IO ()
-runAlg (GeneralArvy spec) = runSpec spec where
+runAlg :: Options -> IO ()
+runAlg opts@(getAlg -> GeneralArvy spec) = runSpec spec where
   runSpec :: ArvySpec () Node '[Log] -> IO ()
-  runSpec ArvySpec { .. } = runBehavior arvyBehavior arvyInitState arvyRunner
+  runSpec ArvySpec { .. } = runBehavior opts arvyBehavior arvyInitState arvyRunner
 
 
 nearest :: DrawState msg s -> Points -> (Float, Float) -> Int
@@ -267,16 +256,17 @@ nearest (squareSize -> square) points (clickx, clicky) = near where
   dist :: Point -> Float
   dist (x1, y1) = (x1 - x) ** 2 + (y1 - y) ** 2
 
-randomNode :: IO Node
-randomNode = runM $ runRandomIO $ sampleRVar (integralUniform 0 (n - 1))
+randomNode :: NodeCount -> IO Node
+randomNode n = runM $ runRandomIO $ sampleRVar (integralUniform 0 (n - 1))
 
 runBehavior
   :: forall msg s r'
-   . ArvyBehavior Node msg r'
+   . Options
+  -> ArvyBehavior Node msg r'
   -> (NodeCount -> ArvyNodeData () -> Sem '[Log] s)
   -> (forall x . UArray Node Weight -> Sem r' x -> Sem '[State s, Log] x)
   -> IO ()
-runBehavior behavior initState runner = do
+runBehavior opts@Options { optNodeCount = n, .. } behavior initState runner = do
 
   let seed = 1
 
@@ -285,7 +275,7 @@ runBehavior behavior initState runner = do
   let weights = Weights.pointWeights n 2 pointsRaw
       points = amap (\arr -> (double2Float $ arr ! 0, double2Float $ arr ! 1)) pointsRaw
 
-  initialTree <- runM $ runRandomSeed seed 1 $ Tree.treeGen tree n weights
+  initialTree <- runM $ runRandomSeed seed 1 $ runIgnoringLog $ Tree.treeGen (getTree opts) n weights
 
 
   let initialDrawState = DrawState
@@ -294,7 +284,7 @@ runBehavior behavior initState runner = do
             { _tokenState = if parent == node
               then HasToken
               else Idle parent
-            , _algState = run $ runTraceLog $ initState n (ArvyNodeData parent (\u -> weights ! (node, u)) ())
+            , _algState = run $ runIgnoringLog $ initState n (ArvyNodeData parent (\u -> weights ! (node, u)) ())
             }
           | node <- [0..n-1]
           , let parent = initialTree ! node
@@ -331,7 +321,7 @@ runBehavior behavior initState runner = do
         & pendingMessages . tokenMessage %~ (<|> mTokMsg)
         where
           NodeState { .. }  = (state ^. nodeStates) ! node
-          (newAlgState, (newTokenState, mReqMsg, mTokMsg)) = run $ runTraceLog $ runState _algState $ nodeStateTransition behavior (runit node) node _tokenState event
+          (newAlgState, (newTokenState, mReqMsg, mTokMsg)) = run $ runIgnoringLog $ runState _algState $ nodeStateTransition behavior (runit node) node _tokenState event
 
       step :: Float -> DrawState msg s -> IO (DrawState msg s)
       step dt' state = do
@@ -341,9 +331,9 @@ runBehavior behavior initState runner = do
         case state ^. mode of
           Interactive -> return newState
           Automatic left -> if left <= 0 then do
-              node <- randomNode
+              node <- randomNode n
               return $ processEvent node MakeRequest newState
-                { _mode = Automatic (1 / reqsPerSec) }
+                { _mode = Automatic (1 / optReqsPerSec) }
             else
               return $ newState
                 { _mode = Automatic (left - dt) }
