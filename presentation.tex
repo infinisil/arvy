@@ -1,0 +1,61 @@
+\documentclass[hyperref={pdfpagelabels=false}]{beamer}
+\let\Tiny=\tiny
+
+\usepackage{xspace}
+\usepackage{xmpmulti}
+\usepackage{array}
+\usepackage[absolute,overlay]{textpos}
+\usepackage{forloop}
+
+\usecolortheme{rose}
+
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamercolor*{title}{fg=white}
+\setbeamercolor*{author}{fg=white}
+\setbeamercolor*{institute}{fg=white}
+\setbeamercolor*{date}{fg=white}
+\setbeamerfont{title}{series=\bfseries,size=\huge}
+% \setbeamercolor{frametitle}{}
+\setbeamerfont{author}{series=\bfseries}
+
+
+\useinnertheme{default}
+\setbeamertemplate{navigation symbols}{}
+
+\title{Arvy Heuristics for Distributed Mutual Exclusion}
+\author{Silvan Mosberger}
+\institute{ETH Zurich -- Distributed Computing Group -- www.disco.ethz.ch}
+
+\begin{document}
+
+{
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{figures/bg}}
+\begin{frame}
+	\begin{textblock*}{\paperwidth}[0,0](0cm,1cm)
+		\begin{center}
+			\usebeamercolor[fg]{title}
+			\textbf{\huge \inserttitle}
+		\end{center}
+		\usebeamercolor[fg]{normal text}
+	\end{textblock*}
+	\begin{textblock*}{\paperwidth}[0,0](-0.5cm,7.4cm)
+		\flushright
+		\color{white}
+		\itshape \insertauthor
+		\usebeamercolor[fg]{normal text}
+	\end{textblock*}
+	\begin{textblock*}{\paperwidth}[0,1](0.2cm,9.4cm)
+		\flushleft
+ 		\usebeamercolor[fg]{institute}
+		\tiny \itshape \insertinstitute
+		\usebeamercolor[fg]{normal text}
+	\end{textblock*}
+\end{frame}
+}
+
+\begin{frame}{Frametitle}
+	blabla
+\end{frame}
+
+
+\end{document}
