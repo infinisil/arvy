@@ -135,6 +135,7 @@ executable arvy-demo
                      , random-fu
                      , polysemy-RandomFu
                      , optparse-applicative
+                     , heaps
 
 test-suite arvy-lib-tests
   import:              defaults
