@@ -27,6 +27,12 @@ import           Polysemy.RandomFu
 import           Polysemy.State
 import           Utils
 
+{-
+TODO:
+- cleanup
+- interactive moving of points?
+-}
+
 data Message p = Message
   { _sender   :: Node
   , _receiver :: Node
@@ -106,7 +112,7 @@ draw points weights state@DrawState { .. } = convert $ nodes <> messages where
   moveToPoint :: Point -> Picture -> Picture
   moveToPoint = uncurry translate
 
-  tip = scale size size $ polygon [(1,0), (3,-1), (3,1)]
+  tip = scale size size $ polygon [(1,0), (2,-0.5), (2,0.5)]
 
   drawArrow :: Node -> Node -> Picture
   drawArrow fromNode toNode = line [x, y] <> arrowTip where
@@ -299,6 +305,21 @@ nearest (squareSize -> square) points (clickx, clicky) = near where
 randomNode :: NodeCount -> IO Node
 randomNode n = runM $ runRandomIO $ sampleRVar (integralUniform 0 (n - 1))
 
+demoPoints :: Array Int (UArray Int Double)
+demoPoints = listArray (0, 4)
+  (map (\(x, y) -> listArray (0, 1) [adjustx x, adjusty y])
+    [ (0, 5)
+    , (7, 5)
+    , (3, 4)
+    , (2, 1)
+    , (6, 0)
+    ])
+  where adjustx x = (x / 7 - 0.5) * 0.9 + 0.5
+        adjusty y = (y / 5 - 0.5) * 0.9 + 0.5
+
+demoTree :: RootedTree
+demoTree = listArray (0, 4) [3, 2, 3, 4, 4]
+
 runBehavior
   :: forall msg s r'
    . Options
@@ -306,16 +327,18 @@ runBehavior
   -> (NodeCount -> ArvyNodeData () -> Sem '[Log] s)
   -> (forall x . UArray Node Weight -> Sem r' x -> Sem '[State s, Log] x)
   -> IO ()
-runBehavior opts@Options { optNodeCount = n, .. } behavior initState runner = do
+runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
+
 
   let seed = 1
+  let n = if optDemo then 5 else optNodeCount
 
-  pointsRaw <- runM $ runRandomSeed seed 0 $ Weights.randomPoints n 2
+  pointsRaw <- if optDemo then return demoPoints else runM $ runRandomSeed seed 0 $ Weights.randomPoints n 2
 
   let weights = Weights.pointWeights n 2 pointsRaw
       points = amap (\arr -> (double2Float $ arr ! 0, double2Float $ arr ! 1)) pointsRaw
 
-  initialTree <- runM $ runRandomSeed seed 1 $ runIgnoringLog $ Tree.treeGen (getTree opts) n weights
+  initialTree <- if optDemo then return demoTree else runM $ runRandomSeed seed 1 $ runIgnoringLog $ Tree.treeGen (getTree opts) n weights
 
 
   let initialDrawState = DrawState

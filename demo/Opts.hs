@@ -14,6 +14,7 @@ data Options = Options
   , optAlg        :: String
   , optTree       :: String
   , optReqsPerSec :: Float
+  , optDemo       :: Bool
   }
 
 getAlg :: Options -> GeneralArvy '[Log]
@@ -61,6 +62,10 @@ parser = Options
                   <> help "For autorandom requests, how many should be issued per simulation second"
                   <> value 2
                   )
+  <*> flag False True ( short 'd'
+                      <> long "demo"
+                      <> help "Enable demo mode with a very simple graph"
+                      )
 
 
 options :: ParserInfo Options
