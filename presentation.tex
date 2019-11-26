@@ -1,4 +1,4 @@
-\documentclass[hyperref={pdfpagelabels=false}]{beamer}
+\documentclass[12pt,hyperref={pdfpagelabels=false}]{beamer}
 \let\Tiny=\tiny
 
 \usepackage{xspace}
@@ -6,8 +6,14 @@
 \usepackage{array}
 \usepackage[absolute,overlay]{textpos}
 \usepackage{forloop}
+\usepackage{pgfplots}
+\usepackage{subcaption}
+\usepackage{tikz}
 
-\usecolortheme{rose}
+\usetikzlibrary{positioning}
+\usetikzlibrary{arrows.meta}
+
+%\usecolortheme{rose}
 
 \setbeamerfont{frametitle}{series=\bfseries}
 \setbeamercolor*{title}{fg=white}
@@ -19,7 +25,7 @@
 \setbeamerfont{author}{series=\bfseries}
 
 
-\useinnertheme{default}
+\usetheme{Pittsburgh}
 \setbeamertemplate{navigation symbols}{}
 
 \title{Arvy Heuristics for Distributed Mutual Exclusion}
@@ -53,8 +59,455 @@
 \end{frame}
 }
 
-\begin{frame}{Frametitle}
-	blabla
+% Explain the problem
+
+\begin{frame}{Distributed Mutual Exclusion}
+
+The guarantee that only at most one node in a network can have exclusive access to a shared resource
+
+\begin{block}{Examples}
+\begin{itemize}
+\item A distributed counter where every node can increase it
+\item Shared memory in a multiprocessor machine
+\end{itemize}
+
+\end{block}
+
+\end{frame}
+
+\tikzset{
+  arvy-expl/.style =
+    { v/.style = { circle, draw } % normal graph vertices
+    , r/.style = { v, gr } % root nodes
+    , rd/.style = { red!70!black }
+    , bl/.style = { blue!70!black }
+    , gr/.style = { green!50!black }
+    , q/.style = { v, rd } % currently making request
+    , e/.style = { draw=black, -> }
+    , re/.style = { e, dashed, bl }
+    , cand/.style = { dotted, gray, ->, >={Stealth[scale=1]} }
+    , >={Stealth[scale=2]}
+    , scale = 1.0
+    , auto
+    }
+}
+
+\begin{frame}{Arrow}
+\begin{block}{Idea}
+Maintain a rooted spanning tree with every node (transitively) pointing towards the node holding the token.
+\end{block}
+\end{frame}
+
+\begin{frame}{Arrow}
+\centering
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\node[gr, above=0 of 5] {\footnotesize has resource};
+\draw[e] (2) -- (3);
+\draw[e] (3) -- (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Arrow}
+\centering
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[re] (2) --node[below right=3pt and -20pt]{\footnotesize request from 2}  (3);
+\draw[e] (3) -- (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arrow}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[re] (3) --node[right]{\footnotesize request from 2}  (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arrow}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (3);
+\draw[re] (4) --node[above right=2pt and -20pt]{\footnotesize request from 2}  (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arrow}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[v] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (3);
+\draw[e] (5) -- (4);
+\draw[e] (1) -- (4);
+\draw[re, gr] (5) --node[left]{\footnotesize resource} (2);
+\path (5) edge [loop below, white] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arrow}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[r] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[v] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (3);
+\draw[e] (5) -- (4);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below, white] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Ivy}
+\begin{block}{Idea}
+Connect to the node that sent the request, because the root will be there soon, so only a small number of hops needed to reach it in the future
+\end{block}
+\end{frame}
+
+\begin{frame}{Ivy}
+\centering
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\node[gr, above=0 of 5] {\footnotesize has resource};
+\draw[e] (2) -- (3);
+\draw[e] (3) -- (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Ivy}
+\centering
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[re] (2) --node[below right=3pt and -20pt]{\footnotesize request from 2}  (3);
+\draw[e] (3) -- (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+
+\begin{frame}{Ivy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[re] (3) --node[right]{\footnotesize request from 2}  (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Ivy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (2);
+\draw[re] (4) --node[above right=2pt and -20pt]{\footnotesize request from 2}  (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Ivy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[v] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (2);
+\draw[e] (5) -- (2);
+\draw[e] (1) -- (4);
+\draw[re, gr] (5) to[out=100, in=240] node[left]{\footnotesize resource} (2);
+\path (5) edge [loop below, white] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Ivy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[r] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[v] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (2);
+\draw[e] (5) -- (2);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below, white] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arvy}
+\begin{block}{Idea}
+Allow connecting back to \textit{any} node on the request path
+\end{block}
+\end{frame}
+
+\begin{frame}{Arvy}
+\centering
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\node[gr, above=0 of 5] {\footnotesize has resource};
+\draw[e] (2) -- (3);
+\draw[e] (3) -- (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Arvy}
+\centering
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[re] (2) to[out=220,in=0] node[below right=3pt and -20pt]{\footnotesize request from 2}  (3);
+\draw[cand] (3) -- (2);
+\node[black!70] (cand) at (4,5.5) {\footnotesize{parent candidate}};
+\draw[black!70] (cand) -- (4.9,4.6);
+\draw[e] (3) -- (4);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+
+\begin{frame}{Arvy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[re] (3) to[out=-90,in=60] node[right]{\footnotesize request from 2}  (4);
+\draw[cand] (4) -- (3);
+\draw[cand] (4) -- (2);
+\draw[e] (4) -- (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arvy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[r] (5) at (6,0) {5};
+\draw[cand] (5) -- (2);
+\draw[cand] (5) -- (3);
+\draw[cand] (5) -- (4);
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (2);
+\draw[re] (4) to[out=0,in=150] node[above right=2pt and -20pt]{\footnotesize request from 2}  (5);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arvy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[q] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[v] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (2);
+\draw[e] (5) -- (3);
+\draw[e] (1) -- (4);
+\draw[re, gr] (5) -- node[left]{\footnotesize resource} (2);
+\path (5) edge [loop below, white] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Arvy}
+\centering
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {1};
+\node[r] (2) at (7,5) {2};
+\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
+\node[v] (3) at (3,4) {3};
+\node[v] (4) at (2,1) {4};
+\node[v] (5) at (6,0) {5};
+\draw[e] (3) -- (2);
+\draw[e] (4) -- (2);
+\draw[e] (5) -- (3);
+\draw[e] (1) -- (4);
+\path (5) edge [loop below, white] (4);
+\path (2) edge [loop above] (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Edge Cost Minimizer}
+\begin{block}{Idea}
+Connect to the node with minimum edge distance for tree edges as short as possible
+\end{block}
+\end{frame}
+
+\begin{frame}{Edge Cost Minimizer}
+\centering
+\begin{tikzpicture}
+[arvy-expl, bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={dashed,draw=blue!70!black,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=1.6]
+\node[bn] (n1) at (0,0) {a};
+\node[bn] (n2) at (1,2) {b};
+\node[bn] (n3) at (3,3) {c};
+\node[bn] (n4) at (5,2) {d};
+\node[bn] (n5) at (4,0) {e};
+\draw[be] (n1) -- node[blue!70!black]{\footnotesize{request path}} (n2);
+\draw[be] (n2) -- (n3);
+\draw[be] (n3) -- (n4);
+\draw[be] (n4) to[out=-100,in=50] (n5);
+\draw[cand] (n5) -- node{$3$} (n1);
+\draw[cand] (n5) -- node{$5$} (n2);
+\draw[cand] (n5) -- node{$1$} (n3);
+\draw[cand] (n5) -- node[left]{$4$} (n4);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Edge Cost Minimizer}
+\centering
+\begin{tikzpicture}
+[arvy-expl, bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={dashed,draw=blue!70!black,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=1.6]
+\node[bn] (n1) at (0,0) {a};
+\node[bn] (n2) at (1,2) {b};
+\node[bn] (n3) at (3,3) {c};
+\node[bn] (n4) at (5,2) {d};
+\node[bn] (n5) at (4,0) {e};
+\draw[be] (n1) -- node[blue!70!black]{\footnotesize{request path}} (n2);
+\draw[be] (n2) -- (n3);
+\draw[be] (n3) -- (n4);
+\draw[cand,white] (n5) -- node[white]{$3$} (n1);
+\draw[be] (n4) to[out=-100,in=50] (n5);
+\draw[e] (n5) -- node{$1$} (n3);
+\end{tikzpicture}
+
 \end{frame}
 
 

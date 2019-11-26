@@ -8,7 +8,19 @@ let
   tex = pkgs.texlive.combine {
     inherit (pkgs.texlive)
       scheme-small
+      algorithmicx
+      cm-super
+      algorithms
+      todonotes
+      minted
+      fvextra
+      ifplatform
+      xstring
+      framed
+      commath
+      pgfplots
       latexmk
+      numprint
       textpos
       forloop;
   };
