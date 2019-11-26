@@ -98,7 +98,7 @@ type Points = Array Int Point
 
 draw :: Points -> GraphWeights -> DrawState msg s -> Picture
 draw points weights state@DrawState { .. } = convert $ nodes <> messages where
-  square = squareSize state
+  square = squareSize state * 0.9
 
   size = 0.1 / sqrt (fromIntegral (rangeSize $ bounds points))
 
@@ -122,18 +122,22 @@ draw points weights state@DrawState { .. } = convert $ nodes <> messages where
     angle = radToDeg (normalizeAngle (atan2 (x1 - x2) (y1 - y2))) - 90
     arrowTip = moveToPoint y $ rotate angle tip
 
+  redc = mixColors 7 3 red black
+  bluec = mixColors 7 3 blue black
+  greenc = mixColors 5 5 green black
+
   drawNode :: Node -> NodeState s -> (Picture, Picture)
   drawNode node NodeState { _tokenState = token } = go token where
     dot = moveToPoint (points ! node) $ circleSolid size
     go :: TokenState -> (Picture, Picture)
-    go HasToken                 = (color green dot, mempty)
-    go WantsToken               = (color red dot, mempty)
-    go (ManyWantToken parent _) = (color red dot, drawArrow node parent)
+    go HasToken                 = (color greenc dot, mempty)
+    go WantsToken               = (color redc dot, mempty)
+    go (ManyWantToken parent _) = (color redc dot, drawArrow node parent)
     go (Idle parent)            = (dot, drawArrow node parent)
 
   messages :: Picture
-  messages = color blue (foldMap drawMessage (state ^. pendingMessages . requestMessages))
-    <> maybe mempty (color green . drawMessage) (state ^. pendingMessages . tokenMessage)
+  messages = color bluec (foldMap drawMessage (state ^. pendingMessages . requestMessages))
+    <> maybe mempty (color greenc . drawMessage) (state ^. pendingMessages . tokenMessage)
 
   drawMessage :: H.Entry Float (Message p) -> Picture
   drawMessage (H.Entry left Message { .. }) = translate x y $ circleSolid size where
@@ -314,8 +318,8 @@ demoPoints = listArray (0, 4)
     , (2, 1)
     , (6, 0)
     ])
-  where adjustx x = (x / 7 - 0.5) * 0.9 + 0.5
-        adjusty y = (y / 5 - 0.5) * 0.9 + 0.5
+  where adjustx x = x / 7
+        adjusty y = y / 5
 
 demoTree :: RootedTree
 demoTree = listArray (0, 4) [3, 2, 3, 4, 4]

@@ -70,7 +70,7 @@ parser = Options
                       )
   <*> option auto ( short 's'
                   <> long "seed"
-                  <> value 0
+                  <> value 14
                   <> help "Random seed"
                   )
 
