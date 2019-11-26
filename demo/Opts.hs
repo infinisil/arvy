@@ -49,6 +49,7 @@ parser :: Parser Options
 parser = Options
   <$> option auto ( short 'n'
                   <> long "node-count"
+                  <> value 70
                   <> help "The number of nodes to use"
                   )
   <*> option str ( short 'a'

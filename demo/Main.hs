@@ -8,10 +8,8 @@ import           Control.Applicative
 import           Control.Lens
 import           Data.Array.Unboxed
 import           Data.Bifunctor
-import           Data.Either
 import qualified Data.Heap                        as H
 import           Data.List
-import           Data.Maybe
 import           Data.Ord                         (comparing)
 import           Data.Random.Distribution.Uniform
 import           Evaluation.Types
@@ -25,6 +23,7 @@ import qualified Parameters.Weights               as Weights
 import           Polysemy
 import           Polysemy.RandomFu
 import           Polysemy.State
+import           System.Exit
 import           Utils
 
 {-
@@ -87,9 +86,15 @@ data DrawState msg s = DrawState
   , _viewSize        :: (Int, Int)
   , _mode            :: Mode
   , _speed           :: Float
+  , _sequential      :: Bool
   }
 
 makeLenses ''DrawState
+
+active :: DrawState msg s -> Bool
+active DrawState { _pendingMessages = PendingMessages reqs Nothing }
+  | H.null reqs = False
+active _ = True
 
 squareSize :: DrawState msg s -> Float
 squareSize DrawState { _viewSize } = fromIntegral $ uncurry min _viewSize
@@ -361,7 +366,8 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
           }
         , _viewSize = (1, 1)
         , _mode = Interactive
-        , _speed = 0.3
+        , _speed = 0.6
+        , _sequential = True
         }
 
   let
@@ -375,8 +381,11 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
         where node = nearest state points click
       handle (EventKey (MouseButton WheelUp) _ _ _) state = return $ state & speed *~ 1.1
       handle (EventKey (MouseButton WheelDown) _ _ _) state = return $ state & speed //~ 1.1
-      handle (EventKey (Char 'i') Down _ _) state = return $ state & mode .~ Interactive
-      handle (EventKey (Char 'r') Down _ _) state = return $ state & mode .~ Automatic 0.0
+      handle (EventKey (Char 'r') Down _ _) state = return $ state & mode .~ case state ^. mode of
+        Interactive -> Automatic 0.0
+        Automatic _ -> Interactive
+      handle (EventKey (Char 'c') Down _ _) state = return $ state & sequential .~ not (state ^. sequential)
+      handle (EventKey (Char 'q') Down _ _) _ = exitSuccess
       handle (EventResize newSize) state = return $ state & viewSize .~ newSize
       handle _ state = return state
 
@@ -402,7 +411,9 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
 
         case state ^. mode of
           Interactive    -> return newState
-          Automatic left -> randomReqs left newState
+          Automatic left -> case (state ^. sequential, active state) of
+            (True, True) -> return newState
+            _            -> randomReqs left newState
         where
         dt = dt' * state ^. speed
 
