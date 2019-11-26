@@ -12,6 +12,7 @@ let
     "lib.*"
     "eval.*"
     "app.*"
+    "demo.*"
     "tests.*"
     "LICENSE"
     "Setup.hs"
@@ -74,4 +75,4 @@ let
     withHoogle = true;
   };
 
-in pkg // { inherit env pkgs hpkgs; }
+in hlib.dontCheck pkg // { inherit env pkgs hpkgs; }
