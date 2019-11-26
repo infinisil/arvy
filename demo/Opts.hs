@@ -4,6 +4,7 @@ import           Arvy.Algorithm
 import           Arvy.Algorithm.Collection
 import           Arvy.Log
 import           Data.List
+import           GHC.Word
 import           Options.Applicative
 import qualified Parameters.Tree           as Tree
 import           Polysemy
@@ -15,6 +16,7 @@ data Options = Options
   , optTree       :: String
   , optReqsPerSec :: Float
   , optDemo       :: Bool
+  , optSeed       :: Word32
   }
 
 getAlg :: Options -> GeneralArvy '[Log]
@@ -66,6 +68,11 @@ parser = Options
                       <> long "demo"
                       <> help "Enable demo mode with a very simple graph"
                       )
+  <*> option auto ( short 's'
+                  <> long "seed"
+                  <> value 0
+                  <> help "Random seed"
+                  )
 
 
 options :: ParserInfo Options
