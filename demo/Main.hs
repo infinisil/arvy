@@ -401,6 +401,7 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
           NodeState { .. }  = (state ^. nodeStates) ! node
           (newAlgState, (newTokenState, mReqMsg, mTokMsg)) = run $ runIgnoringLog $ runState _algState $ nodeStateTransition behavior (runit node) node _tokenState event
 
+      -- FIXME: Iteratively pass time and issue automatic requests interleaved. This then allows more sequential requests with high speeds
       step :: Float -> DrawState msg s -> IO (DrawState msg s)
       step dt' state = do
         let newState = passTime weights behavior runit dt state
@@ -414,8 +415,12 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
 
         case state ^. mode of
           Interactive    -> return newState
-          Automatic left -> case (state ^. sequential, active state) of
+          Automatic left -> case (newState ^. sequential, active newState) of
             (True, True) -> return newState
+            (True, False) -> do
+              node <- randomNode n
+              return $ processEvent node MakeRequest newState
+                & mode .~ Automatic 0
             _            -> randomReqs left newState
         where
         dt = dt' * state ^. speed
