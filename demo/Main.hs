@@ -97,18 +97,21 @@ active DrawState { _pendingMessages = PendingMessages reqs Nothing }
 active _ = True
 
 squareSize :: DrawState msg s -> Float
-squareSize DrawState { _viewSize } = fromIntegral $ uncurry min _viewSize
+squareSize DrawState { _viewSize } = 0.8 * fromIntegral (uncurry min _viewSize)
 
 type Points = Array Int Point
 
-draw :: Points -> GraphWeights -> DrawState msg s -> Picture
-draw points weights state@DrawState { .. } = convert $ nodes <> messages where
-  square = squareSize state * 0.9
+draw :: String -> Points -> GraphWeights -> DrawState msg s -> Picture
+draw title points weights state@DrawState { .. } = convert $ nodes <> messages <> drawTitle where
+  square = squareSize state
+
+  drawTitle :: Picture
+  drawTitle = translate (-0.1) 1.07 $ scale 0.0007 0.0007 $ text title
 
   size = 0.1 / sqrt (fromIntegral (rangeSize $ bounds points))
 
   convert :: Picture -> Picture
-  convert = scale square square . translate (-0.5) (-0.5)
+  convert = scale square square . translate (-0.5) (-0.55)
 
   nodes :: Picture
   nodes = mconcat arrowPics <> mconcat nodePics where
@@ -137,7 +140,7 @@ draw points weights state@DrawState { .. } = convert $ nodes <> messages where
     go :: TokenState -> (Picture, Picture)
     go HasToken                 = (color greenc dot, mempty)
     go WantsToken               = (color redc dot, mempty)
-    go (ManyWantToken parent _) = (color redc dot, drawArrow node parent)
+    go (ManyWantToken parent next) = (color redc dot, drawArrow node parent <> color redc (drawArrow node next))
     go (Idle parent)            = (dot, drawArrow node parent)
 
   messages :: Picture
@@ -145,7 +148,7 @@ draw points weights state@DrawState { .. } = convert $ nodes <> messages where
     <> maybe mempty (color greenc . drawMessage) (state ^. pendingMessages . tokenMessage)
 
   drawMessage :: H.Entry Float (Message p) -> Picture
-  drawMessage (H.Entry left Message { .. }) = translate x y $ circleSolid size where
+  drawMessage (H.Entry left Message { .. }) = translate x y $ scale 0.7 0.7 $ circleSolid size where
     (x1, y1) = points ! _sender
     (x2, y2) = points ! _receiver
 
@@ -306,7 +309,7 @@ runAlg opts@(getAlg -> GeneralArvy spec) = runSpec spec where
 nearest :: DrawState msg s -> Points -> (Float, Float) -> Int
 nearest (squareSize -> square) points (clickx, clicky) = near where
   x = clickx / square + 0.5
-  y = clicky / square + 0.5
+  y = clicky / square + 0.55
   near = fst $ minimumBy (comparing (dist . snd)) (assocs points)
   dist :: Point -> Float
   dist (x1, y1) = (x1 - x) ** 2 + (y1 - y) ** 2
@@ -417,4 +420,4 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
         where
         dt = dt' * state ^. speed
 
-  playIO FullScreen white 60 initialDrawState (return . draw points weights) handle step
+  playIO FullScreen white 60 initialDrawState (return . draw optTitle points weights) handle step

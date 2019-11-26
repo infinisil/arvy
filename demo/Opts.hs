@@ -17,6 +17,7 @@ data Options = Options
   , optReqsPerSec :: Float
   , optDemo       :: Bool
   , optSeed       :: Word32
+  , optTitle      :: String
   }
 
 getAlg :: Options -> GeneralArvy '[Log]
@@ -26,9 +27,9 @@ getAlg Options { optAlg = name } = case lookup name mapping of
   where mapping =
           [ ("arrow", arrow)
           , ("ivy", ivy)
+          , ("edgemin", minWeight)
+          , ("pairmin", localMinPairs)
           , ("dynstar", dynamicStar)
-          , ("localminpairs", localMinPairs)
-          , ("minweight", minWeight)
           , ("ratio", inbetween (1 % 2))
           ]
 
@@ -39,8 +40,8 @@ getTree Options { optTree = name } = case lookup name mapping of
   where mapping =
           [ ("random", Tree.random)
           , ("mst", Tree.mst)
-          , ("shortpairs", Tree.shortPairs)
-          , ("shortestpairs", Tree.shortestPairs)
+          , ("minpair", Tree.shortPairs)
+          , ("approxminpair", Tree.shortestPairs)
           , ("star", Tree.bestStar)
           , ("ring", Tree.ring)
           ]
@@ -73,6 +74,10 @@ parser = Options
                   <> long "seed"
                   <> value 14
                   <> help "Random seed"
+                  )
+  <*> option str ( long "title"
+                  <> help "Title to use"
+                  <> value ""
                   )
 
 
