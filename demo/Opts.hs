@@ -4,6 +4,7 @@ import           Arvy.Algorithm
 import           Arvy.Algorithm.Collection
 import           Arvy.Log
 import           Data.List
+import           GHC.Word
 import           Options.Applicative
 import qualified Parameters.Tree           as Tree
 import           Polysemy
@@ -14,6 +15,7 @@ data Options = Options
   , optAlg        :: String
   , optTree       :: String
   , optReqsPerSec :: Float
+  , optSeed       :: Word32
   }
 
 getAlg :: Options -> GeneralArvy '[Log]
@@ -60,6 +62,11 @@ parser = Options
   <*> option auto ( long "reqsPerSec"
                   <> help "For autorandom requests, how many should be issued per simulation second"
                   <> value 2
+                  )
+  <*> option auto ( short 's'
+                  <> long "seed"
+                  <> value 0
+                  <> help "Random seed"
                   )
 
 

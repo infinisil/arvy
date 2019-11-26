@@ -308,14 +308,12 @@ runBehavior
   -> IO ()
 runBehavior opts@Options { optNodeCount = n, .. } behavior initState runner = do
 
-  let seed = 1
-
-  pointsRaw <- runM $ runRandomSeed seed 0 $ Weights.randomPoints n 2
+  pointsRaw <- runM $ runRandomSeed optSeed 0 $ Weights.randomPoints n 2
 
   let weights = Weights.pointWeights n 2 pointsRaw
       points = amap (\arr -> (double2Float $ arr ! 0, double2Float $ arr ! 1)) pointsRaw
 
-  initialTree <- runM $ runRandomSeed seed 1 $ runIgnoringLog $ Tree.treeGen (getTree opts) n weights
+  initialTree <- runM $ runRandomSeed optSeed 1 $ runIgnoringLog $ Tree.treeGen (getTree opts) n weights
 
 
   let initialDrawState = DrawState
@@ -380,4 +378,4 @@ runBehavior opts@Options { optNodeCount = n, .. } behavior initState runner = do
         where
         dt = dt' * state ^. speed
 
-  playIO FullScreen white 100 initialDrawState (return . draw points weights) handle step
+  playIO FullScreen white 60 initialDrawState (return . draw points weights) handle step
