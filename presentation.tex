@@ -42,7 +42,7 @@ Distributed Mutual Exclusion}
     , r/.style = { v, gr } % root nodes
     , q/.style = { v, rd } % currently making request
     , e/.style = { draw=black, -> }
-    , re/.style = { postaction={decorate}, >={Stealth[scale=1.5]}, dashed, bl }
+    , re/.style = { postaction={decorate}, >={Stealth[scale=1.5]}, densely dotted, bl }
     , weight/.style = { dotted, black!30!white }
     , every node/.style = { inner sep=0pt, minimum size=18pt },
     , >={Stealth[scale=2]}
@@ -76,7 +76,7 @@ every node/.style = { fill, circle, inner sep=0pt, minimum size=4pt },
 cand/.append style = { >={Stealth[scale=0.7]} },
 every loop/.append style = { min distance = 15mm },
 ]
-\tikzset{shift={(current page.south west)},yshift=7cm,xshift=4cm}
+\tikzset{shift={(current page.south west)},yshift=9.2cm,xshift=4cm}
 \node (a) at (3,6) {};
 \node (b) at (2,11) {};
 \node (c) at (5,12) {};
@@ -104,7 +104,7 @@ every loop/.append style = { min distance = 15mm },
 \tikzset{
 remember picture,
 overlay,
-shift={(current page.south west)},yshift=2.8cm,xshift=6.8cm,
+shift={(current page.south west)},yshift=3.3cm,xshift=6.8cm,
 }
 \begin{axis}[
   xlabel={},
@@ -136,23 +136,20 @@ shift={(current page.south west)},yshift=2.8cm,xshift=6.8cm,
 \end{axis}
 \end{tikzpicture}
 
-\begin{textblock*}{\paperwidth}[0,0](0cm,0.7cm)
+\begin{textblock*}{\paperwidth}[0,0](0cm,0.3cm)
         \begin{center}
                 \usebeamercolor[fg]{title}
                 \textbf{\huge \inserttitle}
         \end{center}
-        \usebeamercolor[fg]{normal text}
 \end{textblock*}
-\begin{textblock*}{\paperwidth}[0,0](-0.5cm,7.4cm)
-        \flushright
-        \itshape \insertauthor
-        \usebeamercolor[fg]{normal text}
+\begin{textblock*}{\paperwidth}[0,0](-0.5cm,7.0cm)
+\flushright
+\itshape \insertauthor\\
+Advised by Pankaj Khanchandani and András Papp
 \end{textblock*}
 \begin{textblock*}{\paperwidth}[0,1](0.2cm,9.4cm)
         \flushleft
-        \usebeamercolor[fg]{institute}
         \tiny \itshape \insertinstitute
-        \usebeamercolor[fg]{normal text}
 \end{textblock*}
 \end{frame}
 }
@@ -369,10 +366,10 @@ Allow \textit{any} previous nodes on the request path as new parents
 \node[bn] (n5) at (4,0) {d};
 \draw[e] (n2) -- (n1);
 \draw[e] (n3) -- (n2);
-\draw[be] (n3) to[out=-40,in=70] node[bl]{\footnotesize{request}} (n5);
 \draw[cand,white] (n5) -- node[sloped,above]{5} (n1);
 \draw[cand,white] (n5) -- node[sloped,above]{2} (n2);
 \draw[cand,white] (n5) -- node[sloped,above]{3} (n3);
+\draw[re] (n3) -- node[bl]{request} (n5);
 \end{tikzpicture}
 
 \end{frame}
