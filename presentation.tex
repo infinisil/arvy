@@ -11,35 +11,132 @@
 \usepackage{tikz}
 \usepackage{numprint}
 \usetikzlibrary{pgfplots.groupplots}
-
+\usetikzlibrary{calc}
 \usetikzlibrary{positioning}
 \usetikzlibrary{arrows.meta}
-
-%\usecolortheme{rose}
+\usetikzlibrary{decorations.markings}
 
 \setbeamerfont{frametitle}{series=\bfseries}
-\setbeamercolor*{title}{fg=white}
-\setbeamercolor*{author}{fg=white}
-\setbeamercolor*{institute}{fg=white}
-\setbeamercolor*{date}{fg=white}
 \setbeamerfont{title}{series=\bfseries,size=\huge}
-% \setbeamercolor{frametitle}{}
 \setbeamerfont{author}{series=\bfseries}
 
-
-\usetheme{Pittsburgh}
 \setbeamertemplate{navigation symbols}{}
 
-\title{Arvy Heuristics for Distributed Mutual Exclusion}
+\title{Arvy Heuristics for \\
+Distributed Mutual Exclusion}
 \author{Silvan Mosberger}
 \institute{ETH Zurich -- Distributed Computing Group -- www.disco.ethz.ch}
 
 \begin{document}
 
+\newcommand{\evalTime}{Average request time}
+\newcommand{\evalEdges}{Average tree edge distance}
+
+\tikzset{
+  rd/.style = { red!70!black },
+  bl/.style = { blue!70!black },
+  gr/.style = { green!50!black },
+  cand/.style = { dashed, black!70!white, ->, >={Stealth[scale=1]} },
+  arvy-expl/.style =
+    { v/.style = { circle, draw } % normal graph vertices
+    , r/.style = { v, gr } % root nodes
+    , q/.style = { v, rd } % currently making request
+    , e/.style = { draw=black, -> }
+    , re/.style = { postaction={decorate}, >={Stealth[scale=1.5]}, dashed, bl }
+    , weight/.style = { dotted, black!30!white }
+    , every node/.style = { inner sep=0pt, minimum size=18pt },
+    , >={Stealth[scale=2]}
+    , scale = 1.0
+    , auto,
+    decoration={
+      markings,
+      mark=at position 0.5 with {\arrow{>}},
+    },
+    }
+}
+
+% From https://tex.stackexchange.com/a/136166/201701
+\tikzset{
+  invisible/.style={opacity=0},
+  visible on/.style={alt={#1{}{invisible}}},
+  alt/.code args={<#1>#2#3}{%
+    \alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}} % \pgfkeysalso doesn't change the path
+  },
+}
+
+
 {
-\usebackgroundtemplate{\includegraphics[width=\paperwidth]{figures/bg}}
 \begin{frame}
-\begin{textblock*}{\paperwidth}[0,0](0cm,1cm)
+\begin{tikzpicture}[
+remember picture,
+overlay,
+scale=0.27,
+>={Stealth[scale=1]},
+every node/.style = { fill, circle, inner sep=0pt, minimum size=4pt },
+cand/.append style = { >={Stealth[scale=0.7]} },
+every loop/.append style = { min distance = 15mm },
+]
+\tikzset{shift={(current page.south west)},yshift=7cm,xshift=4cm}
+\node (a) at (3,6) {};
+\node (b) at (2,11) {};
+\node (c) at (5,12) {};
+\node[rd] (d) at (6,1) {};
+\node (e) at (8,9) {};
+\node (f) at (10,0) {};
+\node (g) at (16,8) {};
+\node[gr] (h) at (17,14) {};
+\node (i) at (13,12) {};
+\draw[->] (a) -- (c);
+\draw[->] (b) -- (c);
+\draw[->] (c) -- (e);
+\draw[->] (f) -- (d);
+\draw[->] (e) -- (f);
+\draw[->] (g) -- (h);
+\draw[->] (i) -- (h);
+\draw[cand] (g) -- (e);
+\draw[cand] (g) -- (d);
+\draw[cand] (g) -- (f);
+\path (d) edge [loop left] (d);
+\path (h) edge [loop above] (h);
+\end{tikzpicture}
+
+\begin{tikzpicture}
+\tikzset{
+remember picture,
+overlay,
+shift={(current page.south west)},yshift=2.8cm,xshift=6.8cm,
+}
+\begin{axis}[
+  xlabel={},
+  xmax = 100000,
+  cycle list = { [samples of colormap=8] },
+  font=\footnotesize,
+  scale=0.6,
+  xmode = log,
+  xmin = 1,
+  grid,
+  colormap name = colormap/jet,
+  height=0.7\textheight,
+  width=0.9\textwidth,
+  xtick=\empty,
+  ytick=\empty,
+  every axis plot post/.append style = {
+    line join=round,
+    line width=1pt,
+  },
+]
+\pgfplotstableread{data/converging/treeWeight.dat}{\data}
+\addplot+[dashed] table [y={arrow-random}] {\data};
+\addplot+[dashed] table [y={arrow-star}] {\data};
+\addplot+[dashed] table [y={arrow-mst}] {\data};
+\addplot table [y={ivy-random}] {\data};
+\addplot table [y={dynamicStar-random}] {\data};
+\addplot table [y={localMinPairs-random}] {\data};
+\addplot table [y={minWeight-random}] {\data};
+\end{axis}
+\end{tikzpicture}
+
+\begin{textblock*}{\paperwidth}[0,0](0cm,0.7cm)
         \begin{center}
                 \usebeamercolor[fg]{title}
                 \textbf{\huge \inserttitle}
@@ -48,7 +145,6 @@
 \end{textblock*}
 \begin{textblock*}{\paperwidth}[0,0](-0.5cm,7.4cm)
         \flushright
-        \color{white}
         \itshape \insertauthor
         \usebeamercolor[fg]{normal text}
 \end{textblock*}
@@ -60,549 +156,6 @@
 \end{textblock*}
 \end{frame}
 }
-
-% Explain the problem
-
-\begin{frame}{Distributed Mutual Exclusion}
-
-The guarantee that only at most one node in a network can have exclusive access to a shared resource
-
-\begin{block}{Examples}
-\begin{itemize}
-\item A distributed counter where every node can increase it
-\item Shared memory in a multiprocessor machine
-\end{itemize}
-
-\end{block}
-
-\end{frame}
-
-\tikzset{
-  arvy-expl/.style =
-    { v/.style = { circle, draw } % normal graph vertices
-    , r/.style = { v, gr } % root nodes
-    , rd/.style = { red!70!black }
-    , bl/.style = { blue!70!black }
-    , gr/.style = { green!50!black }
-    , q/.style = { v, rd } % currently making request
-    , e/.style = { draw=black, -> }
-    , re/.style = { e, dashed, bl }
-    , cand/.style = { dashed, black!70!white, ->, >={Stealth[scale=1]} }
-    , weight/.style = { dotted, black!30!white }
-    , >={Stealth[scale=2]}
-    , scale = 1.0
-    , auto
-    }
-}
-
-\begin{frame}{Arrow Algorithm}
-\begin{block}{Idea}
-Maintain a rooted spanning tree with every node (transitively) pointing towards the node holding the token.
-\end{block}
-\end{frame}
-
-\begin{frame}{Arrow Algorithm}
-\centering
-
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\node[gr, above=0 of 5] {\footnotesize has resource};
-\draw[e] (2) -- (3);
-\draw[e] (3) -- (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\end{tikzpicture}
-
-\end{frame}
-
-\begin{frame}{Arrow Algorithm}
-\centering
-
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[re] (2) --node[below right=3pt and -20pt]{\footnotesize request from 2}  (3);
-\draw[e] (3) -- (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Arrow Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[re] (3) --node[right]{\footnotesize request from 2}  (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Arrow Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (3);
-\draw[re] (4) --node[above right=2pt and -20pt]{\footnotesize request from 2}  (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Arrow Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[v] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (3);
-\draw[e] (5) -- (4);
-\draw[e] (1) -- (4);
-\draw[re, gr] (5) --node[left]{\footnotesize resource} (2);
-\path (5) edge [loop below, white] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Arrow Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[r] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[v] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (3);
-\draw[e] (5) -- (4);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below, white] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Ivy Algorithm}
-\begin{block}{Idea}
-Connect to the node that sent the request, because the root will be there soon, so only a small number of hops needed to reach it in the future
-\end{block}
-\end{frame}
-
-\begin{frame}{Ivy Algorithm}
-\centering
-
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\node[gr, above=0 of 5] {\footnotesize has resource};
-\draw[e] (2) -- (3);
-\draw[e] (3) -- (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\end{tikzpicture}
-
-\end{frame}
-
-\begin{frame}{Ivy Algorithm}
-\centering
-
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[re] (2) --node[below right=3pt and -20pt]{\footnotesize request from 2}  (3);
-\draw[e] (3) -- (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-
-\begin{frame}{Ivy Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[re] (3) --node[right]{\footnotesize request from 2}  (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Ivy Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (2);
-\draw[re] (4) --node[above right=2pt and -20pt]{\footnotesize request from 2}  (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Ivy Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[v] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (2);
-\draw[e] (5) -- (2);
-\draw[e] (1) -- (4);
-\draw[re, gr] (5) to[out=100, in=240] node[left]{\footnotesize resource} (2);
-\path (5) edge [loop below, white] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Ivy Algorithm}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[r] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[v] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (2);
-\draw[e] (5) -- (2);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below, white] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{General Arvy Algorithms}
-\begin{block}{Idea}
-Allow connecting back to \textit{any} node on the request path
-\end{block}
-\end{frame}
-
-\begin{frame}{General Arvy Algorithms}
-\centering
-
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\node[gr, above=0 of 5] {\footnotesize has resource};
-\draw[e] (2) -- (3);
-\draw[e] (3) -- (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\end{tikzpicture}
-
-\end{frame}
-
-\begin{frame}{General Arvy Algorithms}
-\centering
-
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[re] (2) to[out=220,in=0] node[below right=3pt and -20pt]{\footnotesize request from 2}  (3);
-\draw[cand] (3) -- (2);
-\node[black!70] (cand) at (4,5.5) {\footnotesize{parent candidate}};
-\draw[black!70] (cand) -- (4.9,4.6);
-\draw[e] (3) -- (4);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-
-\begin{frame}{General Arvy Algorithms}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[re] (3) to[out=-90,in=60] node[right]{\footnotesize request from 2}  (4);
-\draw[cand] (4) -- (3);
-\draw[cand] (4) -- (2);
-\draw[e] (4) -- (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{General Arvy Algorithms}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[r] (5) at (6,0) {5};
-\draw[cand] (5) -- (2);
-\draw[cand] (5) -- (3);
-\draw[cand] (5) -- (4);
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (2);
-\draw[re] (4) to[out=0,in=150] node[above right=2pt and -20pt]{\footnotesize request from 2}  (5);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{General Arvy Algorithms}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[q] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[v] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (2);
-\draw[e] (5) -- (3);
-\draw[e] (1) -- (4);
-\draw[re, gr] (5) -- node[left]{\footnotesize resource} (2);
-\path (5) edge [loop below, white] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{General Arvy Algorithms}
-\centering
-\begin{tikzpicture}[arvy-expl]
-\node[v] (1) at (0,5) {1};
-\node[r] (2) at (7,5) {2};
-\node[rd, above=3pt of 2, color=white] {\footnotesize needs resource};
-\node[v] (3) at (3,4) {3};
-\node[v] (4) at (2,1) {4};
-\node[v] (5) at (6,0) {5};
-\draw[e] (3) -- (2);
-\draw[e] (4) -- (2);
-\draw[e] (5) -- (3);
-\draw[e] (1) -- (4);
-\path (5) edge [loop below, white] (4);
-\path (2) edge [loop above] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Edge Cost Minimizer Heuristic}
-\begin{block}{Idea}
-Connect to the node with minimum edge distance. This makes for a short total tree edge distance over time
-\end{block}
-\end{frame}
-
-\begin{frame}{Edge Cost Minimizer Heuristic}
-\centering
-\begin{tikzpicture}
-[arvy-expl, bn/.style={circle,draw}
-,root/.style={bn,thick}
-,be/.style={dashed,draw=blue!70!black,arrows={-Stealth[scale=1.5]}}
-,req/.style={bn,red!70!black}
-,auto,scale=1.6,font=\footnotesize]
-\node[q] (n1) at (0,0) {a};
-\node[bn] (n2) at (1,2) {b};
-\node[bn] (n3) at (3,3) {c};
-\node[bn] (n4) at (5,2) {d};
-\node[bn] (n5) at (4,0) {e};
-\draw[be] (n1) -- node[blue!70!black]{\footnotesize{request path}} (n2);
-\draw[be] (n2) -- (n3);
-\draw[be] (n3) -- (n4);
-\draw[be] (n4) to[out=-100,in=50] (n5);
-\draw[cand] (n5) -- node{$3$} (n1);
-\draw[cand] (n5) -- node{$5$} (n2);
-\draw[cand] (n5) -- node{$1$} (n3);
-\draw[cand] (n5) -- node[left]{$4$} (n4);
-\end{tikzpicture}
-
-\end{frame}
-
-\begin{frame}{Edge Cost Minimizer Heuristic}
-\centering
-\begin{tikzpicture}
-[arvy-expl, bn/.style={circle,draw}
-,root/.style={bn,thick}
-,be/.style={dashed,draw=blue!70!black,arrows={-Stealth[scale=1.5]}}
-,req/.style={bn,red!70!black}
-,auto,scale=1.6,font=\footnotesize]
-\node[q] (n1) at (0,0) {a};
-\node[bn] (n2) at (1,2) {b};
-\node[bn] (n3) at (3,3) {c};
-\node[bn] (n4) at (5,2) {d};
-\node[bn] (n5) at (4,0) {e};
-\draw[be] (n1) -- node[blue!70!black]{\footnotesize{request path}} (n2);
-\draw[be] (n2) -- (n3);
-\draw[be] (n3) -- (n4);
-\draw[cand,white] (n5) -- node[white]{$3$} (n1);
-\draw[be] (n4) to[out=-100,in=50] (n5);
-\draw[e] (n5) -- node{$1$} (n3);
-\draw[weight] (n5) -- node{$3$} (n1);
-\draw[weight] (n5) -- node{$5$} (n2);
-\draw[weight] (n5) -- node[left]{$4$} (n4);
-\end{tikzpicture}
-
-\end{frame}
-
-\begin{frame}{Local Pair Distance Minimizer Heuristic}
-\centering
-\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
-\node[q] (0) at (0,0) {a};
-\node[v] (1) at (0,2) {b};
-\node[v] (2) at (2,3) {c};
-\node[v,white] (3) at (3,1) {d};
-\draw[e] (1) --node[left]{4} (0);
-\draw[cand] (2) --node[below=2pt]{6} (0);
-\draw[cand] (2) --node[above]{5} (1);
-\draw[re] (0) to[out=110,in=-110] node[left, blue!70!black]{\footnotesize{request path}} (1);
-\draw[re] (1) to[out=60,in=180] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Local Pair Distance Minimizer Heuristic}
-\centering
-\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
-\node[q] (0) at (0,0) {a};
-\node[v] (1) at (0,2) {b};
-\node[v] (2) at (2,3) {c};
-\node[v,white] (3) at (3,1) {d};
-\draw[e] (1) --node[left]{4} (0);
-\draw[weight] (2) --node[below=2pt]{6} (0);
-\draw[e] (2) --node[above]{5} (1);
-\draw[re] (0) to[out=110,in=-110] node[left, blue!70!black]{\footnotesize{request path}} (1);
-\draw[re] (1) to[out=60,in=180] (2);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Local Pair Distance Minimizer Heuristic}
-\centering
-\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
-\node[q] (0) at (0,0) {a};
-\node[v] (1) at (0,2) {b};
-\node[v] (2) at (2,3) {c};
-\node[v] (3) at (3,1) {d};
-\draw[e] (1) --node[left]{4} (0);
-\draw[weight] (2) --node[below=2pt]{6} (0);
-\draw[e] (2) --node[above]{5} (1);
-\draw[cand] (3) --node[below]{2} (0);
-\draw[cand] (3) --node[above]{3} (1);
-\draw[cand] (3) --node[right]{2} (2);
-\draw[re] (0) to[out=110,in=-110] node[left, blue!70!black]{\footnotesize{request path}} (1);
-\draw[re] (1) to[out=60,in=180] (2);
-\draw[re] (2) to[out=-30,in=90] (3);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Local Pair Distance Minimizer Heuristic}
-\centering
-\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
-\node[q] (0) at (0,0) {a};
-\node[v] (1) at (0,2) {b};
-\node[v] (2) at (2,3) {c};
-\node[v] (3) at (3,1) {d};
-\draw[e] (1) --node[left]{4} (0);
-\draw[weight] (2) --node[below=2pt]{6} (0);
-\draw[e] (2) --node[above]{5} (1);
-\draw[weight] (0) --node[below]{2} (3);
-\draw[e] (3) --node[above]{3} (1);
-\draw[weight] (2) --node[right]{2} (3);
-\draw[re] (0) to[out=110,in=-110] node[left, blue!70!black]{\footnotesize{request path}} (1);
-\draw[re] (1) to[out=60,in=180] (2);
-\draw[re] (2) to[out=-30,in=90] (3);
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Dynamic Star Heuristic}
-\begin{block}{Idea}
-\begin{itemize}
-\item Measure request probabilities $p_v$ for each node $v$
-\item Create a star with the best center node over time
-\end{itemize}
-\end{block}
-\end{frame}
-
-\begin{frame}{Results}
-\begin{itemize}
-\item Performance: Total time needed to satisfy all requests
-\item Graph costs: Uniformly random nodes in a unit square
-\item Request sequence: Uniformly random or adversarial
-\end{itemize}
-\end{frame}
-
-\newcommand{\evalTime}{Average request time}
-\newcommand{\evalEdges}{Average tree edge distance}
 
 \pgfplotsset{
   every axis legend/.append style={
@@ -632,7 +185,448 @@ Connect to the node with minimum edge distance. This makes for a short total tre
   },
 }
 
-\begin{frame}{Results: Best Tree for Arrow}
+% Explain the problem
+
+\begin{frame}{Distributed Mutual Exclusion}
+
+Single shared resource in network of nodes wanting exclusive access to it
+
+\vspace{5mm}
+\begin{center}
+\begin{tikzpicture}[
+scale=0.4,
+>={Stealth[scale=1]},
+dot/.style = { fill, circle, inner sep=0pt, minimum size=6pt },
+font=\scriptsize,
+]
+\node[dot,gr] (a) at (5,5) {};
+\node[dot] (b) at (8,9) {};
+\node[dot] (c) at (10,0) {};
+\node[dot,rd] (d) at (16,8) {};
+\draw (a) --node[sloped, above]{2} (b);
+\draw (a) --node[sloped, above]{3} (c);
+\draw (a) --node[sloped, above]{5} (d);
+\draw (b) --node[sloped, above]{4} (c);
+\draw (b) --node[sloped, above]{4} (d);
+\draw (c) --node[sloped, above]{3} (d);
+\node[gr, left=0pt of a] {\footnotesize has token};
+\node[rd, right=0pt of d] {\footnotesize wants token};
+\end{tikzpicture}
+\end{center}
+
+\end{frame}
+
+
+\begin{frame}{Arrow}
+\centering
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {a};
+\node[q,visible on=<-5>] (2) at (7,5) {b};
+\node[r,visible on=<6->] (2) at (7,5) {b};
+\path (2) edge [loop above,visible on=<2->] (2);
+
+\node[rd, above=3pt of 2,visible on=<1>] {\footnotesize wants token};
+\node[v] (3) at (3,4) {c};
+\node[v] (4) at (2,1) {d};
+\node[r,visible on=<-4>] (5) at (6,0) {e};
+\node[v,visible on=<5->] (5) at (6,0) {e};
+\node[gr, above=0 of 5,visible on=<1>] {\footnotesize has token};
+
+
+\draw[e] (1) -- (4);
+
+\draw[e,visible on=<1>] (2) -- (3);
+\draw[re,visible on=<2>] (2) --node[below]{\footnotesize request}  (3);
+\draw[e,visible on=<3->] (3) -- (2);
+
+\draw[e,visible on=<-2>] (3) -- (4);
+\draw[re,visible on=<3>] (3) -- (4);
+\draw[e,visible on=<4->] (4) -- (3);
+
+\draw[e,visible on=<-3>] (4) -- (5);
+\draw[re,visible on=<4>] (4) -- (5);
+\draw[e,visible on=<5->] (5) -- (4);
+
+\path[visible on=<-4>] (5) edge [loop below] (4);
+\draw[re, gr, visible on=<5>] (5) --node[right=4pt]{\footnotesize token} (2);
+\end{tikzpicture}
+
+\end{frame}
+
+
+\begin{frame}{Arrow}
+\begin{block}{Idea}
+Maintain rooted spanning tree pointing to the token
+\end{block}
+\end{frame}
+
+
+\begin{frame}{Ivy}
+\centering
+
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {a};
+\node[q,visible on=<-5>] (2) at (7,5) {b};
+\node[r,visible on=<6->] (2) at (7,5) {b};
+\path (2) edge [loop above,visible on=<2->] (2);
+
+\node[rd, above=3pt of 2,visible on=<1>] {\footnotesize wants token};
+\node[v] (3) at (3,4) {c};
+\node[v] (4) at (2,1) {d};
+\node[r,visible on=<-4>] (5) at (6,0) {e};
+\node[v,visible on=<5->] (5) at (6,0) {e};
+\node[gr, above=0 of 5,visible on=<1>] {\footnotesize has token};
+
+
+\draw[e] (1) -- (4);
+
+\draw[e,visible on=<1>] (2) -- (3);
+\draw[re,visible on=<2>] (2) --node[below]{\footnotesize request}  (3);
+\draw[e,visible on=<3->] (3) -- (2);
+
+\draw[e,visible on=<-2>] (3) -- (4);
+\draw[re,visible on=<3>] (3) -- (4);
+\draw[e,visible on=<4->] (4) -- (2);
+
+\draw[e,visible on=<-3>] (4) -- (5);
+\draw[re,visible on=<4>] (4) -- (5);
+\draw[e,visible on=<5->] (5) -- (2);
+
+\path[visible on=<-4>] (5) edge [loop below] (4);
+\draw[re, gr, visible on=<5>] (5) to[out=50,in=-80] node[right=4pt]{\footnotesize token} (2);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Ivy}
+\begin{block}{Idea}
+Choose node that sent request as new parent
+\end{block}
+\end{frame}
+
+\begin{frame}{General Arvy}
+
+\begin{tikzpicture}[arvy-expl]
+\node[v] (1) at (0,5) {a};
+\node[q,visible on=<-8>] (2) at (7,5) {b};
+\node[r,visible on=<9->] (2) at (7,5) {b};
+\path (2) edge [loop above,visible on=<2->] (2);
+
+\node[rd, above=3pt of 2,visible on=<1>] {\footnotesize wants token};
+\node[v] (3) at (3,4) {c};
+\node[v] (4) at (2,1) {d};
+\node[r,visible on=<-7>] (5) at (6,0) {e};
+\node[v,visible on=<8->] (5) at (6,0) {e};
+\node[gr, above=0 of 5,visible on=<1>] {\footnotesize has token};
+
+\draw[e] (1) -- (4);
+
+\draw[e,visible on=<1>] (2) -- (3);
+\draw[re,visible on=<2>] (2) --node[below]{\footnotesize request}  (3);
+\draw[cand,visible on=<3>] (3) -- (2);
+\node[black!70,visible on=<3>] (cand) at (4,5.5) {\footnotesize{parent candidate}};
+\draw[black!70,visible on=<3>] (cand) -- (4.9,4.6);
+\draw[e,visible on=<4->] (3) -- (2);
+
+\draw[e,visible on=<-3>] (3) -- (4);
+\draw[re,visible on=<4>] (3) -- (4);
+\draw[cand,visible on=<5>] (4) -- (2);
+\draw[cand,visible on=<5>] (4) -- (3);
+\draw[e,visible on=<6->] (4) -- (3);
+
+\draw[e,visible on=<-5>] (4) -- (5);
+\draw[re,visible on=<6>] (4) -- (5);
+\draw[cand,visible on=<7>] (5) -- (2);
+\draw[cand,visible on=<7>] (5) -- (3);
+\draw[cand,visible on=<7>] (5) -- (4);
+\draw[e,visible on=<8->] (5) -- (3);
+
+\path[visible on=<-6>] (5) edge [loop below] (4);
+\draw[re, gr, visible on=<8>] (5) -- node[right=4pt]{\footnotesize token} (2);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{General Arvy}
+\begin{block}{Idea}
+Allow \textit{any} previous nodes on the request path as new parents
+\end{block}
+\end{frame}
+
+\begin{frame}{Edge Distance Minimizer}
+\centering
+\begin{tikzpicture}
+[arvy-expl, bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={dashed,draw=blue!70!black,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=1.3,font=\footnotesize]
+\node[q] (n1) at (0,0) {a};
+\node[bn] (n2) at (1,2) {b};
+\node[bn] (n3) at (3.5,2.5) {c};
+\node[bn] (n5) at (4,0) {d};
+\draw[e] (n2) -- (n1);
+\draw[e] (n3) -- (n2);
+\draw[be] (n3) to[out=-40,in=70] node[bl]{\footnotesize{request}} (n5);
+\draw[cand,white] (n5) -- node[sloped,above]{5} (n1);
+\draw[cand,white] (n5) -- node[sloped,above]{2} (n2);
+\draw[cand,white] (n5) -- node[sloped,above]{3} (n3);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Edge Distance Minimizer}
+\centering
+\begin{tikzpicture}
+[arvy-expl, bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={dashed,draw=blue!70!black,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=1.3,font=\footnotesize]
+\node[q] (n1) at (0,0) {a};
+\node[bn] (n2) at (1,2) {b};
+\node[bn] (n3) at (3.5,2.5) {c};
+\node[bn] (n5) at (4,0) {d};
+\draw[e] (n2) -- (n1);
+\draw[e] (n3) -- (n2);
+\draw[be,white] (n3) to[out=-40,in=70] node[bl,white]{\footnotesize{request}} (n5);
+\draw[cand] (n5) -- node[sloped,above]{5} (n1);
+\draw[cand] (n5) -- node[sloped,above]{2} (n2);
+\draw[cand] (n5) -- node[sloped,above]{3} (n3);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Edge Distance Minimizer}
+\centering
+
+\begin{tikzpicture}
+[arvy-expl, bn/.style={circle,draw}
+,root/.style={bn,thick}
+,be/.style={dashed,draw=blue!70!black,arrows={-Stealth[scale=1.5]}}
+,req/.style={bn,red!70!black}
+,auto,scale=1.3,font=\footnotesize]
+\node[q] (n1) at (0,0) {a};
+\node[bn] (n2) at (1,2) {b};
+\node[bn] (n3) at (3.5,2.5) {c};
+\node[bn] (n5) at (4,0) {d};
+\draw[e] (n2) -- (n1);
+\draw[e] (n3) -- (n2);
+\draw[be,white] (n3) to[out=-40,in=70] node[bl,white]{\footnotesize{request}} (n5);
+\draw[weight] (n5) -- node[sloped,above]{5} (n1);
+\draw[e] (n5) -- node[sloped,above]{2} (n2);
+\draw[weight] (n5) -- node[sloped,above]{3} (n3);
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Edge Distance Minimizer}
+\begin{block}{Idea}
+Choose node with minimum edge distance as the new parent
+\end{block}
+\end{frame}
+
+\begin{frame}{Local Pair Distance Minimizer}
+\centering
+\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
+\node[q] (0) at (0,0) {a};
+\node[v] (1) at (0,2) {b};
+\node[v] (2) at (2,3) {c};
+\node[v,white] (3) at (3,1) {d};
+\draw[e] (1) --node[left]{4} (0);
+\draw[cand,white] (2) --node[below=2pt]{6} (0);
+\draw[cand,white] (2) --node[above]{5} (1);
+\draw[re] (1) to[out=60,in=180] node[above, blue!70!black]{\footnotesize{request}} (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Local Pair Distance Minimizer}
+\centering
+\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
+\node[q] (0) at (0,0) {a};
+\node[v] (1) at (0,2) {b};
+\node[v] (2) at (2,3) {c};
+\node[v,white] (3) at (3,1) {d};
+\draw[e] (1) --node[left]{4} (0);
+\draw[cand] (2) --node[below=2pt]{6} (0);
+\draw[cand] (2) --node[above]{5} (1);
+\draw[re,white] (1) to[out=60,in=180] node[left, blue!70!black]{\footnotesize{request}} (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Local Pair Distance Minimizer}
+\centering
+\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
+\node[q] (0) at (0,0) {a};
+\node[v] (1) at (0,2) {b};
+\node[v] (2) at (2,3) {c};
+\node[v,white] (3) at (3,1) {d};
+\draw[e] (1) --node[left]{4} (0);
+\draw[weight] (2) --node[below=2pt]{6} (0);
+\draw[e] (2) --node[above]{5} (1);
+\draw[re,white] (1) to[out=60,in=180] node[left, blue!70!black]{\footnotesize{request}} (2);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Local Pair Distance Minimizer}
+\centering
+\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
+\node[q] (0) at (0,0) {a};
+\node[v] (1) at (0,2) {b};
+\node[v] (2) at (2,3) {c};
+\node[v] (3) at (3,1) {d};
+\draw[e] (1) --node[left]{4} (0);
+\draw[weight] (2) --node[below=2pt]{6} (0);
+\draw[e] (2) --node[above]{5} (1);
+\draw[cand] (3) --node[below]{2} (0);
+\draw[cand] (3) --node[above]{3} (1);
+\draw[cand] (3) --node[right]{2} (2);
+\draw[re] (0) to[out=110,in=-110] node[left, blue!70!black]{\footnotesize{request path}} (1);
+\draw[re] (1) to[out=60,in=180] (2);
+\draw[re] (2) to[out=-30,in=90] (3);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Local Pair Distance Minimizer}
+\centering
+\begin{tikzpicture}[arvy-expl,scale=2,font=\footnotesize]
+\node[q] (0) at (0,0) {a};
+\node[v] (1) at (0,2) {b};
+\node[v] (2) at (2,3) {c};
+\node[v] (3) at (3,1) {d};
+\draw[e] (1) --node[left]{4} (0);
+\draw[weight] (2) --node[below=2pt]{6} (0);
+\draw[e] (2) --node[above]{5} (1);
+\draw[weight] (0) --node[below]{2} (3);
+\draw[e] (3) --node[above]{3} (1);
+\draw[weight] (2) --node[right]{2} (3);
+\draw[re] (0) to[out=110,in=-110] node[left, blue!70!black]{\footnotesize{request path}} (1);
+\draw[re] (1) to[out=60,in=180] (2);
+\draw[re] (2) to[out=-30,in=90] (3);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Dynamic Star}
+\begin{block}{Idea}
+\begin{itemize}
+\item Measure request probabilities $p_v$ for each node $v$
+\item Create a star with the best center node over time
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{Results}
+\begin{itemize}
+\item Performance: Total time needed to satisfy all requests
+\item Graph costs: Uniformly random nodes in a unit square
+\item Request sequence: Uniformly random or adversarial
+\end{itemize}
+\end{frame}
+
+
+
+
+\begin{frame}{Tree Convergence}
+
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = \evalEdges,
+  xmax = 100000,
+  cycle list = { [samples of colormap=8] },
+  font=\footnotesize
+]
+\pgfplotstableread{data/converging/treeWeight.dat}{\data}
+\addplot+[dashed] table [y={arrow-random}] {\data};
+\addlegendentry {Uniformly random tree}
+\addplot+[dashed] table [y={arrow-star}] {\data};
+\addlegendentry {Best star tree}
+\addplot+[dashed] table [y={arrow-mst}] {\data};
+\addlegendentry {Min. sp. tree}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
+\addplot table [y={dynamicStar-random}] {\data};
+\addlegendentry {\hyperref[alg:dynstar]{Dynamic Star}}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
+\addplot table [y={minWeight-random}] {\data};
+\addlegendentry {\hyperref[alg:ecm]{Edge cost min.}}
+\end{axis}
+\end{tikzpicture}
+
+\end{frame}
+
+\begin{frame}{Best Heuristic for Random Requests}
+
+\begin{tikzpicture}
+\centering
+\begin{axis}[
+  ylabel = \evalTime,
+  xmax = 1000000,
+  cycle list = { [samples of colormap=3] },
+  legend columns = 2,
+  font=\footnotesize,
+]
+\pgfplotstableread{data/algs/time.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best star Arrow}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
+
+\end{axis}
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Best Heuristic for Adversarial Requests}
+
+\begin{tikzpicture}
+\begin{axis}[
+  xmax = 1000000,
+  cycle list = { [samples of colormap=5] },
+  legend columns = 2,
+  ylabel=\evalTime,
+  font=\footnotesize,
+]
+\pgfplotstableread{data/adversary/time.dat}{\data}
+\addplot table [y={arrow-star}] {\data};
+\addlegendentry {Best star Arrow}
+\addplot table [y={ivy-random}] {\data};
+\addlegendentry {Ivy}
+\addplot table [y={localMinPairs-random}] {\data};
+\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
+\addplot table [y={dynamicStar-random}] {\data};
+\addlegendentry {\hyperref[alg:dynstar]{Dynamic Star}}
+
+\end{axis}
+\end{tikzpicture}
+
+\end{frame}
+
+
+\begin{frame}{Conclusion}
+
+\begin{itemize}
+\item Arrow with a star is very good for uniformly random requests
+\item The Dynamic Star heuristic outperforms all others for adversarial requests
+\item The Local Pair Distance Minimizer heuristic is worth looking into for less node contention
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{}
+\centering
+Thanks for your attention
+
+\vspace{2cm}
+Questions?
+\end{frame}
+
+\begin{frame}{Best Tree for Arrow}
 
 \begin{tikzpicture}
 \centering
@@ -660,89 +654,9 @@ Connect to the node with minimum edge distance. This makes for a short total tre
 \end{tikzpicture}
 \end{frame}
 
-\begin{frame}{Results: Tree Convergence}
-
-
-\begin{tikzpicture}
-\centering
-\begin{axis}[
-  ylabel = \evalEdges,
-  xmax = 100000,
-  cycle list = { [samples of colormap=8] },
-  font=\footnotesize
-]
-\pgfplotstableread{data/converging/treeWeight.dat}{\data}
-\addplot+[dashed] table [y={arrow-random}] {\data};
-\addlegendentry {Uniformly random tree}
-\addplot+[dashed] table [y={arrow-star}] {\data};
-\addlegendentry {Best star tree}
-\addplot+[dashed] table [y={arrow-mst}] {\data};
-\addlegendentry {Min. sp. tree}
-\addplot table [y={random-random}] {\data};
-\addlegendentry {Random heuristic}
-\addplot table [y={ivy-random}] {\data};
-\addlegendentry {Ivy}
-\addplot table [y={dynamicStar-random}] {\data};
-\addlegendentry {\hyperref[alg:dynstar]{Dynamic Star}}
-\addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
-\addplot table [y={minWeight-random}] {\data};
-\addlegendentry {\hyperref[alg:ecm]{Edge cost min.}}
-\end{axis}
-\end{tikzpicture}
-
-\end{frame}
-
-\begin{frame}{Results: Best Heuristic for Random Requests}
-
-\begin{tikzpicture}
-\centering
-\begin{axis}[
-  ylabel = \evalTime,
-  xmax = 1000000,
-  cycle list = { [samples of colormap=3] },
-  legend columns = 2,
-  font=\footnotesize,
-]
-\pgfplotstableread{data/algs/time.dat}{\data}
-\addplot table [y={arrow-star}] {\data};
-\addlegendentry {Best star Arrow}
-\addplot table [y={ivy-random}] {\data};
-\addlegendentry {Ivy}
-\addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
-
-\end{axis}
-\end{tikzpicture}
-\end{frame}
-
-\begin{frame}{Results: Best Heuristic for Random Requests}
-
-\begin{tikzpicture}
-\begin{axis}[
-  xmax = 1000000,
-  cycle list = { [samples of colormap=5] },
-  legend columns = 2,
-  ylabel=\evalTime,
-  font=\footnotesize,
-]
-\pgfplotstableread{data/adversary/time.dat}{\data}
-\addplot table [y={arrow-star}] {\data};
-\addlegendentry {Best star Arrow}
-\addplot table [y={ivy-random}] {\data};
-\addlegendentry {Ivy}
-\addplot table [y={localMinPairs-random}] {\data};
-\addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
-\addplot table [y={dynamicStar-random}] {\data};
-\addlegendentry {\hyperref[alg:dynstar]{Dynamic Star}}
-
-\end{axis}
-\end{tikzpicture}
-
-\end{frame}
 
 \begin{frame}{Ivy in Small Cliques}
-We compare the average time to satisfy a request between Arrow and Ivy in small cliques:
+Average request completion time between Arrow and Ivy in small cliques:
 \begin{center}
 \npdecimalsign{.}
 \nprounddigits{3}
@@ -751,29 +665,19 @@ We compare the average time to satisfy a request between Arrow and Ivy in small 
   \hline
   3 & 1.334 & {\color{ForestGreen} 1.250} \\
   \hline
-  4 & 1.498 & {\color{ForestGreen} 1.443} \\
+  4 & 1.499 & {\color{ForestGreen} 1.443} \\
   \hline
-  5 & {\color{ForestGreen} 1.599} & 1.603 \\
+  5 & {\color{ForestGreen} 1.600} & 1.603 \\
   \hline
-  6 & {\color{ForestGreen} 1.664} & 1.738 \\
+  6 & {\color{ForestGreen} 1.665} & 1.739 \\
   \hline
-  7 & {\color{ForestGreen} 1.712} & 1.858 \\
+  7 & {\color{ForestGreen} 1.713} & 1.859 \\
   \hline
   8 & {\color{ForestGreen} 1.749} & 1.963 \\
   \hline
   $\vdots$ & {\color{ForestGreen} $\vdots$} & $\vdots$ \\
 \end{tabular}
 \end{center}
-
-\end{frame}
-
-\begin{frame}{Conclusion}
-
-\begin{itemize}
-\item Arrow with a star is very good for uniformly random requests
-\item The Dynamic Star heuristic outperforms all others for adversarial requests
-\item The Local Pair Distance Minimizer heuristic is worth looking into for less node contention
-\end{itemize}
 
 \end{frame}
 
