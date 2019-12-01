@@ -10,8 +10,8 @@ import           Data.Array.Unboxed
 import           Data.Bifunctor
 import qualified Data.Heap                        as H
 import           Data.List
+import           Data.Maybe
 import           Data.Ord                         (comparing)
-import           Data.Random.Distribution.Uniform
 import           Evaluation.Types
 import           GHC.Float
 import           Graphics.Gloss
@@ -21,9 +21,9 @@ import           Opts
 import qualified Parameters.Tree                  as Tree
 import qualified Parameters.Weights               as Weights
 import           Polysemy
-import           Polysemy.RandomFu
 import           Polysemy.State
 import           System.Exit
+import           System.Random                    hiding (next)
 import           Utils
 
 {-
@@ -33,16 +33,16 @@ TODO:
 -}
 
 data Message p = Message
-  { _sender   :: Node
-  , _receiver :: Node
-  , _payload  :: p
+  { _sender   :: !Node
+  , _receiver :: !Node
+  , _payload  :: !p
   }
 
 makeLenses ''Message
 
 data RequestPayload msg = RequestPayload
-  { _requester       :: Node
-  , _messageContents :: msg Node
+  { _requester       :: !Node
+  , _messageContents :: !(msg Node)
   }
 
 makeLenses ''RequestPayload
@@ -55,38 +55,41 @@ data TokenState
   = HasToken
   | WantsToken
   | ManyWantToken
-    { parent :: Node
-    , next   :: Node
+    { parent :: !Node
+    , next   :: !Node
     }
   | Idle
-    { parent :: Node
+    { parent :: !Node
     }
 
 
 data NodeState s = NodeState
-  { _tokenState :: TokenState
-  , _algState   :: s
+  { _tokenState :: !TokenState
+  , _algState   :: !s
   }
 
 makeLenses ''NodeState
 
 data PendingMessages msg = PendingMessages
-  { _requestMessages :: H.Heap (H.Entry Float (RequestMessage msg))
-  , _tokenMessage    :: Maybe (H.Entry Float TokenMessage)
+  { _requestMessages :: !(H.Heap (H.Entry Float (RequestMessage msg)))
+  , _tokenMessage    :: !(Maybe (H.Entry Float TokenMessage))
   }
 
 makeLenses ''PendingMessages
 
-data Mode = Interactive
-          | Automatic Float
+data AutoMode = NoAuto
+              | AutoConcurrent !Float
+              | AutoSerial
+
+makePrisms ''AutoMode
 
 data DrawState msg s = DrawState
-  { _nodeStates      :: Array Node (NodeState s)
-  , _pendingMessages :: PendingMessages msg
-  , _viewSize        :: (Int, Int)
-  , _mode            :: Mode
-  , _speed           :: Float
-  , _sequential      :: Bool
+  { _nodeStates      :: !(Array Node (NodeState s))
+  , _pendingMessages :: !(PendingMessages msg)
+  , _viewSize        :: !(Int, Int)
+  , _mode            :: !AutoMode
+  , _speed           :: !Float
+  , _stdGen          :: !StdGen
   }
 
 makeLenses ''DrawState
@@ -158,7 +161,7 @@ draw title points weights state@DrawState { .. } = convert $ nodes <> messages <
 
 
 data NodeEvent msg = MakeRequest
-                   | RequestReceive (RequestPayload msg)
+                   | RequestReceive !(RequestPayload msg)
                    | TokenReceive
 
 nodeStateTransition
@@ -239,52 +242,58 @@ messageDistance weights Message { _sender, _receiver } = double2Float $ weights 
 reqsToRecv :: Float -> H.Heap (H.Entry Float (RequestMessage msg)) -> [(Node, NodeEvent msg)]
 reqsToRecv = undefined
 
-moveAlong :: Float -> PendingMessages msg -> PendingMessages msg
-moveAlong dt PendingMessages { .. } = PendingMessages reqMsgs tokMsg where
-  reqMsgs = H.mapMonotonic (first (subtract dt)) _requestMessages
-  tokMsg = fmap (first (subtract dt)) _tokenMessage
+moveAlong :: Float -> DrawState msg s -> DrawState msg s
+moveAlong dt state = state
+  & pendingMessages . requestMessages %~ H.mapMonotonic (first (subtract dt))
+  & pendingMessages . tokenMessage . _Just %~ first (subtract dt)
+  & mode . _AutoConcurrent %~ subtract dt
 
-passTime :: GraphWeights -> ArvyBehavior Node msg r'
+passTime :: forall msg s r' . Float -> NodeCount -> GraphWeights -> ArvyBehavior Node msg r'
   -> (forall x . Node -> Sem r' x -> Sem '[State s, Log] x)
-  -> Float -> DrawState msg s -> DrawState msg s
-passTime weights behavior runit dt state
-  | dt <= 0 = state
-  | otherwise = case nextReceive (state ^. pendingMessages) of
-      Nothing -> state
-      Just (time, msg) -> passTime weights behavior runit (dt - toPass) newState
-        where (toPass, newState) = if time > dt
-                then (dt, state & pendingMessages %~ moveAlong dt)
-                else case msg of
-                  Left (reqMsg, newMsgs) -> (time, state
-                                              & pendingMessages . requestMessages .~ newMsgs
-                                              -- Set new messages from handling the receive
-                                              & pendingMessages . requestMessages %~ maybe id (\value -> H.insert (H.Entry (messageDistance weights value) value)) mReqMsg
-                                              & pendingMessages . tokenMessage %~ (<|> fmap (\value -> H.Entry (messageDistance weights value) value) mTokMsg)
-                                              & pendingMessages %~ moveAlong time
-                                              & nodeStates . ix node .~ NodeState newTokenState newAlgState
-                                            )
-                                            where
-                                              node = reqMsg ^. receiver
-                                              NodeState { .. }  = (state ^. nodeStates) ! node
-                                              (newAlgState, (newTokenState, mReqMsg, mTokMsg)) =
-                                                run $ runIgnoringLog $ runState _algState
-                                                  $ nodeStateTransition behavior (runit node) node _tokenState (RequestReceive (reqMsg ^. payload))
-                  Right tokMsg -> (time, state
-                                    & pendingMessages . tokenMessage .~ Nothing
-                                    & pendingMessages . requestMessages %~ maybe id (\value -> H.insert (H.Entry (messageDistance weights value) value)) mReqMsg
-                                    & pendingMessages . tokenMessage %~ (<|> fmap (\value -> H.Entry (messageDistance weights value) value) mTokMsg)
-                                    & pendingMessages %~ moveAlong time
-                                    & nodeStates . ix node .~ NodeState newTokenState newAlgState
-                                  ) where
-                                    node = tokMsg ^. receiver
-                                    NodeState { .. }  = (state ^. nodeStates) ! node
-                                    (newAlgState, (newTokenState, mReqMsg, mTokMsg)) =
-                                      run $ runIgnoringLog $ runState _algState
-                                        $ nodeStateTransition behavior (runit node) node _tokenState TokenReceive
-
+  -> Float -> DrawState msg s -> IO (DrawState msg s)
+passTime reqsPerSec n weights behavior runit = advanceMsgs
+  where
+    advanceMsgs :: Float -> DrawState msg s -> IO (DrawState msg s)
+    advanceMsgs diff state = case nextEvent state of
+      Nothing          -> case state ^. mode of
+        AutoSerial -> do
+          let (node, stdGen') = randomNode n (state ^. stdGen)
+              state' = processEvent weights behavior runit node MakeRequest $ state & stdGen .~ stdGen'
+          advanceMsgs diff state'
+        _ -> return state
+      Just (time, simEvent)
+        | time > diff -> return $ moveAlong diff state -- No messages to receive in the next diff time units, just advance them
+        | otherwise -> do
+            (node, event, trans) <- case simEvent of
+              RandomSpawn -> do
+                let (node, stdGen') = randomNode n (state ^. stdGen)
+                return ( node
+                       , MakeRequest
+                       , (mode . _AutoConcurrent %~ (+ 1 / reqsPerSec))
+                         . (stdGen .~ stdGen')
+                       )
+              RequestArrive (reqMsg, newMsgs) -> return
+                ( reqMsg ^. receiver
+                , RequestReceive (_payload reqMsg)
+                , pendingMessages . requestMessages .~ newMsgs
+                )
+              TokenArrive tokMsg -> return
+                ( tokMsg ^. receiver
+                , TokenReceive
+                , pendingMessages . tokenMessage .~ Nothing
+                )
+            advanceMsgs (diff - time)
+              $ processEvent weights behavior runit node event
+              $ trans
+              $ moveAlong time state
 
 
 type MsgHeap msg = H.Heap (H.Entry Float (RequestMessage msg))
+
+data SimulationEvent msg = RandomSpawn
+                         | RequestArrive !(RequestMessage msg, MsgHeap msg)
+                         | TokenArrive !TokenMessage
+
 
 nextReceive :: PendingMessages msg -> Maybe (Float, Either (RequestMessage msg, MsgHeap msg) TokenMessage)
 nextReceive PendingMessages { .. } = case (H.uncons _requestMessages, _tokenMessage) of
@@ -294,6 +303,20 @@ nextReceive PendingMessages { .. } = case (H.uncons _requestMessages, _tokenMess
   (Just (H.Entry reqLeft reqMsg, rest), Just (H.Entry tokLeft tokMsg))
     | reqLeft < tokLeft -> Just (reqLeft, Left (reqMsg, rest))
     | otherwise -> Just (tokLeft, Right tokMsg)
+
+nextEvent :: DrawState msg s -> Maybe (Float, SimulationEvent msg)
+nextEvent state = next where
+  next = listToMaybe $ sortOn fst $ catMaybes [nextRequestArrive, nextTokenArrive, nextRandomSpawn]
+  nextRequestArrive = case H.uncons (state ^. pendingMessages . requestMessages) of
+    Nothing                       -> Nothing
+    Just (H.Entry left msg, rest) -> Just (left, RequestArrive (msg, rest))
+  nextTokenArrive = case state ^. pendingMessages . tokenMessage of
+    Nothing                 -> Nothing
+    Just (H.Entry left msg) -> Just (left, TokenArrive msg)
+  nextRandomSpawn = case state ^. mode of
+    AutoConcurrent left -> Just (left, RandomSpawn)
+    _                   -> Nothing
+
 
 main :: IO ()
 main = do
@@ -314,8 +337,8 @@ nearest (squareSize -> square) points (clickx, clicky) = near where
   dist :: Point -> Float
   dist (x1, y1) = (x1 - x) ** 2 + (y1 - y) ** 2
 
-randomNode :: NodeCount -> IO Node
-randomNode n = runM $ runRandomIO $ sampleRVar (integralUniform 0 (n - 1))
+randomNode :: RandomGen g => NodeCount -> g -> (Node, g)
+randomNode n g = randomR (0, n - 1) g
 
 demoPoints :: Array Int (UArray Int Double)
 demoPoints = listArray (0, 4)
@@ -340,7 +363,6 @@ runBehavior
   -> (forall x . UArray Node Weight -> Sem r' x -> Sem '[State s, Log] x)
   -> IO ()
 runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
-
 
   let n = if optDemo then 5 else optNodeCount
 
@@ -368,9 +390,9 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
           , _tokenMessage = Nothing
           }
         , _viewSize = (1, 1)
-        , _mode = Interactive
+        , _mode = NoAuto
         , _speed = 0.6
-        , _sequential = True
+        , _stdGen = mkStdGen (fromIntegral optSeed)
         }
 
   let
@@ -380,49 +402,39 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
 
       handle :: Event -> DrawState msg s -> IO (DrawState msg s)
       handle (EventKey (MouseButton LeftButton) Down _ click) state =
-        return $ processEvent node MakeRequest state
+        return $ processEvent weights behavior runit node MakeRequest state
         where node = nearest state points click
       handle (EventKey (MouseButton WheelUp) _ _ _) state = return $ state & speed *~ 1.1
       handle (EventKey (MouseButton WheelDown) _ _ _) state = return $ state & speed //~ 1.1
-      handle (EventKey (Char 'r') Down _ _) state = return $ state & mode .~ case state ^. mode of
-        Interactive -> Automatic 0.0
-        Automatic _ -> Interactive
-      handle (EventKey (Char 'c') Down _ _) state = return $ state & sequential .~ not (state ^. sequential)
+      handle (EventKey (Char 'r') Down _ _) state = return $ initialDrawState
+        & viewSize .~ state ^. viewSize
+        & mode .~ state ^. mode
+        & speed .~ state ^. speed
+      handle (EventKey (Char 'a') Down _ _) state = return $ state & mode .~ case state ^. mode of
+        NoAuto -> AutoSerial
+        _      -> NoAuto
+      handle (EventKey (Char 'c') Down _ _) state = return $ state & mode .~ case state ^. mode of
+        NoAuto           -> NoAuto
+        AutoSerial       -> AutoConcurrent 0.0
+        AutoConcurrent _ -> AutoSerial
       handle (EventKey (Char 'q') Down _ _) _ = exitSuccess
       handle (EventResize newSize) state = return $ state & viewSize .~ newSize
       handle _ state = return state
 
-      processEvent ::  Node -> NodeEvent msg -> DrawState msg s -> DrawState msg s
-      processEvent node event state = state
-        & nodeStates . ix node .~ NodeState newTokenState newAlgState
-        & pendingMessages . requestMessages %~ maybe id (\value -> H.insert (H.Entry (messageDistance weights value) value)) mReqMsg
-        & pendingMessages . tokenMessage %~ (<|> fmap (\value -> H.Entry (messageDistance weights value) value) mTokMsg)
-        where
-          NodeState { .. }  = (state ^. nodeStates) ! node
-          (newAlgState, (newTokenState, mReqMsg, mTokMsg)) = run $ runIgnoringLog $ runState _algState $ nodeStateTransition behavior (runit node) node _tokenState event
 
       -- FIXME: Iteratively pass time and issue automatic requests interleaved. This then allows more sequential requests with high speeds
       step :: Float -> DrawState msg s -> IO (DrawState msg s)
-      step dt' state = do
-        let newState = passTime weights behavior runit dt state
-            randomReqs :: Float -> DrawState msg s -> IO (DrawState msg s)
-            randomReqs left st
-              | left <= 0 = return $ st { _mode = Automatic (left + dt) }
-              | otherwise = do
-                  node <- randomNode n
-                  let new = processEvent node MakeRequest st
-                  randomReqs (left - 1 / optReqsPerSec) new
-
-        case state ^. mode of
-          Interactive    -> return newState
-          Automatic left -> case (newState ^. sequential, active newState) of
-            (True, True) -> return newState
-            (True, False) -> do
-              node <- randomNode n
-              return $ processEvent node MakeRequest newState
-                & mode .~ Automatic 0
-            _            -> randomReqs left newState
-        where
-        dt = dt' * state ^. speed
+      step dt' state = passTime optReqsPerSec n weights behavior runit dt state
+        where dt = dt' * state ^. speed
 
   playIO FullScreen white 60 initialDrawState (return . draw optTitle points weights) handle step
+
+processEvent :: GraphWeights -> ArvyBehavior Node msg r'
+  -> (forall x . Node -> Sem r' x -> Sem '[State s, Log] x) -> Node -> NodeEvent msg -> DrawState msg s -> DrawState msg s
+processEvent weights behavior runit node event state = state
+  & nodeStates . ix node .~ NodeState newTokenState newAlgState
+  & pendingMessages . requestMessages %~ maybe id (\value -> H.insert (H.Entry (messageDistance weights value) value)) mReqMsg
+  & pendingMessages . tokenMessage %~ (<|> fmap (\value -> H.Entry (messageDistance weights value) value) mTokMsg)
+  where
+    NodeState { .. }  = (state ^. nodeStates) ! node
+    (newAlgState, (newTokenState, mReqMsg, mTokMsg)) = run $ runIgnoringLog $ runState _algState $ nodeStateTransition behavior (runit node) node _tokenState event

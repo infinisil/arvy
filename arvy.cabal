@@ -122,9 +122,10 @@ executable arvy
 
 executable arvy-demo
   import:              defaults
-  extra-modules:       Opts
+  other-modules:       Opts
   hs-source-dirs:      demo
   main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -fprof-auto
   build-depends:       base ^>=4.12.0.0
                      , arvy
                      , gloss
@@ -136,6 +137,7 @@ executable arvy-demo
                      , polysemy-RandomFu
                      , optparse-applicative
                      , heaps
+                     , random
 
 test-suite arvy-lib-tests
   import:              defaults

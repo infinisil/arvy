@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+export PATH="$DIR/../dist/build/arvy-demo:$PATH"
 
 # Basic understanding
-arvy-demo -d -a arrow --title "Arrow"
-arvy-demo -d -a ivy --title "Ivy"
-
-# For concurrency or a bit more complexity
-arvy-demo -n 7 -a arrow --title "Arrow"
-arvy-demo -n 7 -a ivy --title "Ivy"
+#arvy-demo -d -a arrow --title "Arrow"
+#arvy-demo -d -a ivy --title "Ivy"
+#
+## For concurrency or a bit more complexity
+#arvy-demo -n 7 -a arrow --title "Arrow"
+#arvy-demo -n 7 -a ivy --title "Ivy"
 
 # For showing how edgemin converges to an mst
-arvy-demo -a edgemin --title "Edge Cost Minimizer" &
-arvy-demo -t mst -a arrow --title "Arrow with MST" &
+arvy-demo -a edgemin --title "Edge Distance Minimizer" -s 0 &
+arvy-demo -t mst -a arrow --title "Arrow with MST" -s 0 &
 wait
+
+arvy-demo -a pairmin --title "Local Pair Distance Minimizer"
 
 # For showing how dynamic star converges to star
 arvy-demo -a dynstar --title "Dynamic Star" &
@@ -19,9 +24,8 @@ arvy-demo -t star -a arrow --title "Arrow with Star" &
 wait
 
 # For showing how pairmin does a decent job
-arvy-demo -a pairmin --title "Local Pair Distance Minimizer"
 
 # For checking best trees
-arvy-demo -t star -a arrow --title "Arrow with Star"
-arvy-demo -t approxminpair -a arrow --title "Arrow with Approx Min Pairs"
+#arvy-demo -t star -a arrow --title "Arrow with Star"
+#arvy-demo -t approxminpair -a arrow --title "Arrow with Approx Min Pairs"
 
