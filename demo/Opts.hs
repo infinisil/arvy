@@ -40,8 +40,8 @@ getTree Options { optTree = name } = case lookup name mapping of
   where mapping =
           [ ("random", Tree.random)
           , ("mst", Tree.mst)
-          , ("minpair", Tree.shortPairs)
-          , ("approxminpair", Tree.shortestPairs)
+          , ("aminpair", Tree.shortPairs)
+          , ("minpair", Tree.shortestPairs)
           , ("star", Tree.bestStar)
           , ("ring", Tree.ring)
           ]
