@@ -19,8 +19,8 @@ wait
 arvy-demo -a pairmin --title "Local Pair Distance Minimizer"
 
 # For showing how dynamic star converges to star
-arvy-demo -a dynstar --title "Dynamic Star" $seed &
-arvy-demo -t star -a arrow --title "Arrow with Star" $seed &
+arvy-demo -a dynstar --title "Dynamic Star" &
+arvy-demo -t star -a arrow --title "Arrow with Star" &
 wait
 
 # For checking best trees
