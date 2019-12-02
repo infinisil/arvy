@@ -136,14 +136,14 @@ shift={(current page.south west)},yshift=3.3cm,xshift=6.8cm,
     line width=1pt,
   },
 ]
-\pgfplotstableread{data/converging/treeWeight.dat}{\data}
+\pgfplotstableread{data/converging/treeweight.dat}{\data}
 \addplot+[dashed] table [y={arrow-random}] {\data};
 \addplot+[dashed] table [y={arrow-star}] {\data};
 \addplot+[dashed] table [y={arrow-mst}] {\data};
 \addplot table [y={ivy-random}] {\data};
 \addplot table [y={dynamicStar-random}] {\data};
-\addplot table [y={localMinPairs-random}] {\data};
 \addplot table [y={minWeight-random}] {\data};
+\addplot table [y={localMinPairs-random}] {\data};
 \end{axis}
 \end{tikzpicture}
 
@@ -492,7 +492,7 @@ every node/.style = { fill,circle,inner sep=0pt, minimum size=5pt },
   cycle list = { [samples of colormap=8] },
   font=\footnotesize,
 ]
-\pgfplotstableread{data/converging/treeWeight.dat}{\data}
+\pgfplotstableread{data/converging/treeweight.dat}{\data}
 \addplot+[dashed, p1] table [y={arrow-random}] {\data};
 \addlegendentry[p1] {Uniformly random tree}
 \addplot+[dashed,p2] table [y={arrow-star}] {\data};
