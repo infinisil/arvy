@@ -12,3 +12,7 @@ result*
 _minted*
 *.nav
 *.snm
+*.bib
+*.bcf
+*.bib
+*.run.xml

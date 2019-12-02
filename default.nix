@@ -22,15 +22,21 @@ let
       latexmk
       numprint
       textpos
-      forloop;
+      forloop
+      multirow
+      tabu
+      biblatex
+      logreq
+      biber;
   };
 
 in pkgs.stdenv.mkDerivation {
   name = "slides";
   src = pkgs.lib.sourceByRegex ./. [
-    "figures.*"
+    "data.*"
     "Makefile"
     ".*\\.tex"
+    ".*\\.bib"
   ];
   nativeBuildInputs = [
     tex
@@ -39,6 +45,6 @@ in pkgs.stdenv.mkDerivation {
     HOME=$(mktemp -d)
   '';
   installPhase = ''
-    install -Dt $out Thesis.pdf
+    install -Dt $out presentation.pdf
   '';
 }
