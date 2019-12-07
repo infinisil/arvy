@@ -151,26 +151,3 @@ test-suite arvy-lib-tests
                      , mono-traversable
                      , polysemy-RandomFu
                      , random-fu
-
-test-suite arvy-tests
-  import:              defaults
-  other-modules:       AlgorithmSpec
-                     , CollectionSpec
-  type:                exitcode-stdio-1.0
-  main-is:             Main.hs
-  hs-source-dirs:      tests
-  build-depends:       arvy
-                     , arvy-eval
-                     , hspec
-                     , array
-                     , polysemy
-                     , polysemy-zoo
-                     , random
-                     , containers
-                     , deepseq
-                     , vector
-                     , polysemy-RandomFu
-                     , mwc-random
-                     , pipes
-                     , mono-traversable
-                     , random-fu
