@@ -6,7 +6,6 @@ import           Arvy.Algorithm
 import           Control.Monad
 import           Data.Array.Base
 import           Data.Array.IArray
-import           Data.Array.MArray
 import           Data.Bifunctor
 import           Data.IntMap                 (IntMap)
 import qualified Data.IntMap                 as IntMap
@@ -146,7 +145,6 @@ treeStructure tree = T.unfoldTree predecessors root where
 
 
 {-# INLINE floydWarshall #-}
--- TODO: Split a lot of these things out of this Arvy module into the arvy-eval component
 -- | Does the main operation in the floyd-warshall algorithm. Computes the shortest path between all nodes by iteratively modifying given weights. Complexity /O(n^3)/
 floydWarshall :: MArray arr Weight m => NodeCount -> arr Edge Weight -> m ()
 floydWarshall n weights =
@@ -169,7 +167,7 @@ randomSetElement set = do
 
 -- | Run a RandomFu effect with a certain initial seed
 {-# INLINE runRandomSeed #-}
-runRandomSeed :: Members '[Lift IO] r => Word32 -> Word32 -> Sem (RandomFu ': r) a -> Sem r a
-runRandomSeed seed shift sem = do
-  gen <- sendM $ initialize (V.singleton (seed + shift))
+runRandomSeed :: Members '[Lift IO] r => Word32 -> Sem (RandomFu ': r) a -> Sem r a
+runRandomSeed seed sem = do
+  gen <- sendM $ initialize (V.singleton seed)
   runRandomSource' gen sem

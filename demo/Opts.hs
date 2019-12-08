@@ -27,10 +27,10 @@ getAlg Options { optAlg = name } = case lookup name mapping of
   where mapping =
           [ ("arrow", arrow)
           , ("ivy", ivy)
-          , ("edgemin", minWeight)
+          , ("edgemin", edgeMin)
           , ("pairmin", localMinPairs)
           , ("dynstar", dynamicStar)
-          , ("ratio", inbetween (1 % 2))
+          , ("ratio", fixedRatio (1 % 2))
           ]
 
 getTree :: Options -> Tree.TreeParam '[Log, RandomFu, Lift IO]
@@ -40,8 +40,8 @@ getTree Options { optTree = name } = case lookup name mapping of
   where mapping =
           [ ("random", Tree.random)
           , ("mst", Tree.mst)
-          , ("aminpair", Tree.shortPairs)
-          , ("minpair", Tree.shortestPairs)
+          , ("aminpair", Tree.approxMinPairs)
+          , ("minpair", Tree.minPairs)
           , ("star", Tree.bestStar)
           , ("ring", Tree.ring)
           ]

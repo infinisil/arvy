@@ -1,4 +1,13 @@
 {-# LANGUAGE ConstraintKinds #-}
+{- |
+Description : Arvy logging effect
+Copyright   : (c) Silvan Mosberger, 2019
+License     : GPL-3
+Maintainer  : contact@infinisil.com
+Stability   : experimental
+
+This module is the missing piece of infrastructure for combining polysemy with co-log
+-}
 module Arvy.Log
   ( module Colog.Core.Severity
   , Log(..)
@@ -7,31 +16,29 @@ module Arvy.Log
   , lgWarning
   , lgError
   , runLogBySeverity
-  , runLogBySeverity'
-  , runLogBySeverity''
   , tshow
   , defaultLogAction
   , LogMember
   , runIgnoringLog
   ) where
 
-import           Colog.Core.Severity
-import           Colog.Message
 import           Colog
+import           Colog.Core.Severity
+import           Control.Monad.IO.Class
 import           Data.Text
+import           GHC.Stack
 import           Polysemy
-import GHC.Stack
-import Polysemy.Internal
-import Polysemy.Internal.Union
-import Control.Monad.IO.Class
-import Control.Monad
+import           Polysemy.Internal
+import           Polysemy.Internal.Union
 
+-- | A logging effect
 data Log (m :: * -> *) a where
   LogDebug :: CallStack -> Text -> Log m ()
   LogInfo :: CallStack -> Text -> Log m ()
   LogWarning :: CallStack -> Text -> Log m ()
   LogError :: CallStack -> Text -> Log m ()
 
+-- | A constraint for both providing a call stack and a logging effect
 type LogMember r = (HasCallStack, MemberWithError Log r)
 
 {-# INLINE lgDebug #-}
@@ -50,6 +57,8 @@ lgWarning text = withFrozenCallStack $ send (LogWarning callStack text)
 lgError :: LogMember r => Text -> Sem r ()
 lgError text = withFrozenCallStack $ send (LogError callStack text)
 
+-- | A logging interpreter that only logs messages above a certain severity
+-- All lower severity messages should be optimized away
 {-# INLINE runLogBySeverity #-}
 runLogBySeverity :: Severity -> LogAction (Sem r) Message -> Sem (Log ': r) x -> Sem r x
 runLogBySeverity Debug (LogAction action) = interpret $ \case
@@ -73,27 +82,7 @@ runLogBySeverity Error (LogAction action) = interpret $ \case
   LogWarning _ _ -> return ()
   LogError messageStack messageText -> action Message { messageSeverity = Error, .. }
 
-{-# INLINE runLogBySeverity' #-}
-runLogBySeverity' :: Severity -> LogAction (Sem r) Message -> Sem (Log ': r) x -> Sem r x
-runLogBySeverity' sev (LogAction action) = interpret $ \case
-  LogDebug messageStack messageText -> when (Debug >= sev) $ action Message { messageSeverity = Debug, .. }
-  LogInfo messageStack messageText -> when (Info >= sev) $ action Message { messageSeverity = Info, .. }
-  LogWarning messageStack messageText -> when (Warning >= sev) $ action Message { messageSeverity = Warning, .. }
-  LogError messageStack messageText -> when (Error >= sev) $ action Message { messageSeverity = Error, .. }
-
-{-# INLINE runLogBySeverity'' #-}
-runLogBySeverity'' :: forall r x . Severity -> LogAction (Sem r) Message -> Sem (Log ': r) x -> Sem r x
-runLogBySeverity'' sev (LogAction action) = interpret $ \case
-  LogDebug messageStack messageText -> debug Message { messageSeverity = Debug, .. }
-  LogInfo messageStack messageText -> info Message { messageSeverity = Info, .. }
-  LogWarning messageStack messageText -> warning Message { messageSeverity = Warning, .. }
-  LogError messageStack messageText -> err Message { messageSeverity = Error, .. }
-  where
-    debug msg = when (Debug >= sev) $ action msg
-    info msg = when (Info >= sev) $ action msg
-    warning msg = when (Warning >= sev) $ action msg
-    err msg = when (Error >= sev) $ action msg
-
+-- | A logging interpreter that ignores all messages
 {-# INLINE runIgnoringLog #-}
 runIgnoringLog :: Sem (Log ': r) x -> Sem r x
 runIgnoringLog = interpret $ \case
@@ -102,8 +91,10 @@ runIgnoringLog = interpret $ \case
   LogWarning _ _ -> return ()
   LogError _ _ -> return ()
 
+-- | A convenience function for showing a value as Text
 tshow :: Show a => a -> Text
 tshow = pack . show
 
+-- | The default logging action
 defaultLogAction :: MonadIO m => LogAction m Message
 defaultLogAction = cmap fmtMessage logTextStdout

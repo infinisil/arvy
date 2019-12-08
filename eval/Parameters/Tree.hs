@@ -4,34 +4,34 @@
 
 module Parameters.Tree where
 
-import Arvy.Algorithm
-import Evaluation.Types
-import           Data.Array.Unboxed
+import           Arvy.Algorithm
+import           Arvy.Log
+import           Control.Monad
+import           Control.Monad.ST
 import           Data.Array.ST
-import Control.Monad.ST
-import qualified Data.Heap                 as H
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
-import           Data.IntSet                  (IntSet)
-import qualified Data.IntSet as IntSet
+import           Data.Array.Unboxed
+import           Data.Foldable                    (foldr')
+import qualified Data.Heap                        as H
+import           Data.IntSet                      (IntSet)
+import qualified Data.IntSet                      as IntSet
+import           Data.MonoTraversable
+import           Data.Ord
+import           Data.Random.Distribution.Uniform
+import           Data.Sequence                    (Seq (..))
+import qualified Data.Sequence                    as Seq
+import           Data.Set                         (Set)
+import qualified Data.Set                         as Set
+import           Data.STRef
+import           Data.Text                        (Text)
+import           Data.Tuple                       (swap)
+import           Evaluation.Types
 import           Polysemy
-import Polysemy.RandomFu
-import Data.Random.Distribution.Uniform
-import Utils
-import Data.Tuple (swap)
-import Control.Monad
-import Data.Sequence (Seq, Seq(..))
-import qualified Data.Sequence as Seq
-import Data.Foldable (foldr')
-import Data.STRef
-import Data.MonoTraversable
-import Data.Ord
-import Data.Text (Text)
-import Arvy.Log
+import           Polysemy.RandomFu
+import           Utils
 
 data TreeParam r = TreeParam
   { treeName :: Text
-  , treeGen :: NodeCount -> GraphWeights -> Sem r RootedTree
+  , treeGen  :: NodeCount -> GraphWeights -> Sem r RootedTree
   }
 
 ring :: TreeParam r
@@ -68,13 +68,15 @@ randomSpanningTree n = do
         -- Recurse while inserting the previously-excluded node to the included ones and deleting it from the excluded ones
         ((e, i):) <$> go (Set.insert e included) (Set.delete e excluded)
 
-shortPairs :: TreeParam r
-shortPairs = TreeParam
-  { treeName = "shortpairs"
+approxMinPairs :: TreeParam r
+approxMinPairs = TreeParam
+  { treeName = "approxMinPairs"
   , treeGen = \n w ->
       return ( shortPairDistances n w 0 )
   }
 
+-- | Approximated minimim pair distance tree as described in the accompanying paper. /O(n^3)/ complexity
+-- Note that this is using node 0 as the initially included node. Better results might be achieved by trying all possible nodes as starting ones.
 shortPairDistances :: NodeCount -> GraphWeights -> Node -> RootedTree
 shortPairDistances n weights root = runST $ do
   distArr <- newArray ((0, 0), (n - 1, n - 1)) 0
@@ -166,6 +168,8 @@ mstEdges n weights = go initialHeap where
     | otherwise = entry
     where newWeight = weights ! (new, dst)
 
+
+
 -- | A Prufer code is a sequence of n - 2 numbers from [0..n - 1], all of which can be mapped one-to-one to spanning trees in a complete graph with n nodes
 newtype PruferCode = PruferCode [Int] deriving Show
 
@@ -243,9 +247,9 @@ bestPairDistanceTree n weights = do
       candidatesForMaxScore maxScore xs (k + 1)
     where percent = "[" <> tshow (round $ (100 :: Double) / fromIntegral count * fromIntegral k :: Int) <> "] "
 
-shortestPairs :: LogMember r => TreeParam r
-shortestPairs = TreeParam
-  { treeName = "shortestpairs"
+minPairs :: LogMember r => TreeParam r
+minPairs = TreeParam
+  { treeName = "minPairs"
   , treeGen = \n w -> do
       edges <- reverse <$> bestPairDistanceTree n w
       return ( array (0, n - 1) [(r, r) | r <- [0..n-1] ] // map swap edges)

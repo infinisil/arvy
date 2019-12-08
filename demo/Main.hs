@@ -26,12 +26,6 @@ import           System.Exit
 import           System.Random                    hiding (next)
 import           Utils
 
-{-
-TODO:
-- cleanup
-- interactive moving of points?
--}
-
 data Message p = Message
   { _sender   :: !Node
   , _receiver :: !Node
@@ -338,7 +332,7 @@ nearest (squareSize -> square) points (clickx, clicky) = near where
   dist (x1, y1) = (x1 - x) ** 2 + (y1 - y) ** 2
 
 randomNode :: RandomGen g => NodeCount -> g -> (Node, g)
-randomNode n g = randomR (0, n - 1) g
+randomNode n = randomR (0, n - 1)
 
 demoPoints :: Array Int (UArray Int Double)
 demoPoints = listArray (0, 4)
@@ -366,12 +360,12 @@ runBehavior opts@Options { optNodeCount, .. } behavior initState runner = do
 
   let n = if optDemo then 5 else optNodeCount
 
-  pointsRaw <- if optDemo then return demoPoints else runM $ runRandomSeed optSeed 0 $ Weights.randomPoints n 2
+  pointsRaw <- if optDemo then return demoPoints else runM $ runRandomSeed (optSeed + 0) $ Weights.randomPoints n 2
 
   let weights = Weights.pointWeights n 2 pointsRaw
       points = amap (\arr -> (double2Float $ arr ! 0, double2Float $ arr ! 1)) pointsRaw
 
-  initialTree <- if optDemo then return demoTree else runM $ runRandomSeed optSeed 1 $ runIgnoringLog $ Tree.treeGen (getTree opts) n weights
+  initialTree <- if optDemo then return demoTree else runM $ runRandomSeed (optSeed + 1) $ runIgnoringLog $ Tree.treeGen (getTree opts) n weights
 
 
   let initialDrawState = DrawState

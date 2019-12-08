@@ -47,22 +47,27 @@ An Arvy heuristic for a dynamic algorithm.
 -}
 data ArvyBehavior i msg r = ArvyBehavior
   { arvyMakeRequest :: i -> Succ i -> Sem r (msg i)
-  -- ^ 'dynamicArvyMakeRequest cur succ' determines what message should be sent to the successor node @succ@ when some node @cur@ makes a request for the token.
+  -- ^ 'arvyMakeRequest cur succ' determines what message should be sent to the successor node @succ@ when some node @cur@ makes a request for the token.
   , arvyForwardRequest :: msg (Pred i) -> i -> Succ i -> Sem r (Pred i, msg i)
-  -- ^ @'dynamicArvyForwardRequest' msg cur succ@ determines both what message should be forwarded to the successor node @succ@ when some node @cur@ received a token request message @msg@ and what @cur@'s new successor should be. For correctness guarantees, only previously traversed nodes can be selected. This is enforced by @i@ only allowing node indices to be forwarded one way, from @'Pred' i@ to @i@ to @'Succ' i@ (which can be done with the 'forward' function).
+  -- ^ @'arvyForwardRequest' msg cur succ@ determines both what message should be forwarded to the successor node @succ@ when some node @cur@ received a token request message @msg@ and what @cur@'s new successor should be. For correctness guarantees, only previously traversed nodes can be selected. This is enforced by @i@ only allowing node indices to be forwarded one way, from @'Pred' i@ to @i@ to @'Succ' i@ (which can be done with the 'forward' function).
   , arvyReceiveRequest :: msg (Pred i) -> i -> Sem r (Pred i)
-  -- ^ @'dynamicArvyReceiveRequest' msg cur@ determines what the current node @cur@'s new successor should be when a token request message @msg@ was received and @cur@ holds the token. For correctness guarantees, only previously traversed nodes can be selected. This is enforced by @i@ only allowing node indices to be forwarded one way, from @'Pred' i@ to @i@ to @'Succ' i@ (which can be done with the 'forward' function).
+  -- ^ @'arvyReceiveRequest' msg cur@ determines what the current node @cur@'s new successor should be when a token request message @msg@ was received and @cur@ holds the token. For correctness guarantees, only previously traversed nodes can be selected. This is enforced by @i@ only allowing node indices to be forwarded one way, from @'Pred' i@ to @i@ to @'Succ' i@ (which can be done with the 'forward' function).
   }
 
--- | A specification for how to execute a dynamic arvy algorithm. @a@ is the type of data a node needs in order to run.
+-- | A specification for how to execute a dynamic arvy algorithm
+-- - @a@ is the type of data a node needs in order to run.
+-- - @i@ is the type of node indices, needs to stay polymorphic to be allowed in 'GeneralArvy'/'SpecializedArvy'
+-- - @r@ is the type of effects it can have
 data ArvySpec a i r = forall msg s r' . Show (msg Node) => ArvySpec
   { arvyBehavior :: ArvyBehavior i msg r'
   -- ^ How the algorithm should behave for certain events occuring.
   , arvyInitState :: NodeCount -> ArvyNodeData a -> Sem r s
+  -- ^ How the state should be initialized
   , arvyRunner :: forall x . i ~ Node => UArray i Weight -> Sem r' x -> Sem (State s ': r) x
-  -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@. For this it receives the index of the node along with its data.
+  -- ^ How the algorithm should reinterpret the potentially node-specific effects @r'@ into non-node-specific effects @r@ and a node state
   }
 
+-- | A helper function for flipping the type parameters of ArvyBehavior, allowing @arvyBehavior = behaviorType @r ArvyBehavior ...@
 behaviorType :: forall (r :: [(* -> *) -> * -> *]) (msg :: * -> *) i x . x i msg r -> x i msg r
 behaviorType = id
 
@@ -94,35 +99,32 @@ type Node = Int
 type NodeCount = Node
 type Weight = Double
 
--- | The data determining the number of nodes and what data each of them should start with. @a@ is the additional algorithm-specific data each node needs. An example would be for @a@ to be @[Double]@ representing the weights to all other nodes.
+-- | The data determining the number of nodes and what data each of them should start with. @a@ is the additional algorithm-specific data each node needs
 data ArvyData a = ArvyData
   { arvyDataNodeCount :: NodeCount
   , arvyDataNodeData :: Node -> ArvyNodeData a
   } deriving Functor
 
+-- | The data for a single node, including the parent node and the weights to the neighbors
 data ArvyNodeData a = ArvyNodeData
   { arvyNodeSuccessor :: Node
   , arvyNodeWeights :: Node -> Weight
   , arvyNodeAdditional :: a
   } deriving Functor
 
--- | The data a single node should start with. @a@ is the additional algorithm-specific data each node needs. An example would be for @a@ to be @[Double]@ representing the weights to all other nodes.
---data ArvyNodeData a = ArvyNodeData
---  { arvyNodeDataSuccessor :: Node
---  , arvyNodeDataAdditional :: a
---  } deriving (Show, Functor)
-
 -- | A general Arvy algorithm, unrestricted in what graphs it works on. The @a@ is the data each node needs to run. The @r@ is the effect it runs in.
 newtype GeneralArvy r = GeneralArvy (forall i . NodeIndex i => ArvySpec () i r)
 -- | A specific Arvy algorithm, restricted to work on the graphs generated by the @p -> Sem r (ArvyData a)@ function. The @p@ is the parameter the graph generation function takes. The @a@ is the data each node needs to run. The @r@ is the effect it runs in.
 data SpecializedArvy p a r = SpecializedArvy (p -> Sem r (ArvyData a)) (forall i . NodeIndex i => ArvySpec a i r)
 
+-- | An effect allowing nodes to access weights to their neighbors
 data LocalWeights ib (m :: * -> *) a where
   WeightTo :: Forwardable ia ib => ia -> LocalWeights ib m Weight
   AllWeights :: LocalWeights ib m (UArray ib Weight)
 
 makeSem ''LocalWeights
 
+-- | Function for interpreting a LocalWeights effect for an array of weight values
 {-# INLINE weightHandler #-}
 weightHandler
   :: NodeIndex i

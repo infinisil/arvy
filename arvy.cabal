@@ -63,7 +63,6 @@ library arvy-eval
                      , Evaluation.Request
                      , Evaluation.Utils
                      , Utils
-                     , Cache
   build-depends:       arvy
                      , polysemy-RandomFu
                      , random-fu

@@ -23,8 +23,8 @@ data SpecAlgParam p a r = SpecAlgParam
 arrow :: GenAlgParam r
 arrow = GenAlgParam "arrow" Arvy.arrow
 
-minWeight :: GenAlgParam r
-minWeight = GenAlgParam "minWeight" Arvy.minWeight
+edgeMin :: GenAlgParam r
+edgeMin = GenAlgParam "edgeMin" Arvy.edgeMin
 
 ivy :: GenAlgParam r
 ivy = GenAlgParam "ivy" Arvy.ivy
@@ -41,11 +41,11 @@ ring = SpecAlgParam "ring" Arvy.ring
 reclique :: SpecAlgParam Arvy.RecliqueConf (Maybe Int) r
 reclique = SpecAlgParam "reclique" Arvy.reclique
 
-inbetween :: Ratio Int -> GenAlgParam r
-inbetween ratio = GenAlgParam ("inbetween-" <> tshow (numerator ratio) <> "-" <> tshow (denominator ratio)) (Arvy.inbetween ratio)
+fixedRatio :: Ratio Int -> GenAlgParam r
+fixedRatio ratio = GenAlgParam ("fixedRatio-" <> tshow (numerator ratio) <> "-" <> tshow (denominator ratio)) (Arvy.fixedRatio ratio)
 
-inbetweenWeighted :: Double -> GenAlgParam r
-inbetweenWeighted ratio = GenAlgParam ("inbetween2-" <> tshow ratio) (Arvy.inbetweenWeighted ratio)
+weightedFixedRatio :: Double -> GenAlgParam r
+weightedFixedRatio ratio = GenAlgParam ("weightedFixedRatio-" <> tshow ratio) (Arvy.weightedFixedRatio ratio)
 
 dynamicStar :: (Member (Lift IO) r, LogMember r) => GenAlgParam r
 dynamicStar = GenAlgParam "dynamicStar" Arvy.dynamicStar
@@ -55,47 +55,3 @@ indexMeanHop = GenAlgParam "indexMeanHop" (Arvy.indexMeanScore Arvy.HopIndexBase
 
 indexMeanWeight :: LogMember r => GenAlgParam r
 indexMeanWeight = GenAlgParam "indexMeanWeight" (Arvy.indexMeanScore Arvy.WeightSumBased (const 0.2))
-
-{-
-
-inbetweenWeighted :: Show s => Double -> Tree.InitialTreeParameter s r -> AlgorithmParameter r
-inbetweenWeighted ratio tree = AlgorithmParameter
-  { algorithmId = "inbetweenWeighted" ++ show ratio ++ "-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Inbetween, weighted"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.inbetweenWeighted ratio
-  }
-
-random :: (Show s, Member RandomFu r) => Tree.InitialTreeParameter s r -> AlgorithmParameter r
-random tree = AlgorithmParameter
-  { algorithmId = "random-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Random"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.random
-  }
-
-utilityFun :: (Show s, Ord a) => String -> (Int -> Double -> a) -> Tree.InitialTreeParameter s r -> AlgorithmParameter r
-utilityFun desc f tree = AlgorithmParameter
-  { algorithmId = "u-" ++ desc
-  , algorithmDescription = "Utility function " ++ desc
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.utilityFun f
-  }
-
-indexMeanScore :: Member Trace r => Arvy.IndexMeanType -> (Int -> Double) -> Tree.InitialTreeParameter (Arvy.IndexMean, Int) r -> AlgorithmParameter r
-indexMeanScore ty af tree = AlgorithmParameter
-  { algorithmId = "indexmean-wip"
-  , algorithmDescription = "Index mean weighted"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.indexMeanScore ty af
-  }
-
-
-localMinPairs :: (Member Trace r, Show s) => Tree.InitialTreeParameter s r -> AlgorithmParameter r
-localMinPairs tree = AlgorithmParameter
-  { algorithmId = "localminpairs-" ++ Tree.initialTreeId tree
-  , algorithmDescription = "Local minimum pair distances"
-  , algorithmInitialTree = tree
-  , algorithmGet = Arvy.localMinPairs
-  }
--}

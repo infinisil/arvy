@@ -5,17 +5,18 @@ module Arvy.Local
   , runArvySpecLocal'
   ) where
 
-import Arvy.Algorithm
-import Arvy.Log
-import Polysemy
-import Polysemy.State
-import Data.Array.IO
-import Data.MonoTraversable
-import Data.Sequences
-import Data.Array.Unboxed
+import           Arvy.Algorithm
+import           Arvy.Log
+import           Data.Array.IO
+import           Data.Array.Unboxed
+import           Data.MonoTraversable
+import           Data.Sequences
+import           Polysemy
+import           Polysemy.State
 
 type LocalRunState a = (IOUArray Node Node, IOArray Node a)
 
+-- | Convenience function for extracting an ArvyData into IO arrays
 extractArvyDataArrays :: Member (Lift IO) r => ArvyData a -> (NodeCount -> ArvyNodeData a -> Sem r s) -> Sem r (LocalRunState s)
 extractArvyDataArrays ArvyData { .. } initState = do
   let nodeRange = (0, arvyDataNodeCount - 1)
@@ -24,6 +25,7 @@ extractArvyDataArrays ArvyData { .. } initState = do
   statesArr <- sendM $ newListArray nodeRange states
   return (treeArr, statesArr)
 
+-- | Same as 'runArvySpecLocal'' but without allowing inspection in the tree structure
 {-# INLINE runArvySpecLocal #-}
 runArvySpecLocal
   :: forall seq a r
@@ -39,10 +41,15 @@ runArvySpecLocal dat spec = do
   (_, conduit) <- runArvySpecLocal' dat spec
   return conduit
 
+-- | Run an 'ArvySpec' on some initial 'ArvyData'. This actually implements the Arvy algorithm itself.
+-- It returns an 'IOUArray Node Node' for the parent pointers in the rooted spanning tree, which can be
+-- inspected to see the spanning tree change over time. It also returns a function @Node -> Sem r seq@
+-- which returns the sequence of visited nodes (excluding the node sending the requesnt) for when a certain
+-- input node made a request
 {-# INLINE runArvySpecLocal' #-}
 runArvySpecLocal'
   :: forall seq a r
-   . ( Member (Lift IO) r
+   . ( Member (Lift IO) r -- Needs to mutate the IO tree
      , LogMember r
      , Element seq ~ Node
      , SemiSequence seq
@@ -86,6 +93,7 @@ runArvySpecLocal' dat ArvySpec { .. } = do
         msg <- runNode node $ arvyMakeRequest node successor
         send msg successor
 
+    -- | Sends a messages to a node
     {-# INLINE send #-}
     send :: msg Node -> Node -> Sem r seq
     send msg node = do

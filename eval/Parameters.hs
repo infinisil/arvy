@@ -29,20 +29,31 @@ import           Polysemy.Async
 import           Polysemy.RandomFu
 import           Utils
 
+-- | Shared parameters between general and specific parameters
 data SharedParams r = SharedParams
   { sharedParamRandomSeed   :: Word32
+  -- ^ The random seed to use for all randomness
   , sharedParamRequestCount :: Int
+  -- ^ How many requests to issue
   , sharedParamRequests     :: RequestsParameter r
+  -- ^ What kind of requests to issue
   , sharedParamEvals        :: [Eval r]
+  -- ^ What evaluations/statistics to collect
   }
 
+-- | Parameters specific to general algorithms
 data GenParams r = GenParams
   { genParamShared    :: SharedParams r
+  -- ^ The shared parameters
   , genParamNodeCount :: NodeCount
+  -- ^ How many nodes to use
   , genParamWeights   :: WeightsParam r
+  -- ^ What weights to use between nodes
   , genParamAlgs      :: [(GenAlgParam r, TreeParam r)]
+  -- ^ What set of general algorithms with which initial trees to compare
   }
 
+-- | Collects multiple evaluations into a single one
 evalsConduit
   :: forall r f
    . ( Traversable f
@@ -64,6 +75,7 @@ getWeightsArray ArvyData { .. } = listArray ((0, 0), (arvyDataNodeCount - 1, arv
             , v <- [0..arvyDataNodeCount - 1]
             ]
 
+-- | Evaluates a 'GenParams'
 {-# INLINE runGenParams #-}
 runGenParams
   :: forall r
@@ -113,19 +125,25 @@ runGenParams GenParams { genParamShared = SharedParams { .. }, .. } = do
 
     {-# INLINE runRand #-}
     runRand :: Word32 -> Sem (RandomFu ': r) x -> Sem r x
-    runRand = runRandomSeed sharedParamRandomSeed
+    runRand shift = runRandomSeed (sharedParamRandomSeed + shift)
 
 
 
 
 
+-- | Parameters for testing a heuristics specialized to certain graphs
 data SpecParams p a r = SpecParams
   { specParamShared  :: SharedParams r
+  -- ^ The shared parameters
   , specParamInit    :: p
+  -- ^ What data to initialize the specialized heuristic with
   , specParamAlg     :: SpecAlgParam p a r
+  -- ^ What specialized heuristic to use
   , specParamGenAlgs :: [(GenAlgParam r, TreeParam r)]
+  -- ^ What general heuristics along with initial trees to compare the specialized algorithm to
   }
 
+-- | Evaluates a 'SpecParams'
 {-# INLINE runSpecParams #-}
 runSpecParams
   :: forall p a r
@@ -209,4 +227,4 @@ runSpecParams SpecParams { specParamShared = SharedParams { .. }, specParamAlg =
 
     {-# INLINE runRand #-}
     runRand :: Word32 -> Sem (RandomFu ': r) x -> Sem r x
-    runRand = runRandomSeed sharedParamRandomSeed
+    runRand shift = runRandomSeed (sharedParamRandomSeed + shift)

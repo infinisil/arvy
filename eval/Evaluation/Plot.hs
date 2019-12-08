@@ -7,7 +7,6 @@ import           Evaluation.Types
 import           Control.Monad
 import           Data.Colour.Palette.ColorSet
 import           Data.Default.Class
-import           Data.Functor
 import           Data.List
 import           Data.Text                              (Text)
 import qualified Data.Text                              as T
@@ -29,6 +28,7 @@ writeSeriesToDat path allSeries@((_, firstSeries):_) = do
       contents = T.unlines (firstLine : dataLines)
 
   TIO.writeFile path contents
+writeSeriesToDat _ _ = fail "No series to write!"
 
 writeResultsToDats :: Text -> EvalResults -> IO ()
 writeResultsToDats name (EvalResults _ results) = do

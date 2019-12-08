@@ -22,14 +22,13 @@ import           Prelude
 main :: IO ()
 main = do
   trees
+  converging
   ratio
   ratio2
   algs
   adversary
   ivyClique
   recliqueProg
-  converging
-  return ()
 
 trees :: IO ()
 trees = do
@@ -41,7 +40,6 @@ trees = do
       , sharedParamRequestCount = 100000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalTime
-                           , evalRatio
                            , evalHops
                            ]
       }
@@ -49,8 +47,8 @@ trees = do
     , genParamWeights = Weights.unitEuclidian 2
     , genParamAlgs =
       [ (Alg.arrow, Tree.bestStar)
-      , (Alg.arrow, Tree.shortPairs)
-      , (Alg.arrow, Tree.shortestPairs)
+      , (Alg.arrow, Tree.approxMinPairs)
+      , (Alg.arrow, Tree.minPairs)
       , (Alg.arrow, Tree.random)
       , (Alg.arrow, Tree.mst)
       ]
@@ -68,24 +66,21 @@ converging = do
       { sharedParamRandomSeed = 0
       , sharedParamRequestCount = 100000
       , sharedParamRequests = Requests.random
-      , sharedParamEvals = [ evalTime
-                           , evalRatio
-                           , evalHops
-                           , evalTreeEdgeDist
+      , sharedParamEvals = [ evalTreeEdgeDist
                            ]
       }
     , genParamNodeCount = 100
     , genParamWeights = Weights.unitEuclidian 2
     , genParamAlgs =
-      [ (Alg.arrow, Tree.bestStar)
+      [ (Alg.arrow, Tree.random)
+      , (Alg.arrow, Tree.bestStar)
       , (Alg.arrow, Tree.mst)
-      , (Alg.arrow, Tree.random)
 
-      , (Alg.ivy, Tree.random)
       , (Alg.random, Tree.random)
-      , (Alg.localMinPairs, Tree.random)
-      , (Alg.minWeight, Tree.random)
+      , (Alg.ivy, Tree.random)
       , (Alg.dynamicStar, Tree.random)
+      , (Alg.localMinPairs, Tree.random)
+      , (Alg.edgeMin, Tree.random)
       ]
     }
   writeResultsToDats "converging" results
@@ -100,24 +95,21 @@ ratio = do
       , sharedParamRequestCount = 1000000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalTime
-                           , evalRatio
-                           , evalHops
-                           , evalTreeEdgeDist
                            ]
       }
     , genParamNodeCount = 1000
     , genParamWeights = Weights.unitEuclidian 2
     , genParamAlgs =
       [ (Alg.arrow, Tree.bestStar)
-      , (Alg.inbetween (0 % 8), Tree.random)
-      , (Alg.inbetween (1 % 8), Tree.random)
-      , (Alg.inbetween (2 % 8), Tree.random)
-      , (Alg.inbetween (3 % 8), Tree.random)
-      , (Alg.inbetween (4 % 8), Tree.random)
-      , (Alg.inbetween (5 % 8), Tree.random)
-      , (Alg.inbetween (6 % 8), Tree.random)
-      , (Alg.inbetween (7 % 8), Tree.random)
-      , (Alg.inbetween (8 % 8), Tree.random)
+      , (Alg.fixedRatio (0 % 8), Tree.random)
+      , (Alg.fixedRatio (1 % 8), Tree.random)
+      , (Alg.fixedRatio (2 % 8), Tree.random)
+      , (Alg.fixedRatio (3 % 8), Tree.random)
+      , (Alg.fixedRatio (4 % 8), Tree.random)
+      , (Alg.fixedRatio (5 % 8), Tree.random)
+      , (Alg.fixedRatio (6 % 8), Tree.random)
+      , (Alg.fixedRatio (7 % 8), Tree.random)
+      , (Alg.fixedRatio (8 % 8), Tree.random)
       ]
     }
   writeResultsToDats "ratio" results
@@ -132,24 +124,21 @@ ratio2 = do
       , sharedParamRequestCount = 100000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalTime
-                           , evalRatio
-                           , evalHops
-                           , evalTreeEdgeDist
                            ]
       }
     , genParamNodeCount = 1000
     , genParamWeights = Weights.unitEuclidian 2
     , genParamAlgs =
       [ (Alg.arrow, Tree.bestStar)
-      , (Alg.inbetweenWeighted 0, Tree.random)
-      , (Alg.inbetweenWeighted 0.125, Tree.random)
-      , (Alg.inbetweenWeighted 0.25, Tree.random)
-      , (Alg.inbetweenWeighted 0.375, Tree.random)
-      , (Alg.inbetweenWeighted 0.5, Tree.random)
-      , (Alg.inbetweenWeighted 0.625, Tree.random)
-      , (Alg.inbetweenWeighted 0.75, Tree.random)
-      , (Alg.inbetweenWeighted 0.875, Tree.random)
-      , (Alg.inbetweenWeighted 1.0, Tree.random)
+      , (Alg.weightedFixedRatio 0, Tree.random)
+      , (Alg.weightedFixedRatio 0.125, Tree.random)
+      , (Alg.weightedFixedRatio 0.25, Tree.random)
+      , (Alg.weightedFixedRatio 0.375, Tree.random)
+      , (Alg.weightedFixedRatio 0.5, Tree.random)
+      , (Alg.weightedFixedRatio 0.625, Tree.random)
+      , (Alg.weightedFixedRatio 0.75, Tree.random)
+      , (Alg.weightedFixedRatio 0.875, Tree.random)
+      , (Alg.weightedFixedRatio 1.0, Tree.random)
       ]
     }
   writeResultsToDats "ratio2" results
@@ -164,9 +153,7 @@ algs = do
       , sharedParamRequestCount = 1000000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalTime
-                           , evalRatio
                            , evalHops
-                           , evalTreeEdgeDist
                            ]
       }
     , genParamNodeCount = 1000
@@ -189,7 +176,6 @@ adversary = do
       , sharedParamRequestCount = 1000000
       , sharedParamRequests = Requests.farthestRatio
       , sharedParamEvals = [ evalTime
-                           , evalRatio
                            , evalHops
                            ]
       }
@@ -199,8 +185,6 @@ adversary = do
       [ (Alg.arrow, Tree.bestStar)
       , (Alg.ivy, Tree.random)
       , (Alg.localMinPairs, Tree.random)
-      , (Alg.minWeight, Tree.random)
-      , (Alg.inbetween (3 % 4), Tree.random)
       , (Alg.dynamicStar, Tree.random)
       ]
     }
@@ -216,15 +200,13 @@ ivyClique = forM_ [3..8] runIt where
         , sharedParamRequestCount = 1000000
         , sharedParamRequests = Requests.random
         , sharedParamEvals = [ evalTime
-                            , evalHops
-                            , evalTreeEdgeDist
-                            ]
+                             ]
         }
       , genParamNodeCount = i
       , genParamWeights = Weights.clique
       , genParamAlgs =
-        [ (Alg.arrow, Tree.shortestPairs)
-        , (Alg.ivy, Tree.shortestPairs)
+        [ (Alg.arrow, Tree.minPairs)
+        , (Alg.ivy, Tree.minPairs)
         ]
       }
     writeResultsToDats ("low" <> tshow i) results
@@ -239,8 +221,6 @@ recliqueProg = do
       , sharedParamRequestCount = 1000000
       , sharedParamRequests = Requests.random
       , sharedParamEvals = [ evalTime
-                           , evalHops
-                           , evalTreeEdgeDist
                            ]
       }
     , specParamAlg = Alg.reclique
@@ -254,7 +234,6 @@ recliqueProg = do
       , (Alg.arrow, Tree.bestStar)
       , (Alg.arrow, Tree.mst)
       , (Alg.localMinPairs, Tree.random)
-      , (Alg.inbetween (3 % 4), Tree.random)
       ]
     }
   writeResultsToDats "reclique" results
