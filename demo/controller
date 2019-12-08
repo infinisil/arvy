@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-export PATH="$DIR/../dist/build/arvy-demo:$PATH"
+export PATH="$(nix-build --no-out-link "$DIR/.." -A arvy)/bin:$PATH"
 
 # Basic understanding
 #arvy-demo -n 10 -t aminpair -a arrow --title "Arrow" -s 5
