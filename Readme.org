@@ -6,6 +6,8 @@ This work was done as part of my Computer Science bachelor at ETHZ, advised by P
 
 The dependencies are managed by Nix, the code is written in Haskell and the thesis and slides are written in LaTeX.
 
+The thesis can be found pregenerated at [[file:thesis/Thesis.pdf]] and the slides can be found at [[file:slides/presentation.pdf]].
+
 ** Building and Running
 
 This project uses Nix to manage dependencies and is fully reproducible. To install Nix, visit https://nixos.org/nix/. Only Linux has been tested but macOS might work too.
