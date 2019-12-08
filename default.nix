@@ -13,7 +13,7 @@ let
     "eval.*"
     "app.*"
     "demo.*"
-    "tests.*"
+    "lib-tests.*"
     "LICENSE"
     "Setup.hs"
     "arvy.cabal"
@@ -75,4 +75,4 @@ let
     withHoogle = true;
   };
 
-in hlib.dontCheck pkg // { inherit env pkgs hpkgs; }
+in pkg // { inherit env pkgs hpkgs; }
