@@ -2,7 +2,7 @@
 
 This is the repository for my bachelors thesis on Arvy heuristics for distributed mutual exclusion. It contains all the work that was done as part of it, including the implementation of all heuristics, the framework for writing and testing them, the thesis itself, slides used for the final presentation and the simulation used for demonstration.
 
-This work was done as part of my Computer Science bachelor at ETHZ, advised by Pankaj Khanchandani and András Papp Pál and under the direction of Prof. Dr. Roger Wattenhofer.
+This work was done as part of my Computer Science bachelor at ETHZ in the department of [[https://disco.ethz.ch/][Distributed Computing]], advised by Pankaj Khanchandani and András Papp Pál and under the direction of Prof. Dr. Roger Wattenhofer.
 
 The dependencies are managed by Nix, the code is written in Haskell and the thesis and slides are written in LaTeX.
 
