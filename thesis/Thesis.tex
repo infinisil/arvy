@@ -626,7 +626,7 @@ The last node whose $c_i$ is lower than or equal to $t\cdot c_k$ is then selecte
 
 \begin{algorithmic}
 \Function{SelectNewParent}{$A_k$}
-\State\Return $a_{i}$ with the maximum $i$ given the constraint $c_i\leq t\cdot c_k$ 
+\State\Return $a_{i}$ with the maximum $i$ given the constraint $c_i\leq t\cdot c_k$
 \EndFunction
 \end{algorithmic}
 
@@ -1166,6 +1166,10 @@ For evaluating how well heuristics perform we look at the measures defined in \a
     x={x},
     line join=round,
   },
+}
+
+\pgfplotstableset{
+  search path = ..,
 }
 
 \section{Preliminary Results}
