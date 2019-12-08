@@ -1,0 +1,8 @@
+Let's jump right in. The problem we will look at is where you have a single resource in a network that multiple nodes want access to over time. Only one of them should get it. That's what mutual exclusion means and is often a desired property in systems. An example is <...>. Now how do we implement such a system? What messages should nodes send to each other to have the guarantee of mutual exclusion? There are different algorithms to solve this, but we will look at the Arrow algorithm first. Let me show you how this algorithm works.
+
+Show Arrow, Ivy and Arvy
+
+Show edge cost minimizer, first explanation, then demo
+Show Local Pair Dist Minimizer, first expl then demo
+
+Local Pair dist min: Show extra local min pair distance calculation on blackboard
