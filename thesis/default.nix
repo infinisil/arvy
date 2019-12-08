@@ -27,13 +27,13 @@ in pkgs.stdenv.mkDerivation {
   name = "thesis";
   src = pkgs.lib.sourceByRegex ./. [
     "figures.*"
-    "data.*"
     "Makefile"
     ".*\\.tex"
     ".*\\.cls"
     ".*\\.bst"
     ".*\\.bib"
   ];
+  postUnpack = "cp -r ${../data} data";
   nativeBuildInputs = [
     tex
     pkgs.python3.pkgs.pygments

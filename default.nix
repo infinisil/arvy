@@ -61,8 +61,6 @@ let
     });
   });
 
-  pkg = hpkgs.arvy;
-
   env = hpkgs.shellFor {
     packages = p: [ p.arvy ];
     nativeBuildInputs = [
@@ -75,4 +73,10 @@ let
     withHoogle = true;
   };
 
-in pkg // { inherit env pkgs hpkgs; }
+  thesis = import ./thesis {};
+  slides = import ./slides {};
+
+in {
+  inherit (hpkgs) arvy;
+  inherit env thesis slides;
+}

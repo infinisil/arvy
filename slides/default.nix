@@ -33,11 +33,11 @@ let
 in pkgs.stdenv.mkDerivation {
   name = "slides";
   src = pkgs.lib.sourceByRegex ./. [
-    "data.*"
     "Makefile"
     ".*\\.tex"
     ".*\\.bib"
   ];
+  postUnpack = "cp -r ${../data} data";
   nativeBuildInputs = [
     tex
   ];
