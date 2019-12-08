@@ -1192,11 +1192,11 @@ For this evaluation we run Arrow on different initial trees to see how well they
 \addlegendentry {Random tree}
 \addplot table [y={arrow-mst}] {\data};
 \addlegendentry {Minimum spanning tree}
-\addplot table [y={arrow-shortpairs}] {\data};
+\addplot table [y={arrow-approxMinPairs}] {\data};
 \addlegendentry {\hyperref[tree:ampd]{Approx. min. pair dist.} tree}
 \addplot table [y={arrow-star}] {\data};
 \addlegendentry {\hyperref[tree:star]{Best star} tree}
-\addplot table [y={arrow-shortestpairs}] {\data};
+\addplot table [y={arrow-minPairs}] {\data};
 \addlegendentry {\hyperref[tree:mpd]{Min. pair dist.} tree}
 \end{axis}
 \end{tikzpicture}
@@ -1215,11 +1215,11 @@ Not surprisingly, the tree minimizing pair distance outperforms every other tree
 \addlegendentry {Random tree}
 \addplot table [y={arrow-mst}] {\data};
 \addlegendentry {Minimum spanning tree}
-\addplot table [y={arrow-shortpairs}] {\data};
+\addplot table [y={arrow-approxMinPairs}] {\data};
 \addlegendentry {\hyperref[tree:ampd]{Approx. min. pair dist.} tree}
 \addplot table [y={arrow-star}] {\data};
 \addlegendentry {\hyperref[tree:star]{Best star} tree}
-\addplot table [y={arrow-shortestpairs}] {\data};
+\addplot table [y={arrow-minPairs}] {\data};
 \addlegendentry {\hyperref[tree:mpd]{Min. pair dist.} tree}
 \end{axis}
 \end{tikzpicture}
@@ -1254,7 +1254,7 @@ In this section we look at the behavior of heuristics in regards to the tree the
 \addlegendentry {\hyperref[alg:dynstar]{Dynamic Star}}
 \addplot table [y={localMinPairs-random}] {\data};
 \addlegendentry {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
-\addplot table [y={minWeight-random}] {\data};
+\addplot table [y={edgeMin-random}] {\data};
 \addlegendentry {\hyperref[alg:ecm]{Edge cost min.}}
 \end{axis}
 \end{tikzpicture}
@@ -1284,23 +1284,23 @@ Here we look at the Fixed Ratio class of heuristics, both hop-based and weight-b
 \pgfplotstableread{data/ratio/time.dat}{\data}
 \addplot+[dashed] table [y={arrow-star}] {\data};
 \addlegendentry {Best star Arrow}
-\addplot table [y={inbetween-0-1-random}] {\data};
+\addplot table [y={fixedRatio-0-1-random}] {\data};
 \addlegendentry {$t=0$ (Ivy)}
-\addplot table [y={inbetween-1-8-random}] {\data};
+\addplot table [y={fixedRatio-1-8-random}] {\data};
 \addlegendentry {$t=\frac{1}{8}$}
-\addplot table [y={inbetween-1-4-random}] {\data};
+\addplot table [y={fixedRatio-1-4-random}] {\data};
 \addlegendentry {$t=\frac{2}{8}$}
-\addplot table [y={inbetween-3-8-random}] {\data};
+\addplot table [y={fixedRatio-3-8-random}] {\data};
 \addlegendentry {$t=\frac{3}{8}$}
-\addplot table [y={inbetween-1-2-random}] {\data};
+\addplot table [y={fixedRatio-1-2-random}] {\data};
 \addlegendentry {$t=\frac{4}{8}$}
-\addplot table [y={inbetween-5-8-random}] {\data};
+\addplot table [y={fixedRatio-5-8-random}] {\data};
 \addlegendentry {$t=\frac{5}{8}$}
-\addplot table [y={inbetween-3-4-random}] {\data};
+\addplot table [y={fixedRatio-3-4-random}] {\data};
 \addlegendentry {$t=\frac{6}{8}$}
-\addplot table [y={inbetween-7-8-random}] {\data};
+\addplot table [y={fixedRatio-7-8-random}] {\data};
 \addlegendentry {$t=\frac{7}{8}$}
-\addplot table [y={inbetween-1-1-random}] {\data};
+\addplot table [y={fixedRatio-1-1-random}] {\data};
 \addlegendentry {$t=1$ (Arrow)}
 \end{axis}
 \end{tikzpicture}
@@ -1318,23 +1318,23 @@ From this we can see that this heuristic is weaker than both Ivy and Arrow with 
 \pgfplotstableread{data/ratio2/time.dat}{\data}
 \addplot+[dashed] table [y={arrow-star}] {\data};
 \addlegendentry {Best star Arrow}
-\addplot table [y={inbetween2-0.0-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.0-random}] {\data};
 \addlegendentry {$t=0$ (Ivy)}
-\addplot table [y={inbetween2-0.125-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.125-random}] {\data};
 \addlegendentry {$t=\frac{1}{8}$}
-\addplot table [y={inbetween2-0.25-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.25-random}] {\data};
 \addlegendentry {$t=\frac{2}{8}$}
-\addplot table [y={inbetween2-0.375-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.375-random}] {\data};
 \addlegendentry {$t=\frac{3}{8}$}
-\addplot table [y={inbetween2-0.5-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.5-random}] {\data};
 \addlegendentry {$t=\frac{4}{8}$}
-\addplot table [y={inbetween2-0.625-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.625-random}] {\data};
 \addlegendentry {$t=\frac{5}{8}$}
-\addplot table [y={inbetween2-0.75-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.75-random}] {\data};
 \addlegendentry {$t=\frac{6}{8}$}
-\addplot table [y={inbetween2-0.875-random}] {\data};
+\addplot table [y={weightedFixedRatio-0.875-random}] {\data};
 \addlegendentry {$t=\frac{7}{8}$}
-\addplot table [y={inbetween2-1.0-random}] {\data};
+\addplot table [y={weightedFixedRatio-1.0-random}] {\data};
 \addlegendentry {$t=1$ (Arrow)}
 \end{axis}
 \end{tikzpicture}

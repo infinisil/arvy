@@ -145,7 +145,7 @@ shift={(current page.south west)},yshift=3.3cm,xshift=6.8cm,
 \addplot+[dashed] table [y={arrow-mst}] {\data};
 \addplot table [y={ivy-random}] {\data};
 \addplot table [y={dynamicStar-random}] {\data};
-\addplot table [y={minWeight-random}] {\data};
+\addplot table [y={edgeMin-random}] {\data};
 \addplot table [y={localMinPairs-random}] {\data};
 \end{axis}
 \end{tikzpicture}
@@ -507,7 +507,7 @@ every node/.style = { fill,circle,inner sep=0pt, minimum size=5pt },
 \addlegendentry[p1] {Ivy}
 \addplot+[p2] table [y={dynamicStar-random}] {\data};
 \addlegendentry[p2] {\hyperref[alg:dynstar]{Dynamic Star}}
-\addplot+[p4] table [y={minWeight-random}] {\data};
+\addplot+[p4] table [y={edgeMin-random}] {\data};
 \addlegendentry[p4] {\hyperref[alg:ecm]{Edge dist min.}}
 \addplot+[p3] table [y={localMinPairs-random}] {\data};
 \addlegendentry[p3] {\hyperref[alg:lpm]{Local Pair Dist. Min.}}
@@ -605,11 +605,11 @@ Questions?
 \addlegendentry {Random tree}
 \addplot table [y={arrow-mst}] {\data};
 \addlegendentry {Minimum spanning tree}
-\addplot table [y={arrow-shortpairs}] {\data};
+\addplot table [y={arrow-approxMinPairs}] {\data};
 \addlegendentry {\hyperref[tree:ampd]{Approx. min. pair dist.} tree}
 \addplot table [y={arrow-star}] {\data};
 \addlegendentry {\hyperref[tree:star]{Best star} tree}
-\addplot table [y={arrow-shortestpairs}] {\data};
+\addplot table [y={arrow-minPairs}] {\data};
 \addlegendentry {\hyperref[tree:mpd]{Min. pair dist.} tree}
 \end{axis}
 \end{tikzpicture}
