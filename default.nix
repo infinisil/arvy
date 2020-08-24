@@ -47,7 +47,7 @@ let
         aeson = self'.aeson_1_4_4_0;
       });
 
-      polysemy = hlib.unmarkBroken super.polysemy;
+      polysemy = hlib.dontCheck (hlib.unmarkBroken super.polysemy);
       polysemy-plugin = hlib.dontCheck (hlib.unmarkBroken super.polysemy-plugin);
       polysemy-zoo = hlib.dontCheck (hlib.unmarkBroken super.polysemy-zoo);
       polysemy-RandomFu = hlib.unmarkBroken super.polysemy-RandomFu;
